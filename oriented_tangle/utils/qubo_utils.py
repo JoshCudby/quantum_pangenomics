@@ -24,9 +24,9 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     T_max = floor(total_weight * alpha)
 
     # Penalty Values
-    lambda_t = 1.4 * T_max
+    lambda_t = 2 * T_max
     lambda_g = T_max
-    lambda_end = 1.2 * T_max
+    lambda_end = floor(1.5 * T_max)
     lambda_w = T_max
 
     qubo_matrix = np.zeros((T_max, V + 1, 2, T_max, V + 1, 2))
