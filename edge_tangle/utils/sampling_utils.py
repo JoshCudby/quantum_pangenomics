@@ -41,18 +41,15 @@ def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: float, time_limit=None, l
 
 def gurobi_sample_qubo(qubo_matrix: np.ndarray, graph: nx.Graph, offset: int, T_max: int, time_limit: int):
     total_weight = int(sum(graph.nodes[node]["weight"] for node in list(graph.nodes)) / 2)
-    lambda_g = T_max
-    best_obj = T_max * (1 - lambda_g) - total_weight + lambda_g
     
     print(f'Offset: {offset}')
     print(f'Total weight: {total_weight}')
-    print(f'T_max: {T_max}')
-    print(f'Best obj: {best_obj}')    
+    print(f'T_max: {T_max}')   
 
     with gp.Env() as env, gp.Model(env=env) as model:
         model_vars = model.addMVar(shape=qubo_matrix.shape[0], vtype=GRB.BINARY, name="x")
         model.setObjective(model_vars @ qubo_matrix @ model_vars, GRB.MINIMIZE)
-        model.Params.BestObjStop = best_obj - offset
+        model.Params.BestObjStop = - offset
         model.Params.TimeLimit = time_limit
         model.Params.Seed = np.random.default_rng().integers(0, 1000)
         model.optimize()
