@@ -56,7 +56,7 @@ out = process.stdout.decode("utf-8")
 # First line of output includes run data. 3rd line contains the solution.
 out_data = [x for x in out.split('\n') if len(x) > 0]
 solution = out_data[2].split()
-solution = [int(x) for x in solution]
+solution = np.array([int(x) for x in solution])
 solution_energy = int(out_data[0].split(',')[3])
 energy = offset - solution_energy
 path = sample_list_to_path(solution, graph, T_max, V)
