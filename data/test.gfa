@@ -3,8 +3,8 @@ S	u0	AAAA	SC:f:2.0
 S	u1	CCCC	SC:f:1.0
 S	u2	GGGG	SC:f:1.0
 S	u3	TTTT	SC:f:1.0
-L	u0	+	u1	+	0M
-L	u1	+	u2	+	0M
-L	u2	+	u0	+	0M
-L	u2	+	u3	+	0M
-L	u3	+	u0	+	0M  
+L	u0	+	u1	+	0M	EC:i:1
+L	u1	+	u2	-	0M	EC:i:1
+L	u2	-	u3	+	0M	EC:i:1
+L	u3	+	u0	+	0M	EC:i:1  
+L	u0	+	u2	+	0M	EC:i:1
