@@ -4,22 +4,43 @@ import re
 import gurobipy as gp
 from gurobipy import GRB
 from math import floor
+from dimod import CQM, BQM
 
 
-def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: float, time_limit=None, label="Oriented QUBO") -> tuple[dict, float]:
-    """Perform a batch of annealing with greedy post-processing on a given Binary Quadratic Model.
+def dwave_sample_cqm(cqm: CQM, time_limit=None, label="Edge DQM") -> tuple[dict, float]:
+    """Perform a batch of annealing on a given Constrained Quadratic Model.
 
     Args:
-        sampler (Sampler): The sampler to anneal with.
-        bqm (BQM): The model to anneal.
+        cqm (BQM): The model to anneal.
         time_limit (int, optional): The time limit.
         label (str, optional): The label for sample submission on DWave platform.
         
     Returns:
         (dict, float): Returns the best sample and best energy of the batch.
     """
-    
-    from dimod import BQM
+    from dwave.system import LeapHybridCQMSampler
+    sampler = LeapHybridCQMSampler()
+    sampleset = sampler.sample_cqm(cqm, time_limit=time_limit, label=label)
+    num_feasible = sampleset.record.is_feasible.sum()
+    print("{} feasible solutions of {}.".format(num_feasible, len(sampleset))) 
+    if num_feasible > 0:
+        best_sample = sampleset.filter(lambda row: row.is_feasible).first
+        return best_sample.sample, best_sample.energy
+    else:
+        return {}, np.infty
+
+
+def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: float, time_limit=None, label="Edge QUBO") -> tuple[dict, float]:
+    """Perform a batch of annealing on a given Binary Quadratic Model.
+
+    Args:
+        qubo_matrix (np.ndarray): The matrix describing the model to anneal.
+        time_limit (int, optional): The time limit.
+        label (str, optional): The label for sample submission on DWave platform.
+        
+    Returns:
+        (dict, float): Returns the best sample and best energy of the batch.
+    """
     from dwave.system import LeapHybridSampler
     bqm = BQM(qubo_matrix, 'BINARY')
     bqm.offset = offset

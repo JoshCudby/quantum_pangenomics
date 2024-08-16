@@ -2,6 +2,60 @@ import numpy as np
 import networkx as nx
 from itertools import product
 from math import floor
+from dimod import CQM, Binary
+
+
+def cqm_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple[CQM, int, int]:
+    nodes = list(graph.nodes)
+    V = int(len(nodes))
+    total_weight = int(sum(graph.nodes[node]["weight"] for node in nodes) / 2)
+    alpha = 1.2
+    T_max = int(total_weight * alpha)
+
+    variables_array_shape = (T_max, V + 1)
+    
+    def var_index(multi_index):
+        return np.ravel_multi_index(multi_index, variables_array_shape)
+    
+    
+    cqm = CQM()
+    variables = [Binary(i) for i in range(T_max * (V+1))]
+    
+    # Include a 0 * variable term so that the variables are added to the model
+    cqm.set_objective(
+        sum(
+            (graph.nodes[nodes[i]]["weight"] - sum(variables[var_index((t, i))] + variables[var_index((t, i + 1))] for t in range(T_max))) ** 2
+            for i in range(0, V, 2)
+        ) 
+        + 0 * sum(variables)
+    )
+    
+    # Graph step constraints
+    for i,j in product(range(V), range(V)):
+        if not (nodes[i], nodes[j]) in graph.edges:
+            cqm.add_constraint_from_iterable(
+                [(var_index((t, i)), (var_index((t + 1, j))), 1) for t in range(T_max - 1)],
+                sense='==',
+                rhs=0
+            )
+          
+    # Path constraints  
+    for t in range(T_max):
+        cqm.add_constraint_from_iterable(
+            [(var_index((t, i)), 1) for i in range(V + 1)],
+            sense='==',
+            rhs=1
+        )
+        
+    # Don't leave end constraints
+    for t in range(T_max - 1):
+        cqm.add_constraint_from_iterable(
+            [(var_index((t, V)), (var_index((t + 1, i))), 1) for i in range(V)],
+            sense='==',
+            rhs=0
+        )
+    
+    return cqm, T_max, V
 
 
 def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple[np.ndarray, float, int, int]:
