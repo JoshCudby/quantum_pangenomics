@@ -36,7 +36,7 @@ graph = normalise_node_weights(graph, normalisation)
 cqm, T_max, V = cqm_from_graph(graph)
 
 
-sample, energy = dwave_sample_cqm(cqm, time_limit, label=filename)
+sample, energy = dwave_sample_cqm(cqm, time_limit, label=f'cqm_{filename}')
 path = sample_list_to_path(np.array(list(sample.values())), graph, T_max, V)
 
 
