@@ -37,21 +37,23 @@ cqm, T_max, V = cqm_from_graph(graph)
 
 
 sample, energy = dwave_sample_cqm(cqm, time_limit, label=f'cqm_{filename}')
-path = sample_list_to_path(np.array(list(sample.values())), graph, T_max, V)
+if not energy == np.infty: 
+    path = sample_list_to_path(np.array(list(sample.values())), graph, T_max, V)
 
+    validate_path(path, graph)
+    print(f"Energy of path: {energy}")
+    
+    save_dir = "out/cqm/edge"
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)    
+    now = datetime.now().strftime("%d%m%Y_%H%M")
+    save_file = save_dir + f"/dwave_{filename}_{now}"   
+    to_save = np.array([sample, energy, path], dtype=object)
+    np.save(save_file, to_save)
 
-validate_path(path, graph)
-print(f"Energy of path: {energy}")
-
-
-save_dir = "out/cqm/edge"
-if not os.path.exists(save_dir):
-    os.mkdir(save_dir)    
-now = datetime.now().strftime("%d%m%Y_%H%M")
-save_file = save_dir + f"/dwave_{filename}_{now}"   
-to_save = np.array([sample, energy, path], dtype=object)
-np.save(save_file, to_save)
-
-
-print('Compilation Data')
-print(f'[{time_limit}, {energy}],')
+    print('Compilation Data')
+    print(f'[{time_limit}, {energy}],')
+else:
+    print('No feasible path found')
+    print('Compilation Data')
+    print(f'[{time_limit}, {np.infty}],')
