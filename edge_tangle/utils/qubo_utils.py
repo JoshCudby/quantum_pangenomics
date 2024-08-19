@@ -78,10 +78,9 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     T_max = floor(total_weight * alpha)
 
     # Penalty Values
-    lambda_t = 4 
+    lambda_t = 1 
     lambda_g = 1
-    lambda_end = 1
-    lambda_w = 2
+    lambda_w = 1
 
     qubo_matrix = np.zeros((T_max, V + 1, T_max, V + 1))
     
@@ -98,20 +97,11 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
         
     # Graph
     for t in range(T_max - 1):
-        for i, j in product(range(V), range(V)):
-            if (nodes[i], nodes[j]) in graph.edges:
-                qubo_matrix[t, i, t+1, j] -= lambda_g
-
-    # Staying in end
-    for t in range(T_max - 1):
+        qubo_matrix[t, :, t + 1, :] += lambda_g
+        for edge in graph.edges:
+            qubo_matrix[t, nodes.index(edge[0]), t + 1, nodes.index(edge[1])] -= lambda_g
         for i in range(V):
-            qubo_matrix[t, i, t + 1, V] -= (lambda_g - 1)
-        qubo_matrix[t, V, t + 1, V] -= (lambda_g - 1)
-        
-    # Leaving end
-    for t in range(T_max - 1):
-        for i in range(V):
-            qubo_matrix[t, V, t + 1, i] += lambda_end
+            qubo_matrix[t, i, t + 1, V] -= lambda_g
                 
     # Weights
     for i in range(0, V, 2):
@@ -128,5 +118,5 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     qubo_matrix = qubo_matrix.reshape((T_max * (V+1)), (T_max * (V+1)))
     qubo_matrix = 0.5 * (qubo_matrix + qubo_matrix.T)
     
-    offset = -1 * (lambda_g * (1 - T_max) + (T_max - total_weight)) + (T_max * lambda_t + lambda_w * sum(graph.nodes[nodes[i]]["weight"] ** 2 for i in range(0, V, 2)))
+    offset = (T_max * lambda_t + lambda_w * sum(graph.nodes[nodes[i]]["weight"] ** 2 for i in range(0, V, 2)))
     return qubo_matrix, offset, T_max, V
