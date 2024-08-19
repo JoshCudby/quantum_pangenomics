@@ -100,7 +100,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
         qubo_matrix[t, :, t + 1, :] += lambda_g
         for edge in graph.edges:
             qubo_matrix[t, nodes.index(edge[0]), t + 1, nodes.index(edge[1])] -= lambda_g
-        for i in range(V):
+        for i in range(V + 1):
             qubo_matrix[t, i, t + 1, V] -= lambda_g
                 
     # Weights
