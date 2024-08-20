@@ -62,7 +62,7 @@ case $jobs in
 esac
 
 ## MAIN
-if [$host -eq -1] 
+if [$host -eq -1]; then 
     for time_limit in "${times_arr[@]}"
     do
         echo Submitting batch with time limit: $time_limit

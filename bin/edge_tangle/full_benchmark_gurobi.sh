@@ -57,7 +57,7 @@ case $jobs in
 esac
 
 ## MAIN
-if [$host -eq -1] 
+if [$host -eq -1]; then 
     for time_limit in "${times_arr[@]}"; do
         echo Submitting batch with time limit: $time_limit
         bsub -m "node-5-10-4" -J  "e_t_gurobi[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/edge/gurobi.full.$filename.%J.%I" -e "out/edge/error.gurobi.full.$filename.%J" -G "qpg" "python3 ./edge_tangle/edge_max_path_gurobi.py $filename $normalisation $time_limit"
