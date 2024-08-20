@@ -35,8 +35,6 @@ print(f'Normalising by: {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 
 qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
-print(V)
-print(T_max)
 
 # Write to MQLib Format
 filepath = f'out/edge/mqlib_input_{filename}.txt'
