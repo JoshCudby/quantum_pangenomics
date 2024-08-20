@@ -4,8 +4,8 @@ import subprocess
 import os
 from datetime import datetime
 from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
-from utils.qubo_utils import qubo_matrix_from_graph
 from utils.sampling_utils import validate_path, sample_list_to_path
+from math import floor
 
 
 if len(sys.argv) > 1:
@@ -33,23 +33,21 @@ else:
 graph = oriented_graph_from_file(f"data/{filename}")
 print(f'Normalising by: {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
+nodes = list(graph.nodes)
+V = int(len(nodes))
+total_weight = int(sum(graph.nodes[node]["weight"] for node in nodes) / 2)
 
-qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
-print(V)
-print(T_max)
+# T_max = total weight + "a bit"
+alpha = 1.2
+T_max = floor(total_weight * alpha)
 
-# Write to MQLib Format
+lambda_t = 4
+lambda_w = 1
+
+offset = (T_max * lambda_t + lambda_w * sum(graph.nodes[nodes[i]]["weight"] ** 2 for i in range(0, V, 2)))
+
+# Input in MQLib Format
 filepath = f'out/edge/mqlib_input_{filename}.txt'
-non_zero = np.nonzero(qubo_matrix)
-non_zero_count = int(non_zero[0].shape[0] / 2 + qubo_matrix.shape[0] / 2)
-f = open(filepath, 'w')
-f.write(f'{qubo_matrix.shape[0]} {non_zero_count}\n')
-for i in range(qubo_matrix.shape[0]):
-    for j in range(i, qubo_matrix.shape[0]):
-        if not qubo_matrix[i, j] == 0: 
-            f.write(f'{i + 1} {j + 1} {-qubo_matrix[i, j]}\n')
-f.close()
-            
 
 # Run the MQLib solver and capture output
 process = subprocess.run(["MQLib/bin/MQLib", "-fQ", filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
