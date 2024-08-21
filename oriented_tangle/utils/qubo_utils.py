@@ -51,19 +51,11 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
                 v1 = nodes[2 * j + bj]
                 if (v0, v1) in graph.edges:
                     qubo_matrix[t, i, bi, t+1, j, bj] -= lambda_g
-
-    # Steps to end are "free"
-    for t in range(T_max - 1):
-        for i in range(V):
-            for b in range(2):
-                qubo_matrix[t, i, b, t + 1, V, 0] -= (lambda_g - 1)
-        qubo_matrix[t, V, 0, t + 1, V, 0] -= (lambda_g - 1)
         
-    # Leaving end is penalised
+    # End steps are ok
     for t in range(T_max - 1):
-        for i in range(V):
-            for b in range(2):
-                qubo_matrix[t, V, 0, t + 1, i, b] += lambda_end
+        qubo_matrix[t, :, :, t + 1, V, 0] -= lambda_end
+        qubo_matrix[t, V, 0, t + 1, V, 0] -= lambda_end
                 
     # Weights constraints
     for i in range(V):

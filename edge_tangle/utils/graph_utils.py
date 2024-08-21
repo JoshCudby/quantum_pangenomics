@@ -12,7 +12,7 @@ def invert_orient(orient: str):
         raise Exception('Bad orient')
     
 
-def oriented_graph_from_file(filename):
+def dual_oriented_graph_from_file(filename):
     """Reads a .gfa file into the dual graph, where edges become nodes.
 
     Args:

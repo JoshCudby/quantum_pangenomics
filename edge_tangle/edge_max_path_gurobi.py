@@ -4,7 +4,7 @@ import numpy as np
 import sys
 import os
 from datetime import datetime
-from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
+from utils.graph_utils import dual_oriented_graph_from_file, normalise_node_weights
 from utils.qubo_utils import qubo_matrix_from_graph
 from utils.sampling_utils import gurobi_sample_qubo, sample_list_to_path, validate_path
 
@@ -30,7 +30,7 @@ else:
     time_limit = 60
 
 
-graph = oriented_graph_from_file(f"data/{filename}")
+graph = dual_oriented_graph_from_file(f"data/{filename}")
 print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 

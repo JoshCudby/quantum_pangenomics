@@ -3,7 +3,7 @@ import sys
 import subprocess
 import os
 from datetime import datetime
-from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
+from utils.graph_utils import dual_oriented_graph_from_file, normalise_node_weights
 from utils.sampling_utils import validate_path, sample_list_to_path
 from math import floor
 
@@ -30,7 +30,7 @@ else:
     time_limit = 10
     
 
-graph = oriented_graph_from_file(f"data/{filename}")
+graph = dual_oriented_graph_from_file(f"data/{filename}")
 print(f'Normalising by: {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 nodes = list(graph.nodes)

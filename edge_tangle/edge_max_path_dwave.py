@@ -2,7 +2,7 @@ import sys
 import os
 import numpy as np
 from datetime import datetime
-from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
+from utils.graph_utils import dual_oriented_graph_from_file, normalise_node_weights
 from utils.qubo_utils import qubo_matrix_from_graph
 from utils.sampling_utils import dwave_sample_qubo, sample_list_to_path, validate_path
 
@@ -29,7 +29,7 @@ else:
     time_limit = None
    
 
-graph = oriented_graph_from_file(f"data/{filename}")
+graph = dual_oriented_graph_from_file(f"data/{filename}")
 print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
