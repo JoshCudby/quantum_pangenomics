@@ -5,6 +5,8 @@ usage()
     echo "usage: full_benchmark_gurobi [[[-f file] [-j jobs] [-t times] [-n normalisation] [-m memory]] | [-h]]"
 }
 
+host=-1
+
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )           shift
@@ -18,6 +20,9 @@ while [ "$1" != "" ]; do
                                 ;;
         -j | --jobs )           shift
                                 jobs="$1"
+                                ;;
+        -ht | --host )          shift
+                                host="$1"
                                 ;;
         -t | --times )          shift
                                 times_arr=($1)
