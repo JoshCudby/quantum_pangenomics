@@ -24,38 +24,38 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     T_max = floor(total_weight * alpha)
 
     # Penalty Values
-    lambda_t = 2 * T_max
-    lambda_g = T_max
-    lambda_end = floor(1.5 * T_max)
-    lambda_w = T_max
+    lambda_t = 4
+    lambda_g = 2
+    lambda_w = 1
 
     qubo_matrix = np.zeros((T_max, V + 1, 2, T_max, V + 1, 2))
+    
     # Path constraint
     for t in range(T_max):
         for i in range(V):
             for b in range(2):
                 qubo_matrix[t, i, b, t, i, b] -= lambda_t
-                qubo_matrix[t, V, 0, t, i, b] += 2 * lambda_t
+        qubo_matrix[t, V, 0, t, :, :] += 2 * lambda_t
         qubo_matrix[t, V, 0, t, V, 0] -= lambda_t
         
         for i, j in product(range(V), range(V)):
             for bi, bj in product(range(2), range(2)):
                 if not (i == j and bi == bj):
                     qubo_matrix[t, i, bi, t, j, bj] += lambda_t
-        
-    # Graph edges constraint
+    
+    # Graph step constraints
     for t in range(T_max - 1):
-        for i, j in product(range(V), range(V)):
-            for bi, bj in product(range(2), range(2)):
-                v0 = nodes[2 * i + bi]
-                v1 = nodes[2 * j + bj]
-                if (v0, v1) in graph.edges:
-                    qubo_matrix[t, i, bi, t+1, j, bj] -= lambda_g
-        
-    # End steps are ok
-    for t in range(T_max - 1):
-        qubo_matrix[t, :, :, t + 1, V, 0] -= lambda_end
-        qubo_matrix[t, V, 0, t + 1, V, 0] -= lambda_end
+        qubo_matrix[t, :, :, t+1, :, :] += lambda_g
+        qubo_matrix[t, :, :, t+1, V, 0] -= lambda_g
+    for edge in graph.edges:
+        index_0 = nodes.index(edge[0])
+        i = floor(index_0 / 2)
+        bi = index_0 % 2
+        index_1 = nodes.index(edge[1])
+        j = floor(index_1 / 2)
+        bj = index_1 % 2
+        for t in range(T_max - 1):
+            qubo_matrix[t, i, bi, t+1, j, bj] -= lambda_g
                 
     # Weights constraints
     for i in range(V):

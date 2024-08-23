@@ -32,7 +32,10 @@ else:
 graph = oriented_graph_from_file(f"data/{filename}")
 print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
-qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
+
+save_dir = 'out/oriented'
+filepath = f'{save_dir}/qubo_data_{filename}'
+qubo_matrix, offset, T_max, V = np.load(filepath, allow_pickle=True)
 
 
 sample, energy = dwave_sample_qubo(qubo_matrix, offset, time_limit, label=filename)
@@ -43,7 +46,6 @@ validate_path(path, graph)
 print(f"Energy of path: {energy}")
 
 
-save_dir = "out/oriented"
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)    
 now = datetime.now().strftime("%d%m%Y_%H%M")

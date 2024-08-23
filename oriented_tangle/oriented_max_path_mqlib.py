@@ -34,20 +34,10 @@ graph = oriented_graph_from_file(f"data/{filename}")
 print(f'Normalising by: {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 
-qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
-
-# Write to MQLib Format
-filepath = f'out/mqlib_input_{filename}.txt'
-non_zero = np.nonzero(qubo_matrix)
-non_zero_count = int(non_zero[0].shape[0] / 2 + qubo_matrix.shape[0] / 2)
-f = open(filepath, 'w')
-f.write(f'{qubo_matrix.shape[0]} {non_zero_count}\n')
-for i in range(qubo_matrix.shape[0]):
-    for j in range(i, qubo_matrix.shape[0]):
-        if not qubo_matrix[i, j] == 0: 
-            f.write(f'{i + 1} {j + 1} {-qubo_matrix[i, j]}\n')
-f.close()
-            
+save_dir = "out/oriented"
+filepath = f'{save_dir}/qubo_data_{filename}'
+_, offset, T_max, V = np.load(filepath, allow_pickle=True)
+           
 
 # Run the MQLib solver and capture output
 process = subprocess.run(["MQLib/bin/MQLib", "-fQ", filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
@@ -64,7 +54,6 @@ path = sample_list_to_path(solution, graph, T_max, V)
 validate_path(path, graph)
 print(f"Energy of path: {energy}")
 
-save_dir = "out/oriented"
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
     
