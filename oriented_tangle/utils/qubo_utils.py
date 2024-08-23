@@ -28,7 +28,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     lambda_g = 2
     lambda_w = 1
 
-    qubo_matrix = np.zeros((T_max, V + 1, 2, T_max, V + 1, 2))
+    qubo_matrix = np.zeros((T_max, V + 1, 2, T_max, V + 1, 2), dtype=np.int8)
     
     # Path constraint
     for t in range(T_max):

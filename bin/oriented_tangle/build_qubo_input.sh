@@ -46,4 +46,4 @@ esac
 
 
 ## MAIN
-bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/oriented/build.$filename.%J.%I" -e "out/oriented/error.build.$filename.%J" -G "qpg" "python3 ./oriented_tangle/build_oriented_qubo_matrix.py $filename $normalisation"
+bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/oriented/build.$filename.%J" -e "out/oriented/error.build.$filename.%J" -G "qpg" "python3 ./oriented_tangle/build_oriented_qubo_matrix.py $filename $normalisation"
