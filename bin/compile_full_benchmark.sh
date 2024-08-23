@@ -25,6 +25,10 @@ while [ "$1" != "" ]; do
     shift
 done
 
+if [[ $filename =~ ^data/(.*)$ ]]; then
+    filename="${BASH_REMATCH[1]}" 
+fi
+
 out_dir="./out/$dir"
 file_pattern="$solver.full.$filename*"
 search_pattern="Compilation Data"
