@@ -31,33 +31,37 @@ while [ "$1" != "" ]; do
     shift
 done
 
-if [ -f "./data/"$filename ]; then
-    echo "Reading file:" $filename
+if [[ $filename =~ ^data/(.*)$ ]]; then
+    filename="${BASH_REMATCH[1]}" 
+fi
+
+if [ -f "./data/$filename" ]; then
+    echo "Reading file: $filename"
 else
     echo "Could not find input file."
     exit 1
 fi
 
 case $normalisation in
-    [0-9]* ) echo "Normalising node weights by:" $normalisation
+    [0-9]* ) echo "Normalising node weights by:" "$normalisation"
              ;;
     *      ) echo "Normalisation was not a number."; exit 1
 esac
 
 case $memory in
-    [0-9]* ) echo "Memory:" $memory
+    [0-9]* ) echo "Memory:" "$memory"
              ;;
     *      ) echo "Memory was not a number."; exit 1
 esac
 
 case $jobs in
-    [0-9]* ) echo "Jobs:" $jobs
+    [0-9]* ) echo "Jobs:" "$jobs"
              ;;
     *      ) echo "Jobs was not a number."; exit 1
 esac
 
 ## MAIN
 for time_limit in "${times_arr[@]}"; do
-    echo Submitting batch with time limit: $time_limit
-    bsub -m "node-5-10-4" -J  "o_t_gurobi[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/oriented/gurobi.full.$filename.%J.%I" -e "out/oriented/error.gurobi.full.$filename.%J" -G "qpg" "python3 ./oriented_tangle/oriented_max_path_gurobi.py $filename $normalisation $time_limit"
+    echo Submitting batch with time limit: "$time_limit"
+    bsub -m "node-5-10-4" -J  "o_t_gurobi[1-$jobs]" -R '"select[mem>'"$memory"'] rusage[mem='"$memory"']"' -M "$memory" -o "out/oriented/gurobi.full.$filename.%J.%I" -e "out/oriented/error.gurobi.full.$filename.%J" -G "qpg" "python3 ./oriented_tangle/oriented_max_path_gurobi.py $filename $normalisation $time_limit"
 done
