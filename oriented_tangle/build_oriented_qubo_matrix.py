@@ -32,8 +32,11 @@ non_zero = np.nonzero(qubo_matrix)
 non_zero_count = int(non_zero[0].shape[0] / 2 + qubo_matrix.shape[0] / 2)
 f = open(filepath, 'w')
 f.write(f'{qubo_matrix.shape[0]} {non_zero_count}\n')
+to_write = ''
 for i in range(qubo_matrix.shape[0]):
     for j in range(i, qubo_matrix.shape[0]):
         if not qubo_matrix[i, j] == 0: 
-            f.write(f'{i + 1} {j + 1} {-qubo_matrix[i, j]}\n')
+            to_write += f'{i + 1} {j + 1} {-qubo_matrix[i, j]}\n'
+
+f.write(to_write)
 f.close()
