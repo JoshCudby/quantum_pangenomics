@@ -27,7 +27,7 @@ if len(sys.argv) > 3:
     except ValueError:
         time_limit = 60
 else:
-    time_limit = 60
+    time_limit = 10
     
 
 graph = oriented_graph_from_file(f"data/{filename}")
@@ -35,10 +35,10 @@ print(f'Normalising by: {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 
 save_dir = "out/oriented"
-filepath = f'{save_dir}/qubo_data_{filename}'
-_, offset, T_max, V = np.load(filepath, allow_pickle=True)
+to_load = f'{save_dir}/qubo_data_{filename}.npy'
+_, offset, T_max, V = np.load(to_load, allow_pickle=True)
            
-
+filepath = f'{save_dir}/mqlib_input_{filename}.txt'
 # Run the MQLib solver and capture output
 process = subprocess.run(["MQLib/bin/MQLib", "-fQ", filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
 out = process.stdout.decode("utf-8")
