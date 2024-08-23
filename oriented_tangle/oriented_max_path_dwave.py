@@ -34,8 +34,8 @@ print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 
 save_dir = 'out/oriented'
-filepath = f'{save_dir}/qubo_data_{filename}'
-qubo_matrix, offset, T_max, V = np.load(filepath, allow_pickle=True)
+to_load = f'{save_dir}/qubo_data_{filename}.npy'
+qubo_matrix, offset, T_max, V = np.load(to_load, allow_pickle=True)
 
 
 sample, energy = dwave_sample_qubo(qubo_matrix, offset, time_limit, label=filename)

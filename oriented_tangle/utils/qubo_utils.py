@@ -32,30 +32,23 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     
     # Path constraint
     for t in range(T_max):
-        for i in range(V):
-            for b in range(2):
-                qubo_matrix[t, i, b, t, i, b] -= lambda_t
-        qubo_matrix[t, V, 0, t, :, :] += 2 * lambda_t
+        for i, b in product(range(V), range(2)):
+            qubo_matrix[t, i, b, t, i, b] -= lambda_t
+            qubo_matrix[t, V, 0, t, i, b] += 2 * lambda_t
+                
         qubo_matrix[t, V, 0, t, V, 0] -= lambda_t
         
-        for i, j in product(range(V), range(V)):
-            for bi, bj in product(range(2), range(2)):
-                if not (i == j and bi == bj):
-                    qubo_matrix[t, i, bi, t, j, bj] += lambda_t
+        for i, j, bi, bj in product(range(V), range(V), range(2), range(2)):
+            if not (i == j and bi == bj):
+                qubo_matrix[t, i, bi, t, j, bj] += lambda_t
     
     # Graph step constraints
     for t in range(T_max - 1):
-        qubo_matrix[t, :, :, t+1, :, :] += lambda_g
-        qubo_matrix[t, :, :, t+1, V, 0] -= lambda_g
-    for edge in graph.edges:
-        index_0 = nodes.index(edge[0])
-        i = floor(index_0 / 2)
-        bi = index_0 % 2
-        index_1 = nodes.index(edge[1])
-        j = floor(index_1 / 2)
-        bj = index_1 % 2
-        for t in range(T_max - 1):
-            qubo_matrix[t, i, bi, t+1, j, bj] -= lambda_g
+        for i, j, bi, bj in product(range(V), range(V), range(2), range(2)):
+            if not (nodes[2 * i + bi], nodes[2 * j + bj]) in graph.edges:
+                qubo_matrix[t, i, bi, t+1, j, bj] += lambda_g
+        for i, bi in product(range(V), range(2)):
+            qubo_matrix[t, V, 0, t+1, i, bi] += lambda_g
                 
     # Weights constraints
     for i in range(V):
@@ -72,8 +65,8 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     qubo_matrix = 0.5 * (qubo_matrix + qubo_matrix.T)
 
     # Delete non-interacting rows and columns
-    qubo_matrix = np.delete(qubo_matrix, [t * (V+1) *2 + V * 2 + 1 for t in range(T_max)], 0)
-    qubo_matrix = np.delete(qubo_matrix, [t * (V+1) *2 + V * 2 + 1 for t in range(T_max)], 1)
+    qubo_matrix = np.delete(qubo_matrix, [np.ravel_multi_index((t, V, 1), dims=(T_max, V+1, 2)) for t in range(T_max)], 0)
+    qubo_matrix = np.delete(qubo_matrix, [np.ravel_multi_index((t, V, 1), dims=(T_max, V+1, 2)) for t in range(T_max)], 1)
     
     offset = lambda_t * T_max  + lambda_w * int(sum(graph.nodes[nodes[2 * i]]["weight"] ** 2 for i in range(V)))
     

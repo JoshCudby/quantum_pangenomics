@@ -41,18 +41,15 @@ def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: float, time_limit=None, l
 
 def gurobi_sample_qubo(qubo_matrix: np.ndarray, graph: nx.Graph, offset: int, T_max: int, time_limit: int):
     total_weight = int(sum(graph.nodes[node]["weight"] for node in list(graph.nodes)) / 2)
-    lambda_g = T_max
-    best_obj = T_max * (1 - lambda_g) - total_weight + lambda_g
     
     print(f'Offset: {offset}')
     print(f'Total weight: {total_weight}')
     print(f'T_max: {T_max}')
-    print(f'Best obj: {best_obj}')    
 
     with gp.Env() as env, gp.Model(env=env) as model:
         model_vars = model.addMVar(shape=qubo_matrix.shape[0], vtype=GRB.BINARY, name="x")
         model.setObjective(model_vars @ qubo_matrix @ model_vars, GRB.MINIMIZE)
-        model.Params.BestObjStop = best_obj - offset
+        model.Params.BestObjStop = - offset
         model.Params.TimeLimit = time_limit
         model.Params.Seed = np.random.default_rng().integers(0, 1000)
         model.optimize()
@@ -80,6 +77,10 @@ def sample_list_to_path(sample_list: np.ndarray, graph: nx.Graph, T_max: int, V:
 def print_path(path: list):
     """Pretty print a path"""
     num_per_line = 6
+    if len(path) < num_per_line:
+        print(path)
+        return
+    
     for i in range(floor(len(path) / num_per_line)):
         print(path[i * num_per_line: (i + 1) * num_per_line])
     if not (i + 1) * num_per_line == len(path):
@@ -111,13 +112,21 @@ def validate_path(path: list, graph: nx.Graph):
     print_path(path)
     
     time_offset = 0
-    for i in range(len(path)):
-        if i < path[i][0] + time_offset:
-            print(f'Skipped time {i}')
+    i = 0
+    while i < len(path):
+        if i + time_offset == path[i][0]:
+            i += 1
+            continue
+        if path[i][0] < i + time_offset:
+            print(f'Extra node at time {path[i][0]}')
             time_offset -= 1
-        elif i > path[i][0] + time_offset:
-            print(f'Visited 2 nodes at time {i}')
+            i += 1
+            continue
+        if path[i][0] > i + time_offset:
+            print(f'Skipped time {path[i][0]}')
             time_offset += 1
+            i += 1
+            continue
     
     node_dict = {node: 0 for node in graph.nodes}
     node_dict['end'] = 0
