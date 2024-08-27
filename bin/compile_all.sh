@@ -25,5 +25,6 @@ done
 rm "out/$dir/$solver.compiled.txt"
 kmers=('k501' 'k301' 'k201' 'k101' 'sim_k71' 'sim_k61')
 for kmer in "${kmers[@]}"; do
+    echo $kmer >> "out/$dir/$solver.compiled.txt"
     source ./bin/compile_full_benchmark.sh "-f" "data/ddDapMeze1.MT.$kmer.utg.final.gfa" "-d" "$dir" "-s" "$solver" >> "out/$dir/$solver.compiled.txt"
 done 
