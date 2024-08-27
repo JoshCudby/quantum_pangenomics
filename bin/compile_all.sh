@@ -23,7 +23,7 @@ while [ "$1" != "" ]; do
 done
 
 rm "out/$dir/$solver.compiled.txt"
-kmers=('k501' 'k301' 'k201' 'k101' 'sim_k71' 'sim_k61' 'sim_k51' 'sim_k41')
+kmers=('k501' 'k301' 'k201' 'k101' 'k81' 'sim_k71' 'sim_k61' 'sim_k51' 'sim_k41')
 for kmer in "${kmers[@]}"; do
     echo $kmer >> "out/$dir/$solver.compiled.txt"
     source ./bin/compile_full_benchmark.sh "-f" "data/ddDapMeze1.MT.$kmer.utg.final.gfa" "-d" "$dir" "-s" "$solver" >> "out/$dir/$solver.compiled.txt"
