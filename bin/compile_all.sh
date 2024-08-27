@@ -25,5 +25,5 @@ done
 
 kmers=(k501 k301 k201 k101 sim_k71 sim_k61)
 for kmer in $kmers; do
-    ./compile_full_benchmark "-f data/ddDapMeze1.MT.$kmer.utg.final.gfa -d $dir -s $solver" >> "out/$dir/$solver.compiled.txt"
+     source compile_full_benchmark "-f data/ddDapMeze1.MT.$kmer.utg.final.gfa -d $dir -s $solver" >> "out/$dir/$solver.compiled.txt"
 done 
