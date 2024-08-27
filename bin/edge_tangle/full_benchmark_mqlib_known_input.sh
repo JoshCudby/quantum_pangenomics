@@ -70,13 +70,13 @@ if [ "$host" -eq -1 ]; then
     for time_limit in "${times_arr[@]}"
     do
         echo Submitting batch with time limit: $time_limit
-        bsub -m "node-5-10-4" -J  "o_t_mqlib[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/edge/mqlib.full.$filename.%J.%I" -e "out/edge/error.mqlib.full.$filename.%J" -G "qpg" "python3 ./edge_tangle/edge_known_mqlib.py $filename $normalisation $time_limit"
+        bsub -m "node-5-10-4" -J  "edge_m[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/edge/mqlib.full.$filename.%J.%I" -e "out/edge/error.mqlib.full.$filename.%J" -G "qpg" "python3 ./edge_tangle/edge_known_mqlib.py $filename $normalisation $time_limit"
     done
 else
     for time_limit in "${times_arr[@]}"
     do
         echo Submitting batch with time limit: $time_limit
         echo Using any host
-        bsub -J  "o_t_mqlib[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/edge/mqlib.full.$filename.%J.%I" -e "out/edge/error.mqlib.full.$filename.%J" -G "qpg" "python3 ./edge_tangle/edge_known_mqlib.py $filename $normalisation $time_limit"
+        bsub -J  "edge_m[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/edge/mqlib.full.$filename.%J.%I" -e "out/edge/error.mqlib.full.$filename.%J" -G "qpg" "python3 ./edge_tangle/edge_known_mqlib.py $filename $normalisation $time_limit"
     done
 fi

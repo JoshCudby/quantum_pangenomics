@@ -64,5 +64,5 @@ esac
 for time_limit in "${times_arr[@]}"
 do
     echo Submitting batch with time limit: $time_limit
-    bsub -J  "o_t_dwave[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/oriented/dwave.full.$filename.%J.%I" -e "out/oriented/error.dwave.full.$filename.%J" -G "qpg" "python3 ./oriented_tangle/oriented_max_path_dwave.py $filename $normalisation $time_limit"
+    bsub -J  "orien_d[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/oriented/dwave.full.$filename.%J.%I" -e "out/oriented/error.dwave.full.$filename.%J" -G "qpg" "python3 ./oriented_tangle/oriented_max_path_dwave.py $filename $normalisation $time_limit"
 done
