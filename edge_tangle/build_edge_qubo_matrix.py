@@ -1,11 +1,7 @@
 import numpy as np
 import sys
-import subprocess
-import os
-from datetime import datetime
 from utils.graph_utils import dual_oriented_graph_from_file, normalise_node_weights
 from utils.qubo_utils import qubo_matrix_from_graph
-from utils.sampling_utils import validate_path, sample_list_to_path
 
 
 if len(sys.argv) > 1:
@@ -21,24 +17,26 @@ if len(sys.argv) > 2:
 else:
     normalisation = 1
     
-
+print(f'Making graph from: {filename}')
 graph = dual_oriented_graph_from_file(f"data/{filename}")
 print(f'Normalising by: {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 
+print(f'Building qubo matrix')
 qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
 
-# Write to MQLib Format
+print(f'Writing to MQLib format')
 filepath = f'out/edge/mqlib_input_{filename}.txt'
 non_zero = np.nonzero(qubo_matrix)
 non_zero_count = int(non_zero[0].shape[0] / 2 + qubo_matrix.shape[0] / 2)
 f = open(filepath, 'w')
 f.write(f'{qubo_matrix.shape[0]} {non_zero_count}\n')
 to_write = ''
-for i in range(qubo_matrix.shape[0]):
-    for j in range(i, qubo_matrix.shape[0]):
-        if not qubo_matrix[i, j] == 0: 
-            to_write += f'{i + 1} {j + 1} {-qubo_matrix[i, j]}\n'
+for i in range(len(non_zero[0])):
+    to_write += f'{non_zero[0][i] + 1} {non_zero[1][i] + 1} {-qubo_matrix[non_zero[0][i], non_zero[1][i]]} \n'
+    if i % 500 == 0:
+        f.write(to_write)
+        to_write = ''
 
 f.write(to_write)
 f.close()
