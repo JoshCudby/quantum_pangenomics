@@ -27,8 +27,9 @@ qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
 
 print(f'Writing to MQLib format')
 filepath = f'out/edge/mqlib_input_{filename}.txt'
-non_zero = np.nonzero(qubo_matrix)
-non_zero_count = int(non_zero[0].shape[0] / 2 + qubo_matrix.shape[0] / 2)
+ut_qubo_matrix = np.triu(qubo_matrix)
+non_zero = np.nonzero(ut_qubo_matrix)
+non_zero_count = int(non_zero[0].shape[0])
 f = open(filepath, 'w')
 f.write(f'{qubo_matrix.shape[0]} {non_zero_count}\n')
 to_write = ''

@@ -28,15 +28,17 @@ np.save(filepath, to_save)
 
 # Write to MQLib Format
 filepath = f'out/oriented/mqlib_input_{filename}.txt'
-non_zero = np.nonzero(qubo_matrix)
-non_zero_count = int(non_zero[0].shape[0] / 2 + qubo_matrix.shape[0] / 2)
+ut_qubo_matrix = np.triu(qubo_matrix)
+non_zero = np.nonzero(ut_qubo_matrix)
+non_zero_count = int(non_zero[0].shape[0])
 f = open(filepath, 'w')
 f.write(f'{qubo_matrix.shape[0]} {non_zero_count}\n')
 to_write = ''
-for i in range(qubo_matrix.shape[0]):
-    for j in range(i, qubo_matrix.shape[0]):
-        if not qubo_matrix[i, j] == 0: 
-            to_write += f'{i + 1} {j + 1} {-qubo_matrix[i, j]}\n'
+for i in range(len(non_zero[0])):
+    to_write += f'{non_zero[0][i] + 1} {non_zero[1][i] + 1} {-qubo_matrix[non_zero[0][i], non_zero[1][i]]} \n'
+    if i % 500 == 0:
+        f.write(to_write)
+        to_write = ''
 
 f.write(to_write)
 f.close()

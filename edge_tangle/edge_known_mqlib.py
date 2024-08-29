@@ -25,7 +25,7 @@ if len(sys.argv) > 3:
     try:
         time_limit = int(sys.argv[3])
     except ValueError:
-        time_limit = 60
+        time_limit = 10
 else:
     time_limit = 10
     
@@ -55,6 +55,9 @@ out = process.stdout.decode("utf-8")
 
 # First line of output includes run data. 3rd line contains the solution.
 out_data = [x for x in out.split('\n') if len(x) > 0]
+if not len(out_data) > 2:
+    print(out_data)
+    exit(1)
 solution = out_data[2].split()
 solution = np.array([int(x) for x in solution])
 solution_energy = int(out_data[0].split(',')[3])
