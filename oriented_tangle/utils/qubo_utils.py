@@ -24,8 +24,8 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     T_max = floor(total_weight * alpha)
 
     # Penalty Values
-    lambda_t = 2
-    lambda_g = 2
+    lambda_t = 1
+    lambda_g = 1
     lambda_w = 1
 
     # Note: we add an end node with parity 0 and 1, we only want 1 of them. We will delete the other at the end.
