@@ -26,7 +26,7 @@ while [ "$1" != "" ]; do
     shift
 done
 
-rm "out/$dir/$solver$name.compiled.txt"
+rm -f "out/$dir/$solver$name.compiled.txt"
 kmers=('k501' 'k301' 'k201' 'k101' 'k81' 'sim_k71' 'sim_k61' 'sim_k51' 'sim_k41')
 for kmer in "${kmers[@]}"; do
     echo $kmer >> "out/$dir/$solver$name.compiled.txt"
