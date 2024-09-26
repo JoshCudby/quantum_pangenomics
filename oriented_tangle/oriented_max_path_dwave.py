@@ -3,7 +3,6 @@ import os
 import numpy as np
 from datetime import datetime
 from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
-from utils.qubo_utils import qubo_matrix_from_graph
 from utils.sampling_utils import dwave_sample_qubo, sample_list_to_path, validate_path
 
 if len(sys.argv) > 1:

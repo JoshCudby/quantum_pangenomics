@@ -28,6 +28,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     lambda_g = 2
     lambda_w = 1
 
+    # Note: we add an end node with parity 0 and 1, we only want 1 of them. We will delete the other at the end.
     qubo_matrix = np.zeros((T_max, V + 1, 2, T_max, V + 1, 2), dtype=np.int8)
     
     # Path constraint
@@ -64,7 +65,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     qubo_matrix = qubo_matrix.reshape((T_max * (V+1) * 2), (T_max * (V+1) * 2))
     qubo_matrix = 0.5 * (qubo_matrix + qubo_matrix.T)
 
-    # Delete non-interacting rows and columns
+    # Delete rows and columns corresponding to the extra end node we do not need
     qubo_matrix = np.delete(qubo_matrix, [np.ravel_multi_index((t, V, 1), dims=(T_max, V+1, 2)) for t in range(T_max)], 0)
     qubo_matrix = np.delete(qubo_matrix, [np.ravel_multi_index((t, V, 1), dims=(T_max, V+1, 2)) for t in range(T_max)], 1)
     
