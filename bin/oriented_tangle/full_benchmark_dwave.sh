@@ -5,6 +5,7 @@ usage()
     echo "usage: full_benchmark_dwave [[[-f file] [-j jobs] [-t times] [-n normalisation] [-m memory]] | [-h]]"
 }
 
+out=""
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )           shift
@@ -21,6 +22,9 @@ while [ "$1" != "" ]; do
                                 ;;
         -t | --times )          shift
                                 times_arr=($1)
+                                ;;
+        -o | --out )            shift
+                                out=".$1"
                                 ;;
         -h | --help )           usage
                                 exit
@@ -64,5 +68,5 @@ esac
 for time_limit in "${times_arr[@]}"
 do
     echo Submitting batch with time limit: $time_limit
-    bsub -J  "orien_d[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/oriented/dwave.full.$filename.%J.%I" -e "out/oriented/error.dwave.full.$filename.%J" -G "qpg" "python3 ./oriented_tangle/oriented_max_path_dwave.py $filename $normalisation $time_limit"
+    bsub -J  "orien_d[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/oriented/dwave$out.full.$filename.%J.%I" -e "out/oriented/error.dwave$out.full.$filename.%J" -G "qpg" "python3 ./oriented_tangle/oriented_max_path_dwave.py $filename $normalisation $time_limit"
 done
