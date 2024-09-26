@@ -5,6 +5,7 @@ usage()
     echo "usage: compile_full_benchmark [[-s solver] [-f filename] [-d directory]] | [-h]]"
 }
 
+name=""
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )   shift
@@ -15,6 +16,9 @@ while [ "$1" != "" ]; do
                         ;;
         -s | --solver ) shift
                         solver="$1"
+                        ;;
+        -n | --name )   shift
+                        name=".$1"
                         ;;
         -h | --help )   usage
                         exit
@@ -30,7 +34,7 @@ if [[ $filename =~ ^data/(.*)$ ]]; then
 fi
 
 out_dir="./out/$dir"
-file_pattern="$solver.full.$filename*"
+file_pattern="$solver$name.full.$filename*"
 search_pattern="Compilation Data"
 
 files=$(find "$out_dir" -type f -name "$file_pattern" )
