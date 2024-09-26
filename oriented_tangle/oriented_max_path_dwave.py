@@ -26,6 +26,15 @@ if len(sys.argv) > 3:
         time_limit = None
 else:
     time_limit = None
+    
+if len(sys.argv) > 4:
+    try:
+        jobs = int(sys.argv[4])
+    except ValueError:
+        print('Could not parse number of jobs')
+        jobs = 1
+else:
+    jobs = 1 
    
 
 graph = oriented_graph_from_file(f"data/{filename}")
@@ -36,22 +45,22 @@ save_dir = 'out/oriented'
 to_load = f'{save_dir}/qubo_data_{filename}.npy'
 qubo_matrix, offset, T_max, V = np.load(to_load, allow_pickle=True)
 
-
-sample, energy = dwave_sample_qubo(qubo_matrix, offset, time_limit, label=filename)
-path = sample_list_to_path(np.array(list(sample.values())), graph, T_max, V)
-
-
-validate_path(path, graph)
-print(f"Energy of path: {energy}")
+for _ in range(jobs):
+    sample, energy = dwave_sample_qubo(qubo_matrix, offset, time_limit, label=filename)
+    path = sample_list_to_path(np.array(list(sample.values())), graph, T_max, V)
 
 
-if not os.path.exists(save_dir):
-    os.mkdir(save_dir)    
-now = datetime.now().strftime("%d%m%Y_%H%M")
-save_file = save_dir + f"/dwave_{filename}_{now}"   
-to_save = np.array([sample, energy, path], dtype=object)
-np.save(save_file, to_save)
+    validate_path(path, graph)
+    print(f"Energy of path: {energy}")
 
 
-print('Compilation Data')
-print(f'[{time_limit}, {energy}],')
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)    
+    now = datetime.now().strftime("%d%m%Y_%H%M")
+    save_file = save_dir + f"/dwave_{filename}_{now}"   
+    to_save = np.array([sample, energy, path], dtype=object)
+    np.save(save_file, to_save)
+
+
+    print('Compilation Data')
+    print(f'[{time_limit}, {energy}],')
