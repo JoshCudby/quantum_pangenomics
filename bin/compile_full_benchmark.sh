@@ -18,7 +18,7 @@ while [ "$1" != "" ]; do
                         solver="$1"
                         ;;
         -n | --name )   shift
-                        name=".$1"
+                        name="$1"
                         ;;
         -h | --help )   usage
                         exit
