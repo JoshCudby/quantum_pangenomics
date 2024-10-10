@@ -8,3 +8,6 @@
 [submodule "qpg"]
 	path = qpg
 	url = https://github.com/jkbonfield/qpg/
+[submodule "QOKit"]
+	path = QOKit
+	url = https://github.com/jpmorganchase/QOKit.git
