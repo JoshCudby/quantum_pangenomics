@@ -21,11 +21,11 @@ else:
 graph = oriented_graph_from_file(f"data/{filename}")
 print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
-qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
+qubo_matrix, offset, T_max, N = qubo_matrix_from_graph(graph)
 
 path='out/diploid'
 Path(path).mkdir(exist_ok=True)
-to_save = np.array([qubo_matrix, offset, T_max, V], dtype=object)
+to_save = np.array([qubo_matrix, offset, T_max, N], dtype=object)
 filepath = f'{path}/qubo_data_{filename}_normalisation_{normalisation}'
 np.save(filepath, to_save)
 

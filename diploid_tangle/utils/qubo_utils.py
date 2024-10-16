@@ -56,16 +56,18 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
         
     # Traverse graph edges constraints
     Q_graph_prime = np.zeros((N+1, 2, N+1, 2), dtype=np.int8)
-    Q_graph_prime[N, 0, 0:N, :] = 1
 
     # Set end nodes
-    Q_graph_prime[0:N, :, N, 0] = 1
+    Q_graph_prime[N, 0, 0:N, :] = 1
     end_nodes= set()
     for node, val in dict(graph.nodes.data('start')).items():
         if val == 'end':
             node_index_in_qubo = floor(nodes.index(node)/ 2)
             end_nodes.add(node_index_in_qubo)
-    Q_graph_prime[list(end_nodes), :, N, 0] = 0
+    if len(end_nodes) > 0:
+        print(f'Setting end nodes: {end_nodes}')
+        Q_graph_prime[0:N, :, N, 0] = 1
+        Q_graph_prime[list(end_nodes), :, N, 0] = 0
 
     for i, sigma, j, tau in product(range(N), range(2), range(N), range(2)):
         if not (nodes[2 * i + sigma], nodes[2 * j + tau]) in graph.edges:
@@ -85,13 +87,14 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     
     start_nodes = list(start_nodes)
     if len(start_nodes) > 0:
-        Q_start_prime = np.ones((len(start_nodes), 2, len(start_nodes), 2))
-        for i, sigma in product(range(len(start_nodes)), range(2)):
-            Q_start_prime[i, sigma, i, sigma] -= 2
-        Q_start_prime *= lambda_g    
+        print(f'Setting start node: {start_nodes[0]}')
+        Q_start_prime = np.ones((2, 2), dtype=np.int8)
+        for sigma in range(2):
+            Q_start_prime[sigma, sigma] = -1
+        Q_start_prime *= 10    
         
         for X in range(2):
-            Q[X, 0, start_nodes, :, X, 0, :, :][:, :, start_nodes, :] = Q_start_prime
+            Q[X, 0, start_nodes[0], :, X, 0, start_nodes[0], :] += Q_start_prime
         
 
     # Number of visits constraints
@@ -110,6 +113,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     Q = np.delete(Q, indices, 0)
     Q = np.delete(Q, indices, 1)
     
-    offset = lambda_t * T_max  + lambda_w * int(sum(graph.nodes[nodes[2 * i]]["weight"] ** 2 for i in range(N))) + 1
-    
+    offset = lambda_t * T_max * 2  \
+        + lambda_w * int(sum(graph.nodes[nodes[2 * i]]["weight"] ** 2 for i in range(N))) \
+            + (2 if len(start_nodes) > 0 else 0)  * lambda_g   
     return Q, offset, T_max, N

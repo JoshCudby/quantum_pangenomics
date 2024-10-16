@@ -6,6 +6,8 @@ from datetime import datetime
 from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
 from utils.sampling_utils import validate_path, sample_list_to_paths
 
+from math import floor
+from itertools import product
 
 if len(sys.argv) > 1:
     filename = sys.argv[1]
@@ -34,10 +36,10 @@ print(f'Normalising by: {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 
 save_dir = "out/diploid"
-to_load = f'{save_dir}/qubo_data_{filename}.npy'
-_, offset, T_max, V = np.load(to_load, allow_pickle=True)
+to_load = f'{save_dir}/qubo_data_{filename}_normalisation_{normalisation}.npy'
+_, offset, T_max, N = np.load(to_load, allow_pickle=True)
            
-filepath = f'{save_dir}/mqlib_input_{filename}.txt'
+filepath = f'{save_dir}/mqlib_input_{filename}_normalisation_{normalisation}.txt'
 # Run the MQLib solver and capture output
 process = subprocess.run(["MQLib/bin/MQLib", "-fQ", filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
 out = process.stdout.decode("utf-8")
@@ -48,9 +50,9 @@ solution = out_data[2].split()
 solution = np.array([int(x) for x in solution])
 solution_energy = int(out_data[0].split(',')[3])
 energy = offset - solution_energy
-path = sample_list_to_paths(solution, graph, T_max, V)
+paths = sample_list_to_paths(solution, list(graph.nodes), T_max, N)
 
-validate_path(path, graph)
+validate_path(paths, graph)
 print(f"Energy of paths: {energy}")
 
 if not os.path.exists(save_dir):
@@ -59,7 +61,7 @@ if not os.path.exists(save_dir):
 now = datetime.now().strftime("%d%m%Y_%H%M")
 save_file = save_dir + f"/mqlib_output_{filename}_normalisation_{normalisation}_{now}"   
     
-to_save = np.array([solution, energy, path], dtype=object)
+to_save = np.array([solution, energy, paths], dtype=object)
 np.save(save_file, to_save)
 print('Compilation Data')
 print(f'[{time_limit}, {energy}],')

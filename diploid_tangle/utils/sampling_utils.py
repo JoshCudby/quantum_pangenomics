@@ -45,14 +45,15 @@ def sample_array_to_paths(sample_array: np.ndarray, nodes: list, N: int):
             'end' if nz[2][i] == N else nodes[nz[2][i] * 2 + nz[3][i]]
         ) for i in range(nz[0].shape[0])
     ]
-    two_path_list = [path_list_concat[0:int(len(path_list_concat)/2)], path_list_concat[int(len(path_list_concat)/2):len(path_list_concat)]]
-    return two_path_list
+    path_one = [step for step in path_list_concat if step[0] == 0]
+    path_two = [step for step in path_list_concat if step[0] == 1]
+    return [path_one, path_two]
 
 
-def sample_list_to_paths(solution, nodes, N, T):
-    for X in range(2):
-        for t in range(T):
-            solution = np.insert(solution, [X * T * (N + 1) * 2 + 2 * t * (N + 1) + N * 2 + 1], 0)
+def sample_list_to_paths(solution, nodes, T, N):
+    indices = np.array([(2 * (N + 1)) * (x+1) - 1 for x in range(2 * T)])
+    for index in indices:
+        solution = np.insert(solution, [index], 0)
     solution = solution.reshape((2, T, N + 1, 2))
     return sample_array_to_paths(solution, nodes, N)
 
@@ -98,15 +99,15 @@ def validate_path(paths: list, graph: nx.Graph):
         time_offset = 0
         i = 0
         while i < len(path):
-            if i + time_offset == path[i][1]:
+            if path[i][1] == i + time_offset:
                 i += 1
                 continue
-            if path[i][0] < i + time_offset:
+            if path[i][1] < i + time_offset:
                 print(f'Extra {"x" if idx == 0 else "y"} node at time {path[i][1]}')
                 time_offset -= 1
                 i += 1
                 continue
-            if path[i][0] > i + time_offset:
+            if path[i][1] > i + time_offset:
                 print(f'Skipped {"x" if idx == 0 else "y"} at time {path[i][1]}')
                 time_offset += 1
                 i += 1
