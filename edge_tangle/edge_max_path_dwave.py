@@ -35,7 +35,7 @@ graph = normalise_node_weights(graph, normalisation)
 qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
 
 
-sample, energy = dwave_sample_qubo(qubo_matrix, offset, time_limit, label=filename)
+sample, energy = dwave_sample_qubo(qubo_matrix, offset, time_limit, label=f'edge_{filename}')
 path = sample_list_to_path(np.array(list(sample.values())), graph, T_max, V)
 
 

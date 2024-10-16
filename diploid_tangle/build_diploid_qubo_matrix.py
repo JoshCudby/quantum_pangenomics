@@ -26,11 +26,11 @@ qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
 path='out/diploid'
 Path(path).mkdir(exist_ok=True)
 to_save = np.array([qubo_matrix, offset, T_max, V], dtype=object)
-filepath = f'{path}/qubo_data_{filename}'
+filepath = f'{path}/qubo_data_{filename}_normalisation_{normalisation}'
 np.save(filepath, to_save)
 
 # Write to MQLib Format
-filepath = f'out/diploid/mqlib_input_{filename}.txt'
+filepath = f'out/diploid/mqlib_input_{filename}_normalisation_{normalisation}.txt'
 ut_qubo_matrix = np.triu(qubo_matrix)
 non_zero = np.nonzero(ut_qubo_matrix)
 non_zero_count = int(non_zero[0].shape[0])
