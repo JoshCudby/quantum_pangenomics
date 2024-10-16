@@ -1,5 +1,6 @@
 *.pyc
 out/**/*.npy
 out/**/*.gfa.*
+out/**/*input*
 .vscode/
 code_for_dwave/
