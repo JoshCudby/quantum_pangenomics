@@ -25,8 +25,11 @@ while (<>) {
 
     foreach (m/[<>][^<>]*/g) {
 	my ($dir,$node) = (m/(.)(.*)/);
-    print "$dir";
-    print "$node\n";
+
+    # Check if the node exists in the GFA
+    if (!exists $gfa{$node}) {
+        next;
+    }
 	my $gseq = $gfa{$node}{seq};
 	if ($dir eq "<") {
 	    $gseq =~ tr/ACGT/TGCA/;
