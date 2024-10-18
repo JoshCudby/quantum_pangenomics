@@ -15,6 +15,8 @@ while (<$gfa>) {
     $gfa{$F[1]}{seq} = uc($F[2]);
 }
 
+# Initialize a counter for printed sequences
+my $counter = 0;
 
 # Parse the path
 while (<>) {
@@ -38,7 +40,8 @@ while (<>) {
 	$seq .= $gseq;
     }
     if ($seq) {
-        print ">path\n";
+        $counter++;
+        print ">path$counter\n";
         print "$seq\n";
     }
 }
