@@ -19,6 +19,8 @@ while (<$gfa>) {
 # Parse the path
 while (<>) {
     chomp();
+    # Skip lines that don't contain path strings (i.e., '>' or '<')
+    next unless m/[<>]/;
     my $seq="";
 
     foreach (m/[<>][^<>]*/g) {
