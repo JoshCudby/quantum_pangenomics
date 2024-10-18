@@ -37,5 +37,6 @@ while (<>) {
 	}
 	$seq .= $gseq;
     }
+    print "path";
     print "$seq\n";
 }
