@@ -32,6 +32,5 @@ while (<>) {
 	}
 	$seq .= $gseq;
     }
-    
     print "$seq\n";
 }
