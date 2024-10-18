@@ -25,6 +25,8 @@ while (<>) {
 
     foreach (m/[<>][^<>]*/g) {
 	my ($dir,$node) = (m/(.)(.*)/);
+    print "$dir";
+    print "$node\n"
 	my $gseq = $gfa{$node}{seq};
 	if ($dir eq "<") {
 	    $gseq =~ tr/ACGT/TGCA/;
