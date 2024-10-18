@@ -43,7 +43,7 @@ seed =  np.random.default_rng().integers(0, 1000)
 
 # TODO: call this from shell script?
 # Run the MQLib solver and capture output
-process = subprocess.run(["MQLib/bin/MQLib", "-fQ", filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps", "-s", seed], capture_output=True)
+process = subprocess.run(["MQLib/bin/MQLib", "-fQ", filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps", "-s", str(seed)], capture_output=True)
 out = process.stdout.decode("utf-8")
 
 # First line of output includes run data. 3rd line contains the solution.
