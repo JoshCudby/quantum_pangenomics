@@ -153,3 +153,12 @@ def validate_path(paths: list, graph: nx.Graph):
         missing_visits = graph.nodes[nodes[2 * i]]["weight"] - visits
         if  missing_visits != 0:
             print(f'Did not meet node weight for node: {get_original_vertex_name(nodes[2 * i])}. Missing visits: {missing_visits}')
+    
+    start_nodes = set()
+    for node, val in dict(graph.nodes.data('start')).items():
+        if val == 'start':
+            start_nodes.add(node)
+              
+    for idx, path in enumerate(paths):
+        if not get_original_vertex_name(path[0][2]) in start_nodes:
+            print(f'Did not start at start in path {"x" if idx == 0 else "y"}')

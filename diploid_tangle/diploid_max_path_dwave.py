@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 from datetime import datetime
 from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
-from utils.sampling_utils import dwave_sample_qubo, sample_list_to_paths, validate_path
+from utils.sampling_utils import dwave_sample_qubo, sample_list_to_paths, validate_path, print_paths_to_perl_format
 
 if len(sys.argv) > 1:
     filename = sys.argv[1]
@@ -47,17 +47,18 @@ qubo_matrix, offset, T_max, N = np.load(to_load, allow_pickle=True)
 
 for _ in range(jobs):
     sample, energy = dwave_sample_qubo(qubo_matrix, offset, time_limit, label=f'diploid_{filename}')
-    path = sample_list_to_paths(np.array(list(sample.values())), list(graph.nodes), T_max, N)
+    paths = sample_list_to_paths(np.array(list(sample.values())), list(graph.nodes), T_max, N)
 
 
-    validate_path(path, graph)
+    validate_path(paths, graph)
     print(f"Energy of path: {energy}")
+    
+    print_paths_to_perl_format(paths)
 
-    path='out/diploid'
     Path(save_dir).mkdir(exist_ok=True)
     now = datetime.now().strftime("%d%m%Y_%H%M")
     save_file = save_dir + f"/dwave_{filename}_{now}"   
-    to_save = np.array([sample, energy, path], dtype=object)
+    to_save = np.array([sample, energy, paths], dtype=object)
     np.save(save_file, to_save)
 
 
