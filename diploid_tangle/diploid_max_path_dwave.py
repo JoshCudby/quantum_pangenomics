@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 from datetime import datetime
 from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
-from utils.sampling_utils import dwave_sample_qubo, sample_list_to_paths, validate_path, print_paths_to_perl_format
+from utils.sampling_utils import dwave_sample_qubo, sample_list_to_paths, validate_paths, print_paths_to_perl_format
 
 if len(sys.argv) > 1:
     filename = sys.argv[1]
@@ -50,7 +50,7 @@ for _ in range(jobs):
     paths = sample_list_to_paths(np.array(list(sample.values())), list(graph.nodes), T_max, N)
 
 
-    validate_path(paths, graph)
+    validate_paths(paths, graph)
     print(f"Energy of path: {energy}")
     
     print_paths_to_perl_format(paths)

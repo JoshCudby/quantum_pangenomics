@@ -100,13 +100,14 @@ def print_paths_to_perl_format(paths:list):
             print(path_str)
             
 
-def validate_path(paths: list, graph: nx.Graph):
+def validate_paths(paths: list, graph: nx.Graph):
     """Checks the constraints for a path on a graph.
     
     In particular:
-     - does the path go along graph edges at each time step
+     - do the paths go along graph edges at each time step
      - is each node visited the correct number of times
-     - is exactly one node visited per time step
+     - is exactly one node visited per time step for each path
+     - do the paths start at start nodes?
 
     Args:
         path (list): _description_
@@ -136,15 +137,29 @@ def validate_path(paths: list, graph: nx.Graph):
     node_dict = {node: 0 for node in graph.nodes}
     node_dict['end'] = 0
     
+    end_nodes = set()
+    start_nodes = set()
+    for node, val in dict(graph.nodes.data('start')).items():
+        if val == 'end':
+            end_nodes.add(node)
+        elif val == 'start':
+            start_nodes.add(node)
+    
     for idx, path in enumerate(paths):
+        path_name = "x" if idx == 0 else "y"
+        if len(start_nodes) > 0 and not get_original_vertex_name(path[0][2]) in start_nodes:
+            print(f'Did not start at start in path {path_name}')
+        
         for x in range(len(path) - 1):
             v1 = path[x][2]
             node_dict[v1] += 1
             v2 = path[x + 1][2]
             if v1 == 'end' and not v2 == 'end':
-                print(f'Left the end node at {"x" if idx == 0 else "y"} path entry {x}')
+                print(f'Left the end node at {path_name} path entry {x}')
             elif (not v1 == 'end') and (not v2 == 'end') and (not (v1, v2) in graph.edges):
-                print(f'Broke graph edge at {"x" if idx == 0 else "y"} path entry {x}')
+                print(f'Broke graph edge at {path_name} path entry {x}')
+            elif len(end_nodes) > 0 and (v2 == 'end') and (not v1 in end_nodes):
+                print(f'Went to end node illegally in {path_name} at path entry {x}')
         node_dict[v2] += 1
     
     nodes = list(graph.nodes)
@@ -152,13 +167,4 @@ def validate_path(paths: list, graph: nx.Graph):
         visits = node_dict[nodes[2 * i]] + node_dict[nodes[2 * i + 1]]
         missing_visits = graph.nodes[nodes[2 * i]]["weight"] - visits
         if  missing_visits != 0:
-            print(f'Did not meet node weight for node: {get_original_vertex_name(nodes[2 * i])}. Missing visits: {missing_visits}')
-    
-    start_nodes = set()
-    for node, val in dict(graph.nodes.data('start')).items():
-        if val == 'start':
-            start_nodes.add(node)
-              
-    for idx, path in enumerate(paths):
-        if not get_original_vertex_name(path[0][2]) in start_nodes:
-            print(f'Did not start at start in path {"x" if idx == 0 else "y"}')
+            print(f'Did not meet node weight for node: {get_original_vertex_name(nodes[2 * i])}. Missing visits: {missing_visits}')            
