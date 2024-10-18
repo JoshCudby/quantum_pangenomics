@@ -42,7 +42,7 @@ print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 
 save_dir = 'out/diploid'
-to_load = f'{save_dir}/qubo_data_{filename}.npy'
+to_load = f'{save_dir}/qubo_data_{filename}_normalisation_{normalisation}.npy'
 qubo_matrix, offset, T_max, V = np.load(to_load, allow_pickle=True)
 
 for _ in range(jobs):
