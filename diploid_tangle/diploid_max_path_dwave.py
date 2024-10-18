@@ -43,11 +43,11 @@ graph = normalise_node_weights(graph, normalisation)
 
 save_dir = 'out/diploid'
 to_load = f'{save_dir}/qubo_data_{filename}_normalisation_{normalisation}.npy'
-qubo_matrix, offset, T_max, V = np.load(to_load, allow_pickle=True)
+qubo_matrix, offset, T_max, N = np.load(to_load, allow_pickle=True)
 
 for _ in range(jobs):
     sample, energy = dwave_sample_qubo(qubo_matrix, offset, time_limit, label=f'diploid_{filename}')
-    path = sample_list_to_paths(np.array(list(sample.values())), graph, T_max, V)
+    path = sample_list_to_paths(np.array(list(sample.values())), list(graph.nodes), T_max, N)
 
 
     validate_path(path, graph)
