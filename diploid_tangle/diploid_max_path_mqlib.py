@@ -4,10 +4,8 @@ import subprocess
 import os
 from datetime import datetime
 from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
-from utils.sampling_utils import validate_path, sample_list_to_paths
+from utils.sampling_utils import validate_path, sample_list_to_paths, print_paths_to_perl_format
 
-from math import floor
-from itertools import product
 
 if len(sys.argv) > 1:
     filename = sys.argv[1]
@@ -54,6 +52,8 @@ paths = sample_list_to_paths(solution, list(graph.nodes), T_max, N)
 
 validate_path(paths, graph)
 print(f"Energy of paths: {energy}")
+
+print_paths_to_perl_format(paths)
 
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)

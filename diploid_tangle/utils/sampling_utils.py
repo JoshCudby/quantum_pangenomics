@@ -78,7 +78,27 @@ def print_path(path: list):
         print(path[i * num_per_line: (i + 1) * num_per_line])
     if not (i + 1) * num_per_line == len(path):
         print(path[(i + 1)*num_per_line:])
+        
+        
+def oriented_node_to_perl_format(node):
+    pattern = r'(.+)_([\+\-])+'
+    match = re.search(pattern, node)
+    return ('>' if match.group(2) == '+' else '<') + match.group(1)
+        
 
+def print_paths_to_perl_format(paths:list):
+    for path in paths:
+        path_str=""
+        for step in path:
+            if not step[2] == 'end':
+                path_str += oriented_node_to_perl_format(step[2])
+            else:
+                if len(path_str) > 0:
+                    print(path_str)
+                    path_str = ""
+        if len(path_str) > 0:
+            print(path_str)
+            
 
 def validate_path(paths: list, graph: nx.Graph):
     """Checks the constraints for a path on a graph.
