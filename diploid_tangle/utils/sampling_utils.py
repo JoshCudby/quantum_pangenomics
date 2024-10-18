@@ -144,10 +144,11 @@ def validate_paths(paths: list, graph: nx.Graph):
             end_nodes.add(node)
         elif val == 'start':
             start_nodes.add(node)
+    end_nodes.add('end')
     
     for idx, path in enumerate(paths):
         path_name = "x" if idx == 0 else "y"
-        if len(start_nodes) > 0 and not get_original_vertex_name(path[0][2]) in start_nodes:
+        if len(start_nodes) > 0 and not path[0][2] in start_nodes:
             print(f'Did not start at start in path {path_name}')
         
         for x in range(len(path) - 1):
