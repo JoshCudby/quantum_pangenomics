@@ -2,6 +2,8 @@
 
 qubo_solvers/out/**/*.npy
 qubo_solvers/out/**/*.txt
+qubo_solvers/out/**/*build*
+qubo_solvers/out/**/*full*
 !qubo_solvers/out/**/*compiled.txt
 
 .vscode/
