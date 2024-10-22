@@ -1,0 +1,12 @@
+S	u23	TT	LN:i:3079	KC:i:237083	SC:f:77.000
+S	u24	GA	LN:i:2723	KC:i:87136	SC:f:32.000
+S	u25	GC	LN:i:2032	KC:i:79248	SC:f:39.000
+S	u43	CG	LN:i:1349	KC:i:103873	SC:f:77.000	st:Z:start
+L	u23	+	u24	+	1064M	EC:i:32
+L	u24	-	u23	-	1064M	EC:i:32
+L	u23	+	u25	+	369M	EC:i:23
+L	u25	-	u23	-	369M	EC:i:23
+L	u24	+	u43	-	337M	EC:i:7
+L	u43	+	u24	-	337M	EC:i:7
+L	u25	+	u43	-	337M	EC:i:15
+L	u43	+	u25	-	337M	EC:i:15

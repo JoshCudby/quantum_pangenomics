@@ -87,7 +87,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     
     start_nodes = list(start_nodes)
     if len(start_nodes) > 0:
-        print(f'Setting start node: {start_nodes[0]}')
+        print(f'Setting start node: {nodes[2 * start_nodes[0]]}')
         Q_start_prime = np.ones((2, 2), dtype=np.int8)
         for sigma in range(2):
             Q_start_prime[sigma, sigma] = -1

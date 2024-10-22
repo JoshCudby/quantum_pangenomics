@@ -4,12 +4,12 @@ import networkx as nx
 from math import floor
 
 
-def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: float, time_limit=None, label="Oriented QUBO") -> tuple[dict, float]:
+def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: float, time_limit=None, label="Diploid QUBO") -> tuple[dict, float]:
     """Perform a batch of annealing on a given Binary Quadratic Model.
 
     Args:
-        sampler (Sampler): The sampler to anneal with.
-        bqm (BQM): The model to anneal.
+        qubo_matrix (np.ndarray): The matrix describing the model to anneal.
+        offset (float): the constant factor ignored by the model.
         time_limit (int, optional): The time limit.
         label (str, optional): The label for sample submission on DWave platform.
         

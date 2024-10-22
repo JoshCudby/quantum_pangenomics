@@ -3,4 +3,4 @@ out/**/*.npy
 out/**/*.gfa.*
 out/**/*input*
 .vscode/
-code_for_dwave/
+qubo_solvers/code_for_dwave/

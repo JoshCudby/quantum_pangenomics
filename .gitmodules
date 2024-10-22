@@ -1,13 +1,13 @@
 [submodule "pggb"]
-	path = pggb
+	path = modules/pggb
 	url = https://github.com/pangenome/pggb.git
 [submodule "mqlib_fork"]
-	path = MQLib
+	path = modules/MQLib
 	url = https://github.com/JoshCudby/MQLib.git
 	branch = master
 [submodule "qpg"]
-	path = qpg
+	path = modules/qpg
 	url = https://github.com/jkbonfield/qpg/
 [submodule "QOKit"]
-	path = QOKit
+	path = modules/QOKit
 	url = https://github.com/jpmorganchase/QOKit.git

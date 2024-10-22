@@ -37,7 +37,7 @@ else:
     jobs = 1 
    
 
-graph = oriented_graph_from_file(f"data/{filename}")
+graph = oriented_graph_from_file(f"../data/{filename}")
 print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 
