@@ -14,7 +14,6 @@ terms = [(np.random.normal(), spin_pair) for spin_pair in combinations_with_repl
 
 print(get_available_simulator_names("x"))
 simclass = choose_simulator(name='auto')
-print(type(simclass))
 sim = simclass(N_vars, terms=terms)
 sim.get_cost_diagonal()
 

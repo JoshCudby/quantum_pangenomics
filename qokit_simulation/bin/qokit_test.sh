@@ -4,7 +4,10 @@
 
 memory=2000
 
-mkdir -p out/qokit
+module load cuda-12.1.1
+WORKING_DIR=/nfs/users/nfs_j/jc59/qgenomics/pagnenome/qokit_simulation
+source /nfs/users/nfs_j/jc59/qokit_311/bin/activate
+
 # QOKit Testing
 echo "QOKit Testing"
 bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu - -M "$memory" -o "out/qokit.test.%J" -e "out/error.qokit.test.%J" -G "qpg" -q "qpg" "python3 ./qokit_job_testing.py"
