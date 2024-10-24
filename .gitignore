@@ -1,10 +1,11 @@
 **/*.pyc
 
-qubo_solvers/out/**/*.npy
-qubo_solvers/out/**/*.txt
-qubo_solvers/out/**/*build*
-qubo_solvers/out/**/*full*
-qubo_solvers/out/**/*gfa*
+**/out/**/*.npy
+**/out/**/*.txt
+**/out/**/*build*
+**/out/**/*full*
+**/out/**/*gfa*
+**/out/**/*test*
 !qubo_solvers/out/**/*compiled.txt
 
 .vscode/
