@@ -5,6 +5,7 @@
 memory=2000
 
 module load cuda-12.1.1
+LD_LIBRARY_PATH=$CUDA_HOME/lib64
 WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qokit_simulation
 source ~/qokit-311/bin/activate
 
