@@ -37,7 +37,7 @@ p = 1
 gamma, beta = rng.random((2, p))
 # u, v = parameter_utils.to_fourier_basis(gamma, beta)
 theta = np.hstack([gamma, beta])
-print(theta)
+print(f'Original theta: {theta}')
 
 f = get_qaoa_objective(N, p, terms=terms, parameterization='theta', objective='overlap')
 print(f"Success probability at p={p} before optimization is {1-f(theta)}")
@@ -45,17 +45,17 @@ print(f"Success probability at p={p} before optimization is {1-f(theta)}")
 res = scipy.optimize.minimize(f, theta, method='COBYLA', options={'rhobeg': 0.01/N})
 gamma_opt, beta_opt = res.x[:p], res.x[p:]
 print(f"Success probability at p={p} after optimization is {1-f(np.hstack([gamma_opt, beta_opt]))}")
-print(f'gamma_opt: {gamma_opt}')
-print(f'beta opt: {beta_opt}')
+print(f'Optimised theta at p = {p}: {theta}')
 
-p = p + 1
-init_gamma, init_beta = np.hstack([gamma_opt, [0]]), np.hstack([beta_opt, [0]])
-theta = np.hstack([init_gamma, init_beta])
-print(f'theta: {theta}')
+while(1-f(np.hstack([gamma_opt, beta_opt])) < 10 ** -4 and p < 6):
+    p = p + 1
+    init_gamma, init_beta = np.hstack([gamma_opt, [0]]), np.hstack([beta_opt, [0]])
+    theta = np.hstack([init_gamma, init_beta])
+    
+    f = get_qaoa_objective(N, p, terms=terms, parameterization='theta', objective='overlap')
+    print(f"Success probability at p={p} before optimization is {1-f(theta)}")
 
-f = get_qaoa_objective(N, p, terms=terms, parameterization='theta', objective='overlap')
-print(f"Success probability at p={p} before optimization is {1-f(theta)}")
-
-res = scipy.optimize.minimize(f, theta, method='COBYLA', options={'rhobeg': 0.01/N})
-u_opt, v_opt = res.x[:p], res.x[p:]
-print(f"Success probability at p={p} after optimization is {1-f(np.hstack([u_opt, v_opt]))}")
+    res = scipy.optimize.minimize(f, theta, method='COBYLA', options={'rhobeg': 0.01/N})
+    u_opt, v_opt = res.x[:p], res.x[p:]
+    print(f"Success probability at p={p} after optimization is {1-f(np.hstack([u_opt, v_opt]))}")
+    print(f'Optimised theta at p = {p}: {theta}')
