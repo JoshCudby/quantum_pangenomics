@@ -48,6 +48,6 @@ def f_from_terms_ground_truth(s):
         out += coeff * s[i] * s[j]
     return out
 
-min, sol = brute_force(f_from_terms_ground_truth, N_vars, minimize=True)[0]
+min, sol = brute_force(f_from_terms_ground_truth, N_vars, minimize=True)
 print(f"True minimum: {min}")
 print(f"True sol: {sol}")
