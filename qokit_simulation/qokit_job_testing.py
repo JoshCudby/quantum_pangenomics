@@ -9,7 +9,7 @@ from qokit.fur import choose_simulator, get_available_simulator_names
 
 # Small test
 N_vars = 4
-np.random.seed(100)
+np.random.seed(10)
 terms = [(np.random.normal(), spin_pair) for spin_pair in combinations_with_replacement(range(N_vars), r=2)]
 
 # print(get_available_simulator_names("x"))
