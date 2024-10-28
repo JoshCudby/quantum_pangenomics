@@ -38,6 +38,7 @@ initial_beta = np.linspace(1, 0, p)
 
 res = scipy.optimize.minimize(f, np.hstack([initial_gamma, initial_beta]), method='COBYLA', options={'rhobeg': 0.01})
 print(f"Expected QAOA solution quality: {res.fun:.5f}")
+print(f"Sol: {res.x}")
 
 def f_from_terms_ground_truth(s):
     """ground truth for debugging
@@ -47,4 +48,6 @@ def f_from_terms_ground_truth(s):
         out += coeff * s[i] * s[j]
     return out
 
-print(f"True minimum: {brute_force(f_from_terms_ground_truth, N_vars, minimize=True)[0]:.5f}")
+min, sol = brute_force(f_from_terms_ground_truth, N_vars, minimize=True)[0]
+print(f"True minimum: {min}")
+print(f"True sol: {sol}")
