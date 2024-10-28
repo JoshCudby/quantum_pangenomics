@@ -20,11 +20,11 @@ print(N)
 terms = [(Q[i, j], [i, j]) for i in range(N) for j in range(i, N)]
 
 
-print(get_available_simulator_names("x"))
-simclass = choose_simulator(name='auto')
-sim = simclass(N, terms=terms)
-print(type(sim))
-sim.get_cost_diagonal()
+# print(get_available_simulator_names("x"))
+# simclass = choose_simulator(name='auto')
+# sim = simclass(N, terms=terms)
+# print(type(sim))
+# sim.get_cost_diagonal()
 
 # Initial
 p = 1
@@ -32,7 +32,7 @@ gamma, beta = rng.random((2, 3))
 u, v = parameter_utils.to_fourier_basis(gamma, beta)
 init_freq = np.hstack([u, v])
 
-f = get_qaoa_objective(N, p, parameterization='freq', objective='overlap')
+f = get_qaoa_objective(N, p, terms=terms, parameterization='freq', objective='overlap')
 print(f"Success probability at p={p} before optimization is {1-f(init_freq)}")
 
 res = scipy.optimize.minimize(f, init_freq, method='COBYLA', options={'rhobeg': 0.01/N})
