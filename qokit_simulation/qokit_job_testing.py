@@ -32,7 +32,7 @@ terms = [(np.random.normal(), spin_pair) for spin_pair in combinations_with_repl
 
 # Get objective
 p = 5
-f = get_qaoa_objective(N_vars, p, terms=terms, parameterization='theta', objective='overlap')
+f = get_qaoa_objective(N_vars, p, terms=terms, parameterization='theta', objective='expectation')
 initial_gamma = -1*np.linspace(0, 1, p)
 initial_beta = np.linspace(1, 0, p)
 
@@ -51,3 +51,7 @@ def f_from_terms_ground_truth(s):
 min, sol = brute_force(f_from_terms_ground_truth, N_vars, minimize=True)
 print(f"True minimum: {min}")
 print(f"True sol: {sol}")
+
+print(f_from_terms_ground_truth([0] * N_vars))
+print(f_from_terms_ground_truth([1] * N_vars))
+print(f_from_terms_ground_truth([1,1,1,0]))
