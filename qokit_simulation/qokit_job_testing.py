@@ -38,3 +38,14 @@ print(f"Success probability at p={p} before optimization is {1-f(init_freq)}")
 res = scipy.optimize.minimize(f, init_freq, method='COBYLA', options={'rhobeg': 0.01/N})
 u_opt, v_opt = res.x[:p], res.x[p:]
 print(f"Success probability at p={p} after optimization is {1-f(np.hstack([u_opt, v_opt]))}")
+
+p = p + 1
+init_u, init_v = parameter_utils.extrapolate_parameters_in_fourier_basis(u_opt, v_opt, p, 1)
+init_freq = np.hstack([init_u, init_v])
+
+f = get_qaoa_objective(N, p, terms=terms, parameterization='freq', objective='overlap')
+print(f"Success probability at p={p} before optimization is {1-f(init_freq)}")
+
+res = scipy.optimize.minimize(f, init_freq, method='COBYLA', options={'rhobeg': 0.01/N})
+u_opt, v_opt = res.x[:p], res.x[p:]
+print(f"Success probability at p={p} after optimization is {1-f(np.hstack([u_opt, v_opt]))}")
