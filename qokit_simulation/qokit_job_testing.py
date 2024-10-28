@@ -29,21 +29,21 @@ terms = [(Q[i, j], [i, j]) for i in range(N) for j in range(i, N)]
 # Initial
 p = 1
 gamma, beta = rng.random((2, 3))
-u, v = parameter_utils.to_fourier_basis(gamma, beta)
-init_freq = np.hstack([u, v])
+# u, v = parameter_utils.to_fourier_basis(gamma, beta)
+theta = np.hstack([gamma, beta])
 
-f = get_qaoa_objective(N, p, terms=terms, parameterization='freq', objective='overlap')
-print(f"Success probability at p={p} before optimization is {1-f(init_freq)}")
+f = get_qaoa_objective(N, p, terms=terms, parameterization='theta', objective='overlap')
+print(f"Success probability at p={p} before optimization is {1-f(theta)}")
 
-res = scipy.optimize.minimize(f, init_freq, method='COBYLA', options={'rhobeg': 0.01/N})
-u_opt, v_opt = res.x[:p], res.x[p:]
-print(f"Success probability at p={p} after optimization is {1-f(np.hstack([u_opt, v_opt]))}")
-print(u_opt)
-print(v_opt)
+res = scipy.optimize.minimize(f, theta, method='COBYLA', options={'rhobeg': 0.01/N})
+gamma_opt, beta_opt = res.x[:p], res.x[p:]
+print(f"Success probability at p={p} after optimization is {1-f(np.hstack([gamma_opt, beta_opt]))}")
+print(gamma_opt)
+print(beta_opt)
 
 p = p + 1
-init_u, init_v = parameter_utils.extrapolate_parameters_in_fourier_basis(u_opt, v_opt, p, 1)
-init_freq = np.hstack([init_u, init_v])
+init_gamma, init_beta = np.hstack([gamma, [0]]), np.hstack([beta, [0]])
+init_freq = np.hstack([gamma, beta])
 
 f = get_qaoa_objective(N, p, terms=terms, parameterization='freq', objective='overlap')
 print(f"Success probability at p={p} before optimization is {1-f(init_freq)}")

@@ -11,6 +11,6 @@ source ~/qokit-311/bin/activate
 
 # QOKit Testing
 echo "QOKit Testing"
-bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu - -M "$memory" -o "out/qokit.test.%J" -e "out/error.qokit.test.%J" -G "qpg" -q "qpg" "python3 ./qokit_job_testing.py"
+bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=4:j_exclusive=yes" -M "$memory" -o "out/qokit.test.%J" -e "out/error.qokit.test.%J" -G "qpg" -q "qpg" "python3 ./qokit_job_testing.py"
 
 exit 0
