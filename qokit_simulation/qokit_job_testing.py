@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt
 
 from qokit.utils import brute_force
 from qokit import get_qaoa_objective
-from qokit.fur import choose_simulator, get_available_simulator_names
+# from qokit.fur import choose_simulator, get_available_simulator_names
 
 # Small test
 N_vars = 4
-np.random.seed(10)
-terms = [(np.random.normal(), spin_pair) for spin_pair in combinations_with_replacement(range(N_vars), r=2)]
+rng = np.random.default_rng(10)
+terms = [(rng.normal(), spin_pair) for spin_pair in combinations_with_replacement(range(N_vars), r=2)]
 
 # print(get_available_simulator_names("x"))
 # simclass = choose_simulator(name='auto')
@@ -38,7 +38,7 @@ initial_beta = np.linspace(1, 0, p)
 
 res = scipy.optimize.minimize(f, np.hstack([initial_gamma, initial_beta]), method='COBYLA', options={'rhobeg': 0.01})
 print(f"Expected QAOA solution quality: {res.fun:.5f}")
-print(f"Sol: {res.x}")
+print(f"Optimised parameters: {res.x}")
 
 def f_from_terms_ground_truth(s):
     """ground truth for debugging
@@ -52,6 +52,6 @@ min, sol = brute_force(f_from_terms_ground_truth, N_vars, minimize=True)
 print(f"True minimum: {min}")
 print(f"True sol: {sol}")
 
-print(f_from_terms_ground_truth([0] * N_vars))
 print(f_from_terms_ground_truth([1] * N_vars))
-print(f_from_terms_ground_truth([1,1,1,0]))
+print(f_from_terms_ground_truth([-1] * N_vars))
+print(f_from_terms_ground_truth([-1,-1,-1,1]))
