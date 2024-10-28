@@ -32,7 +32,7 @@ terms = [(np.random.normal(), spin_pair) for spin_pair in combinations_with_repl
 
 # Get objective
 p = 5
-f = get_qaoa_objective(N_vars, p, terms=terms, parameterization='theta')
+f = get_qaoa_objective(N_vars, p, terms=terms, parameterization='theta', objective='overlap')
 initial_gamma = -1*np.linspace(0, 1, p)
 initial_beta = np.linspace(1, 0, p)
 
