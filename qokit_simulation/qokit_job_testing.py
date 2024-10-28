@@ -13,6 +13,7 @@ Q, offset, W = data
 Q = np.triu(Q) * 2
 Q -= np.triu(np.triu(Q).T) / 2
 N_vars = Q.shape[0]
+print(N_vars)
 
 # Get Hamiltonian terms
 terms = [(Q[i, j], [i, j]) for i in range(N_vars) for j in range(i, N_vars)]
@@ -35,4 +36,15 @@ probs.sum()
 probs = sim.get_probabilities(_result, preserve_state=False)
 sv2 = sim.get_statevector(_result)
 print("Using numpy") if np.allclose(sv, sv2) else print("Yohoo, I'm using a memory-economic simulator!")
-print(sv2)
+
+overlap = sim.get_overlap(_result)
+print("Ground state overlap:", overlap)
+# Below we test that for positive-valued cost function, the maximum can be achieved 
+# by either inverting the values, or negating the values.
+costs_abs = np.abs(sim.get_cost_diagonal())
+print("Overlap with ground state for absolute cost:", sim.get_overlap(_result, costs=costs_abs))
+overlap_inv = sim.get_overlap(_result, costs=1/costs_abs)
+print("Overlap with highest state (inverted costs):", overlap_inv)
+overlap_neg = sim.get_overlap(_result, costs=-costs_abs)
+print("Overlap with highest state (negative):", overlap_neg)
+assert overlap_inv == overlap_neg, "You may have values of mixed sign in your cost."
