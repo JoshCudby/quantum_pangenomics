@@ -9,24 +9,24 @@ from itertools import combinations_with_replacement
 
 rng = np.random.default_rng(10)
 
-# data = np.load('../qubo_solvers/out/tangle/qubo_data_test.npy', allow_pickle=True)
-# Q, offset, W = data
-# # Move terms to upper triangular part
-# Q = np.triu(Q) * 2
-# Q -= np.triu(np.triu(Q).T) / 2
-# N = Q.shape[0]
-# print(N)
+data = np.load('../qubo_solvers/out/tangle/qubo_data_test.npy', allow_pickle=True)
+Q, offset, W = data
+# Move terms to upper triangular part
+Q = np.triu(Q) * 2
+Q -= np.triu(np.triu(Q).T) / 2
+N = Q.shape[0]
+print(N)
 
-# # Get Hamiltonian terms
-# terms = [(Q[i, j], [i, j]) for i in range(N) for j in range(i, N)]
+# Get Hamiltonian terms
+terms = [(Q[i, j], [i, j]) for i in range(N) for j in range(i, N)]
 
 # Small test
-N = 4
-np.random.seed(10)
-terms = [(np.random.normal(), spin_pair) for spin_pair in combinations_with_replacement(range(N), r=2)]
+# N = 4
+# np.random.seed(10)
+# terms = [(np.random.normal(), spin_pair) for spin_pair in combinations_with_replacement(range(N), r=2)]
 
 
-# print(get_available_simulator_names("x"))
+print(get_available_simulator_names("x"))
 # simclass = choose_simulator(name='auto')
 # sim = simclass(N, terms=terms)
 # print(type(sim))
