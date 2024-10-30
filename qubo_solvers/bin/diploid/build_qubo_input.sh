@@ -51,4 +51,5 @@ esac
 
 ## MAIN
 bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
+-o "build.$filename.%J" -e "error.build.$filename.%J" \
 "python3 ./diploid_tangle/build_diploid_qubo_matrix.py $filename $normalisation"
