@@ -8,7 +8,7 @@ from utils.qubo_utils import qubo_matrix_from_graph
 if len(sys.argv) > 1:
     filepath = sys.argv[1]
 else:
-    filepath = "data/test.gfa"
+    filepath = "test.gfa"
 
 if len(sys.argv) > 2:
     try:
