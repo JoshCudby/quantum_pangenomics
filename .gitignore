@@ -10,3 +10,6 @@
 
 .vscode/
 qubo_solvers/code_for_dwave/
+
+data/gfLaeSulp1/gfLaeSulp1.gaf
+data/gfLaeSulp1/gfLaeSulp1.gfa
