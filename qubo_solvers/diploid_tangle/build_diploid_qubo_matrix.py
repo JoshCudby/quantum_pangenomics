@@ -9,7 +9,7 @@ print("Started Building Matrix")
 if len(sys.argv) > 1:
     filepath = sys.argv[1]
 else:
-    filepath = "test.gfa"
+    filepath = "../data/test.gfa"
 
 if len(sys.argv) > 2:
     try:
