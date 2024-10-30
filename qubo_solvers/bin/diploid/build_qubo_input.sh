@@ -26,8 +26,9 @@ while [ "$1" != "" ]; do
 done
 
 echo "$filename"
+extension="${filename##*.}"
 filename=$(basename -- "$filename")
-echo "$filenmae"
+filename="$filename$extension"
 
 if [ -f "$filename" ]; then
     echo "Reading file: $filename"
