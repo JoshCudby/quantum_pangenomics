@@ -5,6 +5,7 @@ from pathlib import Path
 from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
 from utils.qubo_utils import qubo_matrix_from_graph
 
+print("Started Building Matrix")
 if len(sys.argv) > 1:
     filepath = sys.argv[1]
 else:
@@ -17,8 +18,10 @@ if len(sys.argv) > 2:
         normalisation = 1
 else:
     normalisation = 1
-   
+
+print(filepath)
 filename = os.path.basename(filepath)
+print(filename)
 
 graph = oriented_graph_from_file(filepath)
 print(f'Normalising by {normalisation}')
