@@ -32,7 +32,7 @@ np_data_filepath = f'{out_path}/qubo_data_{filename}_normalisation_{normalisatio
 np.save(np_data_filepath, to_save)
 
 # Write to MQLib Format
-mqlib_data_filepath = f'out/diploid/mqlib_input_{filename}_normalisation_{normalisation}.txt'
+mqlib_data_filepath = f'{out_path}/mqlib_input_{filename}_normalisation_{normalisation}.txt'
 ut_qubo_matrix = np.triu(qubo_matrix)
 non_zero = np.nonzero(ut_qubo_matrix)
 non_zero_count = int(non_zero[0].shape[0])
