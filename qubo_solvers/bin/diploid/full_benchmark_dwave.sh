@@ -65,6 +65,8 @@ case $jobs in
 esac
 
 ## MAIN
+WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
+source ~/pangenome/bin/activate
 for time_limit in "${times_arr[@]}"
 do
     echo Submitting batch with time limit: $time_limit
