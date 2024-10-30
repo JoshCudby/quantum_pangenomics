@@ -26,6 +26,7 @@ while [ "$1" != "" ]; do
 done
 
 filename=$(basename -- "$filename")
+echo "$filenmae"
 
 if [ -f "$filename" ]; then
     echo "Reading file: $filename"
