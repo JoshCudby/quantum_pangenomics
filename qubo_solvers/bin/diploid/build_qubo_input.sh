@@ -25,9 +25,7 @@ while [ "$1" != "" ]; do
     shift
 done
 
-if [[ $filename =~ ^data/(.*)$ ]]; then
-    filename="${BASH_REMATCH[1]}" 
-fi
+filename=$(basename -- "$filename")
 
 if [ -f "$filename" ]; then
     echo "Reading file: $filename"
