@@ -35,16 +35,14 @@ while [ "$1" != "" ]; do
     shift
 done
 
-if [[ $filename =~ ^data/(.*)$ ]]; then
-    filename="${BASH_REMATCH[1]}" 
-fi
-
-if [ -f "./data/"$filename ]; then
-    echo "Reading file:" $filename
+if [ -f "$filepath" ]; then
+    echo "Reading file: $filepath"
 else
     echo "Could not find input file."
     exit 1
 fi
+
+filename=$(basename -- "$filepath")
 
 case $normalisation in
     [0-9]* ) echo "Normalising node weights by:" $normalisation
@@ -70,5 +68,5 @@ source ~/pangenome/bin/activate
 for time_limit in "${times_arr[@]}"
 do
     echo Submitting batch with time limit: $time_limit
-    bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/diploid/dwave$out.full.$filename.%J" -e "out/diploid/error.dwave$out.full.$filename.%J" -G "qpg" "python3 ./diploid_tangle/diploid_max_path_dwave.py $filename $normalisation $time_limit $jobs"
+    bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/diploid/dwave$out.full.$filename.%J" -e "out/diploid/error.dwave$out.full.$filename.%J" -G "qpg" "python3 ./diploid_tangle/diploid_max_path_dwave.py $filepath $normalisation $time_limit $jobs"
 done

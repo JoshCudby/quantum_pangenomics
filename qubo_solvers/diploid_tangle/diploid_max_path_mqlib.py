@@ -8,9 +8,9 @@ from utils.sampling_utils import validate_paths, sample_list_to_paths, print_pat
 
 
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
+    filepath = sys.argv[1]
 else:
-    filename = "test.gfa"
+    filepath = "test.gfa"
 
 if len(sys.argv) > 2:
     try:
@@ -27,9 +27,10 @@ if len(sys.argv) > 3:
         time_limit = 10
 else:
     time_limit = 10
-    
 
-graph = oriented_graph_from_file(f"../data/{filename}")
+filename = os.path.basename(filepath)
+
+graph = oriented_graph_from_file(filepath)
 print(f'Normalising by: {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 
@@ -37,13 +38,13 @@ save_dir = "out/diploid"
 to_load = f'{save_dir}/qubo_data_{filename}_normalisation_{normalisation}.npy'
 _, offset, T_max, N = np.load(to_load, allow_pickle=True)
            
-filepath = f'{save_dir}/mqlib_input_{filename}_normalisation_{normalisation}.txt'
+mqlib_input_filepath = f'{save_dir}/mqlib_input_{filename}_normalisation_{normalisation}.txt'
 
 seed =  np.random.default_rng().integers(0, 1000)
 
 # TODO: call this from shell script?
 # Run the MQLib solver and capture output
-process = subprocess.run(["MQLib/bin/MQLib", "-fQ", filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps", "-s", str(seed)], capture_output=True)
+process = subprocess.run(["MQLib/bin/MQLib", "-fQ", mqlib_input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps", "-s", str(seed)], capture_output=True)
 out = process.stdout.decode("utf-8")
 
 # First line of output includes run data. 3rd line contains the solution.
