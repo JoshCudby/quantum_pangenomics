@@ -2,7 +2,7 @@
 
 ## MAIN
 
-memory=2000
+memory=4000
 
 module load cuda-12.1.1
 LD_LIBRARY_PATH=$CUDA_HOME/lib64

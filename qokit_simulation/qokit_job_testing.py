@@ -33,10 +33,15 @@ print(get_available_simulator_names("x"))
 # sim.get_cost_diagonal()
 
 # Initial
-p = 1
-gamma, beta = rng.random((2, p))
-# u, v = parameter_utils.to_fourier_basis(gamma, beta)
-theta = np.hstack([gamma, beta])
+p = 10
+# gamma, beta = rng.random((2, p))
+# theta = np.hstack([gamma, beta])
+theta = np.array([
+    0.91099071, 0.91964213, 0.93378148, 0.9981171 , 0.92979027,
+    0.97469023,0.93451724, 0.89760674, 0.89314422,0.84197274,
+    0.16223702,0.20334032, 0.27478456, 0.33242042,0.36578007,
+    0.37391533,0.48222589,0.48440223 ,0.48181484,0.54973208
+])
 print(f'Original theta: {theta}')
 
 f = get_qaoa_objective(N, p, terms=terms, parameterization='theta', objective='overlap')
@@ -48,7 +53,7 @@ theta = np.hstack([gamma_opt, beta_opt])
 print(f"Success probability at p = {p} after optimization is {1-f(theta)}")
 print(f'Optimised theta at p = {p}: {theta}')
 
-while(1-f(theta) < 10 ** -4 and p < 10):
+while(1-f(theta) < 10 ** -4 and p < 15):
     init_gamma = np.interp(np.linspace(0, 1, p + 1), np.linspace(0, 1, p), gamma_opt)
     init_beta = np.interp(np.linspace(0, 1, p + 1), np.linspace(0, 1, p), beta_opt)
     init_theta = np.hstack([init_gamma, init_beta])
