@@ -50,5 +50,5 @@ esac
 
 
 ## MAIN
-echo $WORKING_DIR
-bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/diploid/build.$filename.%J" -e "out/diploid/error.build.$filename.%J" -G "qpg" "python3 ./diploid_tangle/build_diploid_qubo_matrix.py $filename $normalisation"
+mkdir "./out/diploid"
+bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "./out/diploid/build.$filename.%J" -e "./out/diploid/error.build.$filename.%J" -G "qpg" "python3 ./diploid_tangle/build_diploid_qubo_matrix.py $filename $normalisation"
