@@ -50,4 +50,5 @@ esac
 
 
 ## MAIN
-bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/edge/build.$filename.%J" -e "out/edge/error.build.$filename.%J" -G "qpg" "python3 ./edge_tangle/build_edge_qubo_matrix.py $filename $normalisation"
+bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "log.txt" -e "error.log.txt" -G "qpg" "python3 ./edge_tangle/build_edge_qubo_matrix.py $filename $normalisation"
+#out/edge/build.$filename.%J out/edge/error.build.$filename.%J
