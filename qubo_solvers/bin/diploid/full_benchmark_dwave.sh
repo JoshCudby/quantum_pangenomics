@@ -9,7 +9,7 @@ out=""
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )           shift
-                                filename="$1"
+                                filepath="$1"
                                 ;;
         -n | --normalisation )  shift
                                 normalisation="$1"

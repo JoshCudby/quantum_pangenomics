@@ -8,7 +8,7 @@ usage()
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )           shift
-                                filename="$1"
+                                filepath="$1"
                                 ;;
         -n | --normalisation )  shift
                                 normalisation="$1"
@@ -31,16 +31,14 @@ while [ "$1" != "" ]; do
     shift
 done
 
-if [[ $filename =~ ^data/(.*)$ ]]; then
-    filename="${BASH_REMATCH[1]}" 
-fi
-
-if [ -f "./data/"$filename ]; then
-    echo "Reading file:" $filename
+if [ -f "$filepath" ]; then
+    echo "Reading file: $filepath"
 else
     echo "Could not find input file."
     exit 1
 fi
+
+filename=$(basename -- "$filepath")
 
 case $normalisation in
     [0-9]* ) echo "Normalising node weights by:" $normalisation
