@@ -25,6 +25,7 @@ while [ "$1" != "" ]; do
     shift
 done
 
+echo "$filename"
 filename=$(basename -- "$filename")
 echo "$filenmae"
 
