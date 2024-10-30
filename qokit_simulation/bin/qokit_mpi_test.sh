@@ -11,6 +11,6 @@ source ~/qokit-311/bin/activate
 
 # QOKit Testing
 echo "QOKit MPI Testing"
-bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=2" -M "$memory" -o "out/qokit.mpi.test.%J" -e "out/error.qokit.mpi.test.%J" -G "qpg" -q "qpg" "python3 ./qokit_job_testing.py"
+bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=2" -M "$memory" -o "out/qokit.mpi.test.%J" -e "out/error.qokit.mpi.test.%J" -G "qpg" -q "qpg" "python3 ./qokit_mpi_testing.py"
 
 exit 0
