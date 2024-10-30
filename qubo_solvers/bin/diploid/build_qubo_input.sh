@@ -25,20 +25,14 @@ while [ "$1" != "" ]; do
     shift
 done
 
-echo "$filename"
-extension="${filename##*.}"
-filename=$(basename -- "$filename")
-echo $filename
-echo $extension
-filename="$filename$extension"
-echo $filename
-
 if [ -f "$filename" ]; then
     echo "Reading file: $filename"
 else
     echo "Could not find input file."
     exit 1
 fi
+
+filename=$(basename -- "$filename")
 
 case $normalisation in
     [0-9]* ) echo "Normalising node weights by: $normalisation"
