@@ -29,26 +29,26 @@ if [[ $filename =~ ^data/(.*)$ ]]; then
     filename="${BASH_REMATCH[1]}" 
 fi
 
-if [ -f $filename ]; then
-    echo "Reading file:" $filename
+if [ -f "$filename" ]; then
+    echo "Reading file: $filename"
 else
     echo "Could not find input file."
     exit 1
 fi
 
 case $normalisation in
-    [0-9]* ) echo "Normalising node weights by:" $normalisation
+    [0-9]* ) echo "Normalising node weights by: $normalisation"
              ;;
     *      ) echo "Normalisation was not a number."; exit 1
 esac
 
 case $memory in
-    [0-9]* ) echo "Memory:" $memory
+    [0-9]* ) echo "Memory: $memory"
              ;;
     *      ) echo "Memory was not a number."; exit 1
 esac
 
 
 ## MAIN
-mkdir "./out/diploid"
-bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "./out/diploid/build.$filename.%J" -e "./out/diploid/error.build.$filename.%J" -G "qpg" "python3 ./diploid_tangle/build_diploid_qubo_matrix.py $filename $normalisation"
+bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
+"python3 ./diploid_tangle/build_diploid_qubo_matrix.py $filename $normalisation"
