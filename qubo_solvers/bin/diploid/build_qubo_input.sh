@@ -29,7 +29,7 @@ if [[ $filename =~ ^data/(.*)$ ]]; then
     filename="${BASH_REMATCH[1]}" 
 fi
 
-if [ -f "./data/"$filename ]; then
+if [ -f $filename ]; then
     echo "Reading file:" $filename
 else
     echo "Could not find input file."
