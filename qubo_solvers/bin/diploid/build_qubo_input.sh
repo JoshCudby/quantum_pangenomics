@@ -28,7 +28,10 @@ done
 echo "$filename"
 extension="${filename##*.}"
 filename=$(basename -- "$filename")
+echo $filename
+echo $extension
 filename="$filename$extension"
+echo $filename
 
 if [ -f "$filename" ]; then
     echo "Reading file: $filename"
