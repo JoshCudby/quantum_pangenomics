@@ -11,6 +11,3 @@
 [submodule "QOKit"]
 	path = modules/QOKit
 	url = https://github.com/jpmorganchase/QOKit.git
-[submodule "modules/cotengra"]
-	path = modules/cotengra
-	url = https://github.com/jcmgray/cotengra.git
