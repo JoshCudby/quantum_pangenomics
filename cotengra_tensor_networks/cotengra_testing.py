@@ -39,7 +39,7 @@ def Q_to_Ising(Q, offset):
             offset += Q[i, j] / 4
     return J, offset
 
-data = np.load('../../qubo_solvers/out/tangle/qubo_data_test.npy', allow_pickle=True)
+data = np.load('../qubo_solvers/out/tangle/qubo_data_test.npy', allow_pickle=True)
 Q, offset, W = data
 # Move terms to upper triangular part
 Q = np.triu(Q) * 2
