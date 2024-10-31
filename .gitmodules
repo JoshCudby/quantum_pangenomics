@@ -11,9 +11,6 @@
 [submodule "QOKit"]
 	path = modules/QOKit
 	url = https://github.com/jpmorganchase/QOKit.git
-[submodule "modules/quimb"]
-	path = modules/quimb
-	url = https://github.com/jcmgray/quimb.git
 [submodule "modules/quimb_fork"]
 	path = modules/quimb_fork
 	url = https://github.com/JoshCudby/quimb_fork.git
