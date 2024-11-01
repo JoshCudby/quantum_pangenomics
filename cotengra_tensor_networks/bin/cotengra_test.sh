@@ -2,7 +2,7 @@
 
 ## MAIN
 
-memory=16000
+memory=64000
 
 WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qokit_simulation
 source ~/cotengra-venv/bin/activate
