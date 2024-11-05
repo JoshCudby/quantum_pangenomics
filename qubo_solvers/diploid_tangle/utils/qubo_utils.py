@@ -91,7 +91,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
         Q_start_prime = np.ones((2, 2), dtype=np.int8)
         for sigma in range(2):
             Q_start_prime[sigma, sigma] = -1
-        Q_start_prime *= 10    
+        Q_start_prime *= lambda_g    
         
         for X in range(2):
             Q[X, 0, start_nodes[0], :, X, 0, start_nodes[0], :] += Q_start_prime

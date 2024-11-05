@@ -43,6 +43,22 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
             if not (i == j and bi == bj):
                 qubo_matrix[t, i, bi, t, j, bj] += lambda_t
     
+    # Set start/end nodes
+    start_nodes=set()
+    end_nodes= set()
+    for node, val in dict(graph.nodes.data('start')).items():
+        if val == 'start':
+            node_index_in_qubo = floor(nodes.index(node)/ 2)
+            start_nodes.add(node_index_in_qubo)
+        if val == 'end':
+            node_index_in_qubo = floor(nodes.index(node)/ 2)
+            end_nodes.add(node_index_in_qubo)
+    
+    start_nodes = list(start_nodes)        
+    end_nodes = list(end_nodes)
+    exist_start_nodes = len(start_nodes) > 0
+    exist_end_nodes = len(end_nodes) > 0
+    
     # Graph step constraints
     for t in range(T_max - 1):
         for i, j, bi, bj in product(range(V), range(V), range(2), range(2)):
@@ -50,6 +66,15 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
                 qubo_matrix[t, i, bi, t+1, j, bj] += lambda_g
         for i, bi in product(range(V), range(2)):
             qubo_matrix[t, V, 0, t+1, i, bi] += lambda_g
+            if exist_end_nodes:
+                if i not in end_nodes:
+                    qubo_matrix[t, i, bi, t+1, V, 0] += lambda_g
+    if exist_start_nodes:
+        start_node = start_nodes[0]
+        for b in range(2):
+            qubo_matrix[0, start_node, b, 0, start_node, b] -= lambda_g
+            qubo_matrix[0, start_node, b, 0, start_nodes, 1 - b] += lambda_g
+        
                 
     # Weights constraints
     for i in range(V):
@@ -69,6 +94,6 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     qubo_matrix = np.delete(qubo_matrix, [np.ravel_multi_index((t, V, 1), dims=(T_max, V+1, 2)) for t in range(T_max)], 0)
     qubo_matrix = np.delete(qubo_matrix, [np.ravel_multi_index((t, V, 1), dims=(T_max, V+1, 2)) for t in range(T_max)], 1)
     
-    offset = lambda_t * T_max  + lambda_w * int(sum(graph.nodes[nodes[2 * i]]["weight"] ** 2 for i in range(V)))
+    offset = lambda_t * T_max  + lambda_w * int(sum(graph.nodes[nodes[2 * i]]["weight"] ** 2 for i in range(V))) + (1 if exist_start_nodes else 0)  * lambda_g
     
     return qubo_matrix, offset, T_max, V
