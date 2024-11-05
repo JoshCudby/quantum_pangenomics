@@ -19,8 +19,8 @@ def oriented_graph_from_file(filename):
             weight = segment_line.KC / segment_line.LN
         else:
             raise Exception('Could not compute graph weights from .gfa file')
-        graph.add_node(f'{segment_line.name}_+', weight=weight)
-        graph.add_node(f'{segment_line.name}_-', weight=weight)
+        graph.add_node(f'{segment_line.name}_+', weight=weight, start=segment_line.st)
+        graph.add_node(f'{segment_line.name}_-', weight=weight, start=segment_line.st)
     for edge_line in gfa.edges:
         v1 = edge_line.sid1
         v2 = edge_line.sid2

@@ -48,9 +48,11 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     end_nodes= set()
     for node, val in dict(graph.nodes.data('start')).items():
         if val == 'start':
+            print(f'Found start node:{node}')
             node_index_in_qubo = floor(nodes.index(node)/ 2)
             start_nodes.add(node_index_in_qubo)
         if val == 'end':
+            print(f'Found end node:{node}')
             node_index_in_qubo = floor(nodes.index(node)/ 2)
             end_nodes.add(node_index_in_qubo)
     
