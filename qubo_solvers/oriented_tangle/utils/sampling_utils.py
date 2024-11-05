@@ -135,7 +135,7 @@ def validate_path(path: list, graph: nx.Graph):
             i += 1
             continue
         if path[i][0] > i + time_offset:
-            print(f'Skipped time {path[i][0]}')
+            print(f'Skipped time {path[i][0] - 1}')
             time_offset += 1
             i += 1
             continue
