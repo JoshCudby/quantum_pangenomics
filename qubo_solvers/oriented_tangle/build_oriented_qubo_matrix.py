@@ -1,12 +1,13 @@
 import sys
 import numpy as np
+import os
 from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
 from utils.qubo_utils import qubo_matrix_from_graph
 
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
+    filepath = sys.argv[1]
 else:
-    filename = "test.gfa"
+    filepath = "../data/test.gfa"
 
 if len(sys.argv) > 2:
     try:
@@ -16,18 +17,20 @@ if len(sys.argv) > 2:
 else:
     normalisation = 1
    
+filename = os.path.basename(filepath)
+out_dir = 'out/oriented'
 
-graph = oriented_graph_from_file(f"data/{filename}")
+graph = oriented_graph_from_file(filepath)
 print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
 
 to_save = np.array([qubo_matrix, offset, T_max, V], dtype=object)
-filepath = f'out/oriented/qubo_data_{filename}'
+filepath = f'{out_dir}/qubo_data_{filename}'
 np.save(filepath, to_save)
 
 # Write to MQLib Format
-filepath = f'out/oriented/mqlib_input_{filename}.txt'
+filepath = f'{out_dir}/mqlib_input_{filename}.txt'
 ut_qubo_matrix = np.triu(qubo_matrix)
 non_zero = np.nonzero(ut_qubo_matrix)
 non_zero_count = int(non_zero[0].shape[0])

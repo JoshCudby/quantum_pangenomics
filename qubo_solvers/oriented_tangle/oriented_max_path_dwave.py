@@ -6,9 +6,9 @@ from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
 from utils.sampling_utils import dwave_sample_qubo, sample_list_to_path, validate_path
 
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
+    filepath = sys.argv[1]
 else:
-    filename = "test.gfa"
+    filepath = "../data/test.gfa"
 
 if len(sys.argv) > 2:
     try:
@@ -36,8 +36,9 @@ if len(sys.argv) > 4:
 else:
     jobs = 1 
    
+filename = os.path.basename(filepath)
 
-graph = oriented_graph_from_file(f"data/{filename}")
+graph = oriented_graph_from_file(filepath)
 print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 

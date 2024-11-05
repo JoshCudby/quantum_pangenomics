@@ -19,9 +19,7 @@ if len(sys.argv) > 2:
 else:
     normalisation = 1
 
-print(filepath)
 filename = os.path.basename(filepath)
-print(filename)
 
 graph = oriented_graph_from_file(filepath)
 print(f'Normalising by {normalisation}')

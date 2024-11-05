@@ -8,9 +8,9 @@ from utils.sampling_utils import validate_path, sample_list_to_path
 
 
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
+    filepath = sys.argv[1]
 else:
-    filename = "test.gfa"
+    filepath = "../data/test.gfa"
 
 if len(sys.argv) > 2:
     try:
@@ -28,8 +28,9 @@ if len(sys.argv) > 3:
 else:
     time_limit = 10
     
+filename = os.path.basename(filepath)
 
-graph = oriented_graph_from_file(f"data/{filename}")
+graph = oriented_graph_from_file(filepath)
 print(f'Normalising by: {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 
