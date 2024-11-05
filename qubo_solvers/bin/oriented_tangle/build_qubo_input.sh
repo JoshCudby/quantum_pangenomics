@@ -50,6 +50,6 @@ esac
 ## MAIN
 WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
 source ~/pangenome/bin/activate
-bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg"\
+bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
 -o "out/oriented/build.$filename.%J" -e "out/oriented/error.build.$filename.%J" \
 "python3 ./oriented_tangle/build_oriented_qubo_matrix.py $filepath $normalisation"
