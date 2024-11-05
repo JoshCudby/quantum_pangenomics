@@ -14,8 +14,14 @@ def oriented_graph_from_file(filename):
     gfa = gfapy.Gfa.from_file(filename, vlevel=0)
     graph = nx.DiGraph()
     for segment_line in gfa.segments:
-        graph.add_node(f'{segment_line.name}_+', weight=segment_line.SC, start=segment_line.st)
-        graph.add_node(f'{segment_line.name}_-', weight=segment_line.SC, start=segment_line.st)
+        if segment_line.SC is not None:
+            weight = segment_line.SC
+        elif segment_line.LN is not None and segment_line.KC is not None:
+            weight = segment_line.KC / segment_line.LN
+        else:
+            raise Exception('Could not compute graph weights from .gfa file')
+        graph.add_node(f'{segment_line.name}_+', weight=weight, start=segment_line.st)
+        graph.add_node(f'{segment_line.name}_-', weight=weight, start=segment_line.st)
     for edge_line in gfa.edges:
         v1 = edge_line.sid1
         v2 = edge_line.sid2
