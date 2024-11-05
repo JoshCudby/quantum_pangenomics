@@ -50,7 +50,7 @@ offset = (T_max * lambda_t + lambda_w * sum(graph.nodes[nodes[i]]["weight"] ** 2
 filepath = f'out/edge/mqlib_input_{filename}.txt'
 
 # Run the MQLib solver and capture output
-process = subprocess.run(["MQLib/bin/MQLib", "-fQ", filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
+process = subprocess.run(["../modules/MQLib/bin/MQLib", "-fQ", filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
 out = process.stdout.decode("utf-8")
 
 # First line of output includes run data. 3rd line contains the solution.
