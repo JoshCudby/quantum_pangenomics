@@ -68,5 +68,7 @@ source ~/pangenome/bin/activate
 for time_limit in "${times_arr[@]}"
 do
     echo Submitting batch with time limit: $time_limit
-    bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/oriented/dwave$out.full.$filename.%J" -e "out/oriented/error.dwave$out.full.$filename.%J" -G "qpg" "python3 ./oriented_tangle/oriented_max_path_dwave.py $filename $normalisation $time_limit $jobs"
+    bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" \ 
+    -o "out/oriented/dwave$out.full.$filename.%J" -e "out/oriented/error.dwave$out.full.$filename.%J" -G "qpg" \
+     "python3 ./oriented_tangle/oriented_max_path_dwave.py $filepath $normalisation $time_limit $jobs"
 done

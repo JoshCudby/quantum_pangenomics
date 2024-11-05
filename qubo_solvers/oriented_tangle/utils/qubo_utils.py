@@ -56,6 +56,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     
     start_nodes = list(start_nodes)        
     end_nodes = list(end_nodes)
+    print(f'Start nodes: {start_nodes}, End nodes: {end_nodes}')
     exist_start_nodes = len(start_nodes) > 0
     exist_end_nodes = len(end_nodes) > 0
     
