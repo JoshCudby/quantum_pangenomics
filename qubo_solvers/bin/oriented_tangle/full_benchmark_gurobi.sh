@@ -63,7 +63,7 @@ WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
 source ~/pangenome/bin/activate
 for time_limit in "${times_arr[@]}"; do
     echo Submitting batch with time limit: "$time_limit"
-    bsub -m "node-5-10-4" -J  "orien_g[1-$jobs]" -R '"select[mem>'"$memory"'] rusage[mem='"$memory"']"' -M "$memory" \
+    bsub -J  "orien_g[1-$jobs]" -R '"select[mem>'"$memory"'] rusage[mem='"$memory"']"' -M "$memory" \
      -o "out/oriented/gurobi.full.$filename.%J.%I" -e "out/oriented/error.gurobi.full.$filename.%J" -G "qpg" \
      "python3 ./oriented_tangle/oriented_max_path_gurobi.py $filepath $normalisation $time_limit"
 done
