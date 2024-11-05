@@ -8,7 +8,7 @@ usage()
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )           shift
-                                filename="$1"
+                                filepath="$1"
                                 ;;
         -n | --normalisation )  shift
                                 normalisation="$1"
@@ -31,16 +31,14 @@ while [ "$1" != "" ]; do
     shift
 done
 
-if [[ $filename =~ ^data/(.*)$ ]]; then
-    filename="${BASH_REMATCH[1]}" 
-fi
-
-if [ -f "./data/$filename" ]; then
-    echo "Reading file: $filename"
+if [ -f "$filepath" ]; then
+    echo "Reading file: $filepath"
 else
     echo "Could not find input file."
     exit 1
 fi
+
+filename=$(basename -- "$filepath")
 
 case $normalisation in
     [0-9]* ) echo "Normalising node weights by:" "$normalisation"
@@ -61,6 +59,8 @@ case $jobs in
 esac
 
 ## MAIN
+WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
+source ~/pangenome/bin/activate
 for time_limit in "${times_arr[@]}"; do
     echo Submitting batch with time limit: "$time_limit"
     bsub -m "node-5-10-4" -J  "orien_g[1-$jobs]" -R '"select[mem>'"$memory"'] rusage[mem='"$memory"']"' -M "$memory" -o "out/oriented/gurobi.full.$filename.%J.%I" -e "out/oriented/error.gurobi.full.$filename.%J" -G "qpg" "python3 ./oriented_tangle/oriented_max_path_gurobi.py $filename $normalisation $time_limit"
