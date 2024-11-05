@@ -45,19 +45,19 @@ fi
 filename=$(basename -- "$filepath")
 
 case $normalisation in
-    [0-9]* ) echo "Normalising node weights by:" $normalisation
+    [0-9]* ) echo "Normalising node weights by: $normalisation"
              ;;
     *      ) echo "Normalisation was not a number."; exit 1
 esac
 
 case $memory in
-    [0-9]* ) echo "Memory:" $memory
+    [0-9]* ) echo "Memory: $memory"
              ;;
     *      ) echo "Memory was not a number."; exit 1
 esac
 
 case $jobs in
-    [0-9]* ) echo "Jobs:" $jobs
+    [0-9]* ) echo "Jobs: $jobs"
              ;;
     *      ) echo "Jobs was not a number."; exit 1
 esac
@@ -67,8 +67,8 @@ WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
 source ~/pangenome/bin/activate
 for time_limit in "${times_arr[@]}"
 do
-    echo Submitting batch with time limit: $time_limit
-    bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" \ 
+    echo "Submitting batch with time limit: $time_limit"
+    bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" \
     -o "out/oriented/dwave$out.full.$filename.%J" -e "out/oriented/error.dwave$out.full.$filename.%J" -G "qpg" \
-     "python3 ./oriented_tangle/oriented_max_path_dwave.py $filepath $normalisation $time_limit $jobs"
+    "python3 ./oriented_tangle/oriented_max_path_dwave.py $filepath $normalisation $time_limit $jobs"
 done
