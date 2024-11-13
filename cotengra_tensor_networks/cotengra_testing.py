@@ -5,6 +5,10 @@ import quimb as qu
 import tqdm
 from pathlib import Path
 from skopt import Optimizer
+import sys
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
 seed = 10
 
@@ -17,6 +21,7 @@ opt = ctg.ReusableHyperOptimizer(
     minimize='combo-64',
     # use the following for persistently cached paths
     directory=True,
+    slicing_opts={'target_size': 2**28}
 )
 
 def Q_to_Ising(Q, offset):
@@ -37,6 +42,12 @@ def Q_to_Ising(Q, offset):
             J[(j, j)] -= Q[i, j] / 4
             # Update the offset based on the interaction strength between qubits i and j
             offset += Q[i, j] / 4
+    del_keys = []
+    for key in J.keys():
+        if J[key] == 0:
+            del_keys.append(key)
+    for key in del_keys:
+        J.pop(key)
     return J, offset
 
 data = np.load('../qubo_solvers/out/tangle/qubo_data_test.npy', allow_pickle=True)
@@ -46,16 +57,39 @@ Q = np.triu(Q) * 2
 Q -= np.triu(np.triu(Q).T) / 2
 N_vars = Q.shape[0]
 
+# rng = np.random.default_rng(seed)
+# Q = rng.random((50, 50))
+# Q = (Q + Q.T) / 2
+# Q = np.triu(Q) * 2
+# Q -= np.triu(np.triu(Q).T) / 2
+
+# # Sparsify
+# mask = rng.choice([0, 1], Q.shape, p=[0.8, 0.2])
+# Q = mask * Q
+# N_vars = Q.shape[0]
+
 # Get Hamiltonian terms
 terms, offset = Q_to_Ising(Q, 0)
 
-p = 4
+p = 2
 gammas = qu.randn(p, seed=seed)
 betas = qu.randn(p, seed=seed)
 
-# Self-interactions break this
-# Local install source code, add a loop over diagonal with rz gate
-circ_ex = qtn.circ_qaoa(terms, p, gammas, betas)
+Z = qu.pauli('Z')
+ZZ = qu.pauli('Z') & qu.pauli('Z')
+
+eprint(f'Num of vars: {N_vars}')
+eprint(f'Num terms in Hamiltonian: {len(list(terms.items()))}')
+
+circ = qtn.circ_qaoa(terms, p, gammas, betas)
+local_exp_rehs = [
+    circ.local_expectation_rehearse(weight * ZZ, edge, optimize=opt)
+    if not edge[0] == edge[1]
+    else circ.local_expectation_rehearse(weight * Z, edge[0], optimize=opt)
+    for edge, weight in tqdm.tqdm(list(terms.items()))
+]
+eprint([rehs['W'] for rehs in local_exp_rehs])
+
 
 def energy(x):
     p = len(x) // 2
@@ -63,14 +97,11 @@ def energy(x):
     betas = x[p:]
     circ = qtn.circ_qaoa(terms, p, gammas, betas)
 
-    Z = qu.pauli('Z')
-    ZZ = qu.pauli('Z') & qu.pauli('Z')
-
     ens = [
         circ.local_expectation(weight * ZZ, edge, optimize=opt, backend="jax")
         if not edge[0] == edge[1]
         else circ.local_expectation(weight * Z, edge[0], optimize=opt, backend="jax")
-        for edge, weight in terms.items()
+        for edge, weight in tqdm.tqdm(list(terms.items()))
     ]
     
     return sum(ens).real
@@ -83,7 +114,7 @@ bounds = (
 
 bopt = Optimizer(bounds)
 
-for i in tqdm.trange(100):
+for _ in tqdm.trange(30):
     x = bopt.ask()
     res = bopt.tell(x, energy(x))
     
@@ -92,4 +123,4 @@ print(res)
 save_dir = 'out'
 Path(save_dir).mkdir(exist_ok=True)
 save_file = 'testing'
-np.save(save_file, np.array([res], dtype='object'))
+np.save(f'{save_dir}/{save_file}', np.array([res], dtype='object'))

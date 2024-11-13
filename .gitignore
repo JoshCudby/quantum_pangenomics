@@ -18,3 +18,4 @@ data/**/raw/**/*
 
 **/.ipynb_checkpoints/**/*
 **/ctg_cache/**/*
+*venv
