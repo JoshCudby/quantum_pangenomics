@@ -66,5 +66,6 @@ do
     echo Submitting batch with time limit: $time_limit
     bsub -J  "orien_m[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" \
     -o "out/oriented/mqlib.full.$filename.%J.%I" -e "out/oriented/error.mqlib.full.$filename.%J" -G "qpg" \
+    -n 4 -q "qpg" -gpu -\
     "python3 ./oriented_tangle/oriented_max_path_mqlib.py $filepath $normalisation $time_limit"
 done

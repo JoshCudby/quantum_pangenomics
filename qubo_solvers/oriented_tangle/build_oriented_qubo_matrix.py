@@ -23,11 +23,13 @@ out_dir = 'out/oriented'
 graph = oriented_graph_from_file(filepath)
 print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
+print(len(graph.nodes))
 qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
 
-to_save = np.array([qubo_matrix, offset, T_max, V], dtype=object)
+to_save = np.array([offset, T_max, V], dtype=object)
+# to_save = np.array([qubo_matrix, offset, T_max, V], dtype=object)
 filepath = f'{out_dir}/qubo_data_{filename}'
-np.save(filepath, to_save)
+np.save(filepath, to_save, allow_pickle=True)
 
 # Write to MQLib Format
 filepath = f'{out_dir}/mqlib_input_{filename}.txt'

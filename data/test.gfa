@@ -1,10 +1,15 @@
 H	VN:Z:1.0
-S	u0	AAAA	SC:f:2.0
-S	u1	CCCC	SC:f:2.0
-S	u2	GGGG	SC:f:2.0
-S	u3	TTTT	SC:f:2.0
+S	u0	TAAC	LN:i:4	SC:f:2.0
+S	u1	CCCG	LN:i:4	SC:f:2.0
+S	u2	CGGG	LN:i:4	SC:f:2.0
+S	u3	CTTT	LN:i:4	SC:f:2.0
 L	u0	+	u1	+	0M	EC:i:1
+L	u1	-	u0	-	0M	EC:i:1
 L	u1	+	u2	-	0M	EC:i:1
+L	u2	+	u1	-	0M	EC:i:1
 L	u2	-	u3	+	0M	EC:i:1
-L	u3	+	u0	+	0M	EC:i:1  
+L	u3	-	u2	+	0M	EC:i:1
 L	u0	+	u2	+	0M	EC:i:1
+L	u2	-	u0	-	0M	EC:i:1
+# L	u3	+	u0	+	0M	EC:i:1  
+# L	u0	-	u3	-	0M	EC:i:1  

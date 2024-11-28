@@ -36,7 +36,8 @@ graph = normalise_node_weights(graph, normalisation)
 
 save_dir = "out/oriented"
 to_load = f'{save_dir}/qubo_data_{filename}.npy'
-_, offset, T_max, V = np.load(to_load, allow_pickle=True)
+# _, offset, T_max, V = np.load(to_load, allow_pickle=True)
+offset, T_max, V = np.load(to_load, allow_pickle=True)
            
 filepath = f'{save_dir}/mqlib_input_{filename}.txt'
 # Run the MQLib solver and capture output

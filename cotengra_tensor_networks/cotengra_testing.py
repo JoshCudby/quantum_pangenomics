@@ -10,23 +10,22 @@ import sys
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
-seed = 10
+seed = 666
 
 opt = ctg.ReusableHyperOptimizer(
     methods=['greedy'],
     reconf_opts={}, 
     max_repeats=32,
-    max_time="rate:1e6",
+    max_time="equil:4",
     parallel=True,
-    minimize='combo-64',
     # use the following for persistently cached paths
     directory=True,
-    slicing_opts={'target_size': 2**28}
+    slicing_reconf_opts={'target_size': 2**30},
 )
 
 def Q_to_Ising(Q, offset):
     n_qubits = Q.shape[0]
-    J = {(i, j) : 0 for i in range(n_qubits) for j in range(i, n_qubits)}
+    J = {(i, i) : 0 for i in range(n_qubits)}
 
     for i in range(n_qubits):
         # Update the magnetic field for qubit i based on its diagonal element in Q
@@ -36,7 +35,7 @@ def Q_to_Ising(Q, offset):
         # Calculate pairwise interactions
         for j in range(i + 1, n_qubits):
             # Update the pairwise interaction strength (J) between qubits i and j
-            J[(i, j)] += Q[i, j] / 4
+            J[(i, j)] = Q[i, j] / 4
             # Update the magnetic fields for qubits i and j based on their interactions in Q
             J[(i, i)] -= Q[i, j] / 4
             J[(j, j)] -= Q[i, j] / 4
@@ -50,6 +49,7 @@ def Q_to_Ising(Q, offset):
         J.pop(key)
     return J, offset
 
+
 data = np.load('../qubo_solvers/out/tangle/qubo_data_test.npy', allow_pickle=True)
 Q, offset, W = data
 # Move terms to upper triangular part
@@ -57,21 +57,10 @@ Q = np.triu(Q) * 2
 Q -= np.triu(np.triu(Q).T) / 2
 N_vars = Q.shape[0]
 
-# rng = np.random.default_rng(seed)
-# Q = rng.random((50, 50))
-# Q = (Q + Q.T) / 2
-# Q = np.triu(Q) * 2
-# Q -= np.triu(np.triu(Q).T) / 2
-
-# # Sparsify
-# mask = rng.choice([0, 1], Q.shape, p=[0.8, 0.2])
-# Q = mask * Q
-# N_vars = Q.shape[0]
-
 # Get Hamiltonian terms
 terms, offset = Q_to_Ising(Q, 0)
 
-p = 2
+p = 4
 gammas = qu.randn(p, seed=seed)
 betas = qu.randn(p, seed=seed)
 
@@ -89,6 +78,7 @@ local_exp_rehs = [
     for edge, weight in tqdm.tqdm(list(terms.items()))
 ]
 eprint([rehs['W'] for rehs in local_exp_rehs])
+eprint([rehs['tree'].contraction_cost(log=10) for rehs in local_exp_rehs])
 
 
 def energy(x):

@@ -22,6 +22,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     if alpha is None:
         alpha = 1.2
     T_max = floor(total_weight * alpha)
+    print(T_max, V)
 
     # Penalty Values
     lambda_t = 10
