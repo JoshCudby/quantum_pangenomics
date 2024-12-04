@@ -1,12 +1,6 @@
 **/*.pyc
 
-**/out/**/*.npy
-**/out/**/*.txt
-**/out/**/*build*
-**/out/**/*full*
-**/out/**/*gfa*
-**/out/**/*test*
-!qubo_solvers/out/**/*compiled.txt
+**/out/
 
 .vscode/
 qubo_solvers/code_for_dwave/

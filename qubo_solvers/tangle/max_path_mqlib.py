@@ -10,7 +10,7 @@ from utils.sampling_utils import print_path, validate_path
 
 
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
+    filepath = sys.argv[1]
 else:
     raise Exception('No MQLib file to read')
 
@@ -30,7 +30,8 @@ if len(sys.argv) > 3:
 else:
     time_limit = 60
     
-filepath = f'out/mqlib_input_{filename}.txt'
+filename = os.path.basename(filepath)
+input_filepath = f'qubo_solvers/out/tangle/mqlib_input_{filename}.txt'
 
 graph = graph_from_gfa_file(f"data/{filename}")
 
@@ -47,7 +48,7 @@ qubo_matrix = get_max_path_problem_qubo_matrix(dg, penalty)
 # Write to MQLib Format
 non_zero = np.nonzero(qubo_matrix)
 non_zero_count = int(non_zero[0].shape[0] / 2 + qubo_matrix.shape[0] / 2)
-f = open(filepath, 'w')
+f = open(input_filepath, 'w')
 f.write(f'{qubo_matrix.shape[0]} {non_zero_count}\n')
 for i in range(qubo_matrix.shape[0]):
     for j in range(i, qubo_matrix.shape[0]):
@@ -57,7 +58,7 @@ f.close()
             
 
 # Run the MQLib solver and capture output
-process = subprocess.run(["../modules/MQLib/bin/MQLib", "-fQ", filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
+process = subprocess.run(["modules/MQLib/bin/MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
 out = process.stdout.decode("utf-8")
 
 # First line of output includes run data. 3rd line contains the solution.
@@ -73,7 +74,7 @@ print_path(path)
 validate_path(path, graph)
 print(f"Energy of path: {energy}")
 
-save_dir = "out"
+save_dir = "qubo_solvers/out/tangle"
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
     

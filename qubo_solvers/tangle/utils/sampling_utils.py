@@ -121,6 +121,9 @@ def qubo_vars_to_path(qubo_vars: list[int], dg: nx.DiGraph) -> list:
 def print_path(path: list):
     """Pretty print a path"""
     num_per_line = 8
+    if len(path) < num_per_line:
+        print(path)
+        return
     for i in range(floor(len(path) / num_per_line)):
         print(path[i * num_per_line: (i + 1) * num_per_line])
     if not (i + 1) * num_per_line == len(path) - 1:
