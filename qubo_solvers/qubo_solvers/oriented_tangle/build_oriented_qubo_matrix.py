@@ -1,8 +1,8 @@
 import sys
 import numpy as np
 import os
-from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
-from utils.qubo_utils import qubo_matrix_from_graph
+from qubo_solvers.oriented_tangle.utils.graph_utils import oriented_graph_from_file, normalise_node_weights
+from qubo_solvers.oriented_tangle.utils.qubo_utils import qubo_matrix_from_graph
 
 if len(sys.argv) > 1:
     filepath = sys.argv[1]
