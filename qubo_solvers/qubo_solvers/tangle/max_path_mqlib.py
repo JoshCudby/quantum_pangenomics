@@ -34,9 +34,8 @@ input_filepath = f"{tangle_out_dir}/mqlib_input_{filename}.txt"
 qubo_data_filepath = f"{tangle_out_dir}/qubo_data_{filename}.npy"
 
 Q, offset, T_max, V = np.load(qubo_data_filepath, allow_pickle=True)
-print(Q, offset, T_max, V)
-graph = graph_from_gfa_file(f"{DATA_DIR}/{filename}")
 
+graph = graph_from_gfa_file(f"{DATA_DIR}/{filename}")
 print(f"Normalising by: {normalisation}")
 graph = normalise_node_weights(graph, normalisation)
 
