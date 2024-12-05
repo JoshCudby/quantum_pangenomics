@@ -1,6 +1,7 @@
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
+import os
 import sys
 from datetime import datetime
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR
@@ -10,9 +11,9 @@ from qubo_solvers.tangle.utils.sampling_utils import validate_path
 
 
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
+    filepath = sys.argv[1]
 else:
-    filename = "test.gfa"
+    filepath = f"{DATA_DIR}/test.gfa"
 
 if len(sys.argv) > 2:
     try:
@@ -29,6 +30,8 @@ if len(sys.argv) > 3:
         time_limit = 5
 else:
     time_limit = 5
+
+filename = os.path.basename(filepath)
 
 tangle_out_dir = f"{OUT_DIR}/tangle"
 qubo_data_filepath = f"{tangle_out_dir}/qubo_data_{filename}.npy"

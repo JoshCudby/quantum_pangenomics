@@ -1,14 +1,17 @@
 import sys
 import numpy as np
+import os
 from pathlib import Path
 from qubo_solvers.tangle.utils.graph_utils import graph_from_gfa_file, normalise_node_weights
 from qubo_solvers.tangle.utils.qubo_utils import get_tangle_qubo_matrix
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR
 
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
+    filepath = sys.argv[1]
+    filename = os.path.basename(filepath)
 else:
-    filename = f"test.gfa"
+    filename = "test.gfa"
+    filepath = f"{DATA_DIR}/{filename}"
 
 if len(sys.argv) > 2:
     try:
@@ -18,7 +21,6 @@ if len(sys.argv) > 2:
 else:
     normalisation = 1
     
-filepath=f"{DATA_DIR}/{filename}"
 graph = graph_from_gfa_file(filepath)
 
 print(f'Normalising by {normalisation}')

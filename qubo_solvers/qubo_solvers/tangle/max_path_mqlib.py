@@ -1,5 +1,6 @@
 import numpy as np
 import sys
+import os
 import subprocess
 from datetime import datetime
 from qubo_solvers.definitions import DATA_DIR, MQLIB_DIR, OUT_DIR
@@ -9,9 +10,9 @@ from qubo_solvers.tangle.utils.sampling_utils import validate_path
 
 
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
+    filepath = sys.argv[1]
 else:
-    filename = "test.gfa"
+    filepath = f"{DATA_DIR}/test.gfa"
 
 if len(sys.argv) > 2:
     try:
@@ -28,6 +29,8 @@ if len(sys.argv) > 3:
         time_limit = 3
 else:
     time_limit = 3
+    
+filename = os.path.basename(filepath)
     
 tangle_out_dir = f"{OUT_DIR}/tangle"
 input_filepath = f"{tangle_out_dir}/mqlib_input_{filename}.txt"

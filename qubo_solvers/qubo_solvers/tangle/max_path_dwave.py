@@ -7,11 +7,9 @@ from qubo_solvers.tangle.utils.graph_utils import graph_from_gfa_file, toy_graph
 from qubo_solvers.tangle.utils.sampling_utils import dwave_sample_qubo, dwave_sample_to_path, print_path, validate_path
 
 if len(sys.argv) > 1:
-    filename = sys.argv[1]
-    graph = graph_from_gfa_file(f"{DATA_DIR}/{filename}")
-
+    filepath = sys.argv[1]
 else:
-    graph = toy_graph(exact_solution=False)
+    filepath = f"{DATA_DIR}/test.gfa"
 
 if len(sys.argv) > 2:
     try:
@@ -30,6 +28,7 @@ if len(sys.argv) > 3:
 else:
     time_limit = None
 
+filename = os.path.basename(filepath)
 
 tangle_out_dir = f"{OUT_DIR}/tangle"
 qubo_data_filepath = f"{tangle_out_dir}/qubo_data_{filename}.npy"

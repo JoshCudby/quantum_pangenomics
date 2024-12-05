@@ -8,7 +8,7 @@ usage()
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )           shift
-                                filename="$1"
+                                filepath="$1"
                                 ;;
         -n | --normalisation )  shift
                                 normalisation="$1"
@@ -31,12 +31,13 @@ while [ "$1" != "" ]; do
     shift
 done
 
-if [ -f "./data/"$filename ]; then
+if [ -f "$filepath" ]; then
     echo "Reading file:" $filename
 else
     echo "Could not find input file."
     exit 1
 fi
+filename=$(basename -- "$filepath")
 
 case $normalisation in
     [0-9]* ) echo "Normalising node weights by:" $normalisation
@@ -56,9 +57,13 @@ case $jobs in
     *      ) echo "Jobs was not a number."; exit 1
 esac
 
+outdir="/lustre/scratch127/qpg/jc59/out/tangle"
+
 ## MAIN
 for time_limit in "${times_arr[@]}"
 do
     echo Submitting batch with time limit: $time_limit
-    bsub -J  "dwaveJobs[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -o "out/dwave.full.$filename.%J.%I" -e "out/error.dwave.full.$filename.%J" -G "qpg" "python3 ./tangle/max_path_dwave.py $filename $normalisation $time_limit q"
+    bsub -J  "dwaveJobs[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"'\
+     -M "$memory" -o "$outdir/dwave.full.$filename.%J.%I" -e "$outdir/error.dwave.full.$filename.%J"\
+      -G "qpg" "python3 qubo_solvers/tangle/max_path_dwave.py $filepath $normalisation $time_limit"
 done

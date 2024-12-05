@@ -2,8 +2,9 @@ import sys
 import numpy as np
 import os
 from pathlib import Path
-from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
-from utils.qubo_utils import qubo_matrix_from_graph
+from qubo_solvers.definitions import DATA_DIR, OUT_DIR
+from qubo_solvers.diploid_tangle.utils.graph_utils import oriented_graph_from_file, normalise_node_weights
+from qubo_solvers.diploid_tangle.utils.qubo_utils import qubo_matrix_from_graph
 
 print("Started Building Matrix")
 if len(sys.argv) > 1:
