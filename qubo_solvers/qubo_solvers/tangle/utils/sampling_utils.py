@@ -7,28 +7,26 @@ from dimod import Sampler, BQM
 from dwave.system import LeapHybridSampler
 
 
-def dwave_sample_bqm(sampler: Sampler, bqm: BQM, time_limit=None, label="QUBO", num_reads=30):
-    """Perform a batch of annealing with greedy post-processing on a given Binary Quadratic Model.
+def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: int, time_limit=None, label=None):
+    """Solves the max path problem on a node-weighted graph.
 
     Args:
-        sampler (Sampler): The sampler to anneal with.
-        bqm (BQM): The model to anneal.
-        time_limit (int, optional): The time limit. Quantum solver only.
-        label (str, optional): The label for sample submission on DWave platform. Quantum solver only.
-        num_reads (int, optional): Number of runs in batch. Defaults to 30. Classical Solver only.
-        
-    Returns:
-        (dict, float): Returns the best sample and best energy of the batch.
+        qubo_matrix (np.ndarray): The QUBO matrix to sample from.
+        time_limit (int, optional): The time limit passed to the sampler.
     """
+    if label is None:
+        label = "Tangle"
+    sampler = LeapHybridSampler()
     
-    if isinstance(sampler, LeapHybridSampler):
-        if time_limit == -1:
-            time_limit = sampler.min_time_limit(bqm)
-            print(f"Using default min time limit: {time_limit}")
-        sampleset = sampler.sample(bqm, time_limit, label=label)
-    else:
-        sampleset = sampler.sample(bqm, label=label, num_reads=num_reads)
-    
+    bqm = BQM(qubo_matrix, 'BINARY')
+    bqm.offset = offset
+    print(f'Number of QUBO vars: {len(bqm.variables)}')
+        
+    if time_limit == -1:
+        time_limit = sampler.min_time_limit(bqm)
+        print(f"Using default min time limit: {time_limit}")
+    sampleset = sampler.sample(bqm, time_limit, label=label)
+ 
     try:
         print(f"D-Wave access time: {round(sampleset.info['run_time'] / 10 ** 6)}")
     except:
@@ -39,30 +37,8 @@ def dwave_sample_bqm(sampler: Sampler, bqm: BQM, time_limit=None, label="QUBO", 
     
     best_sample = post_processed.first.sample
     best_energy = post_processed.first.energy
+
     return best_sample, best_energy
-
-
-def get_path(sample: dict):
-    """Deprecated"""
-    return sorted([i for i in list(sample.keys()) if sample[i]], key=lambda e: e[1])
-
-
-def get_node_visits(sample: dict):
-    """Deprecated"""
-    path = get_path(sample)
-    nodes = set([key[0] for key in list(sample.keys())])
-    node_visits = {node : 0 for node in nodes}
-    for path_node in path:
-        node_visits[path_node[0]] += 1
-        
-    return node_visits
-
-
-def get_constraint_values(sample: dict, graph: nx.DiGraph):
-    """Deprecated"""
-    node_visits = get_node_visits(sample)
-    constraint_values = np.array([node_visits[x] - graph.nodes.data()[x]["weight"] for x in list(graph.nodes)])
-    return constraint_values
 
 
 def _index_to_node_time(idx, num_nodes):
@@ -80,12 +56,18 @@ def _index_to_node_time(idx, num_nodes):
     return (div, rem)
 
 
-def dwave_sample_to_path(sample: dict, dg: nx.DiGraph) -> list:
+def on_vars_to_path(on_vars, nodes):
+    path = [_index_to_node_time(x, len(nodes) + 1) for x in on_vars]
+    path = [(e[0], nodes[e[1]] if e[1] < len(nodes) else 'end') for e in path]
+    return path
+
+
+def dwave_sample_to_path(sample: dict, g: nx.Graph) -> list:
     """Gets the actual path as a list of (time, node) pairs from an output of a DWave Sampler.
 
     Args:
         sample (dict): the qubo variables as a dict.
-        dg (nx.DiGraph): the directed graph underlying the problem.
+        g (nx.Graph): the graph underlying the problem.
 
     Returns:
         list: a list of (time_step, node) pairs.
@@ -94,9 +76,8 @@ def dwave_sample_to_path(sample: dict, dg: nx.DiGraph) -> list:
     for i in range(len(sample.keys())):
         if sample[i] == 1:
             on_vars.append(i)
-    path = [_index_to_node_time(x, len(dg.nodes)) for x in on_vars]
-    path = [(e[0], list(dg.nodes)[e[1]]) for e in path]
-    return path
+    return on_vars_to_path(on_vars, list(g.nodes))
+    
 
 
 def qubo_vars_to_path(qubo_vars: list[int], g: nx.Graph) -> list:
@@ -104,7 +85,7 @@ def qubo_vars_to_path(qubo_vars: list[int], g: nx.Graph) -> list:
 
     Args:
         qubo_vars (list[int]): the qubo variables as a list.
-        dg (nx.DiGraph): the directed graph underlying the problem.
+        g (nx.Graph): the graph underlying the problem.
 
     Returns:
         list: a list of (time_step, node) pairs.
@@ -113,9 +94,7 @@ def qubo_vars_to_path(qubo_vars: list[int], g: nx.Graph) -> list:
     for i, var in enumerate(qubo_vars):
         if var == 1:
             on_vars.append(i)
-    path = [_index_to_node_time(i, len(g.nodes) + 1) for i in on_vars]
-    path = [(e[0], list(g.nodes)[e[1]] if e[1] < len(g.nodes) else 'end') for e in path]
-    return path
+    return on_vars_to_path(on_vars, list(g.nodes))
 
 
 def print_path(path: list):

@@ -93,34 +93,3 @@ def get_tangle_qubo_matrix(graph: nx.DiGraph) -> np.ndarray:
     qubo_matrix = 0.5 * (qubo_matrix + qubo_matrix.T)
     
     return qubo_matrix, offset, T, W
-
-
-def dwave_sample_max_path_problem(graph: nx.Graph, sampler=None, time_limit=None, penalty=None):
-    """Solves the max path problem on a node-weighted graph.
-
-    Args:
-        graph (nx.Graph): The underlying graph.
-        sampler (Sampler, optional): The sampler to use. Defaults to SimulatedAnnealingSampler.
-        time_limit (int, optional): The time limit passed to the sampler.
-        penalty (int, optional): The penalty for breaking constraints. Defaults to total weight of graph.
-    """
-    if sampler is None:
-        sampler = SimulatedAnnealingSampler()
-    
-    dg = graph_to_max_path_digraph(graph)
-    W = len(dg.nodes) - 1
-    
-    if penalty is None:
-        penalty = W
-    
-    qubo_matrix = get_tangle_qubo_matrix(dg, penalty)
-    bqm = BQM(qubo_matrix, 'BINARY')
-    bqm.offset = penalty * (W + 3)
-    print(f'Number of nodes: {W + 1}')
-    print(f'Number of edges: {len(dg.edges)}')
-    print(f'Number of QUBO vars: {len(bqm.variables)}')
-    
-    best_sample, best_energy = dwave_sample_bqm(sampler, bqm, time_limit=time_limit, label=f"Max Path QUBO W = {W}")
-    
-    best_path = dwave_sample_to_path(best_sample, dg)
-    return best_sample, best_energy, best_path
