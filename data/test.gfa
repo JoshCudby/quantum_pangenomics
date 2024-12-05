@@ -1,5 +1,5 @@
 H	VN:Z:1.0
-S	u0	TAAC	LN:i:4	SC:f:1.0	st:Z:start
+S	u0	TAAC	LN:i:4	SC:f:2.0	st:Z:start
 S	u1	CCCG	LN:i:4	SC:f:1.0
 S	u2	CGGG	LN:i:4	SC:f:1.0
 S	u3	CTTT	LN:i:4	SC:f:1.0	st:Z:end

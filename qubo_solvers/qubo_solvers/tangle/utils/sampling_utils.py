@@ -99,7 +99,7 @@ def dwave_sample_to_path(sample: dict, dg: nx.DiGraph) -> list:
     return path
 
 
-def qubo_vars_to_path(qubo_vars: list[int], dg: nx.DiGraph) -> list:
+def qubo_vars_to_path(qubo_vars: list[int], g: nx.Graph) -> list:
     """Gets the actual path as a list of (time, node) pairs from an array of qubo variable values.
 
     Args:
@@ -113,8 +113,8 @@ def qubo_vars_to_path(qubo_vars: list[int], dg: nx.DiGraph) -> list:
     for i, var in enumerate(qubo_vars):
         if var == 1:
             on_vars.append(i)
-    path = [_index_to_node_time(i, len(dg.nodes)) for i in on_vars]
-    path = [(e[0], list(dg.nodes)[e[1]]) for e in path]
+    path = [_index_to_node_time(i, len(g.nodes) + 1) for i in on_vars]
+    path = [(e[0], list(g.nodes)[e[1]] if e[1] < len(g.nodes) else 'end') for e in path]
     return path
 
 
@@ -128,15 +128,6 @@ def print_path(path: list):
         print(path[i * num_per_line: (i + 1) * num_per_line])
     if not (i + 1) * num_per_line == len(path) - 1:
         print(path[(i + 1)*num_per_line:])
-        
-        
-def get_original_vertex_name(vertex_name):
-    pattern = r'(.*)_\d*'
-    match = re.search(pattern, vertex_name)
-    if match is None:
-        raise Exception('Could not retrieve vertex name')
-    else:
-        return match.group(1)
 
         
         
@@ -152,43 +143,60 @@ def validate_path(path: list, graph: nx.Graph):
         path (list): _description_
         graph (nx.Graph): _description_
     """
+    print(f"Best path:")
+    print_path(path)
+    if len(path) == 0:
+        print("No path")
+        return
+    
+    end_nodes = set()
+    start_nodes = set()
+    for node, val in dict(graph.nodes.data('start')).items():
+        if val == 'end':
+            end_nodes.add(node)
+        elif val == 'start':
+            start_nodes.add(node)
+    end_nodes.add('end')
+    
+    if len(start_nodes) > 0 and not path[0][1] in start_nodes:
+        print(f'Did not start at start')
+    
+    time_offset = 0
+    i = 0
+    while i < len(path):
+        if i + time_offset == path[i][0]:
+            i += 1
+            continue
+        if path[i][0] < i + time_offset:
+            print(f'Extra node at time {path[i][0]}')
+            time_offset -= 1
+            i += 1
+            continue
+        if path[i][0] > i + time_offset:
+            print(f'Skipped time {path[i][0] - 1}')
+            time_offset += 1
+            i += 1
+            continue
+    
     node_dict = {node: 0 for node in graph.nodes}
     node_dict['end'] = 0
     
-    for i in range(len(path) - 1):
-        v1 = get_original_vertex_name(path[i][1])
+    for x in range(len(path) - 1):
+        v1 = path[x][1]
         node_dict[v1] += 1
-        v2 = get_original_vertex_name(path[i + 1][1])
-        if v2 == 'end':
-            if v1 == 'end':
-                pass
-            else:
-                start_value = graph.nodes[v1]["start"]
-                if not start_value == "end":
-                    print(f'Broke graph edge at step {i}')
-        else:
-            if not (v1, v2) in graph.edges:
-                print(f'Broke graph edge at step {i}')
+        v2 = path[x + 1][1]            
+        if v1 == 'end' and not v2 == 'end':
+            print(f'Left the end node at path entry {x}')
+        elif (not v1 == 'end') and (not v2 == 'end') and (not (v1, v2) in graph.edges):
+            print(f'Broke graph edge at path entry {x}')
+        elif len(end_nodes) > 0 and (v2 == 'end') and (not v1 in end_nodes):
+            print(f'Went to end node illegally at path entry {x}')
+    node_dict[v2] += 1
     
-    for node in graph.nodes:
-        missing_visits = graph.nodes[node]["normalised_weight"] - node_dict[node]
+    nodes = list(graph.nodes)
+    for i in range(len(nodes)):
+        visits = node_dict[nodes[i]]
+        missing_visits = graph.nodes[nodes[i]]["weight"] - visits
         if  missing_visits != 0:
-            print(f'Did not meet node weight for node: {node}. Missing visits: {missing_visits}')
-    
-    time_offset = 0
-    for i in range(len(path)):
-        if i < path[i][0] + time_offset:
-            print(f'Skipped time {i}')
-            time_offset -= 1
-        elif i > path[i][0] + time_offset:
-            print(f'Visited 2 nodes at time {i}')
-            time_offset += 1
-            
-    start_vertex = get_original_vertex_name(path[0][1])
-    if not graph.nodes[start_vertex]["start"] == "start":
-        print(f'Did not start at Start node; started at {start_vertex}')
-    
-    if not get_original_vertex_name(path[-1][1]) == 'end':
-        print('Did not end at End node.')
-            
+            print(f'Did not meet node weight for node: {nodes[i]}. Missing visits: {missing_visits}')
     

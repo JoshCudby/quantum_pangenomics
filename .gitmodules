@@ -2,7 +2,7 @@
 	path = modules/pggb
 	url = https://github.com/pangenome/pggb.git
 [submodule "mqlib_fork"]
-	path = modules/MQLib
+	path = qubo_solvers/MQLib
 	url = https://github.com/JoshCudby/MQLib.git
 	branch = master
 [submodule "qpg"]

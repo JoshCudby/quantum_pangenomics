@@ -4,7 +4,7 @@ import numpy as np
 import sys
 import os
 from datetime import datetime
-from utils.qubo_utils import graph_to_max_path_digraph, get_max_path_problem_qubo_matrix
+from utils.qubo_utils import graph_to_max_path_digraph, get_tangle_qubo_matrix
 from utils.graph_utils import graph_from_gfa_file, toy_graph, normalise_node_weights
 from utils.sampling_utils import qubo_vars_to_path
 from utils.sampling_utils import print_path, validate_path
@@ -42,7 +42,7 @@ dg = graph_to_max_path_digraph(graph)
 W = len(dg.nodes) - 1
 penalty = W
 
-qubo_matrix = get_max_path_problem_qubo_matrix(dg, penalty)
+qubo_matrix = get_tangle_qubo_matrix(dg, penalty)
     
 offset = penalty * (W + 3)
 

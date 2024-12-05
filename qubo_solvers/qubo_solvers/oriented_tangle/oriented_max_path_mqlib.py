@@ -3,8 +3,8 @@ import sys
 import subprocess
 import os
 from datetime import datetime
-from utils.graph_utils import oriented_graph_from_file, normalise_node_weights
-from utils.sampling_utils import validate_path, sample_list_to_path
+from qubo_solvers.oriented_tangle.utils.graph_utils import oriented_graph_from_file, normalise_node_weights
+from qubo_solvers.oriented_tangle.utils.sampling_utils import validate_path, sample_list_to_path
 
 
 if len(sys.argv) > 1:
