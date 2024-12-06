@@ -2,45 +2,12 @@ import sys
 import os
 import numpy as np
 from datetime import datetime
-from qubo_solvers.definitions import DATA_DIR, OUT_DIR
-from qubo_solvers.tangle.utils.graph_utils import graph_from_gfa_file, toy_graph, normalise_node_weights
-from qubo_solvers.tangle.utils.sampling_utils import dwave_sample_qubo, dwave_sample_to_path, print_path, validate_path
+from qubo_solvers.tangle.utils.setup_utils import setup
+from qubo_solvers.tangle.utils.sampling_utils import dwave_sample_qubo, validate_path
 
-if len(sys.argv) > 1:
-    filepath = sys.argv[1]
-else:
-    filepath = f"{DATA_DIR}/test.gfa"
+filepath, filename, tangle_out_dir, graph, time_limit, Q, offset, T_max, V = setup(sys.argv)
 
-if len(sys.argv) > 2:
-    try:
-        normalisation = int(sys.argv[2])
-    except ValueError:
-        normalisation = 1
-else:
-    normalisation = 1
-
-if len(sys.argv) > 3:
-    try:
-        time_limit = int(sys.argv[3])
-    except ValueError:
-        print('Could not parse quantum time limit')
-        time_limit = None
-else:
-    time_limit = None
-
-filename = os.path.basename(filepath)
-
-tangle_out_dir = f"{OUT_DIR}/tangle"
-qubo_data_filepath = f"{tangle_out_dir}/qubo_data_{filename}.npy"
-
-Q, offset, T_max, V = np.load(qubo_data_filepath, allow_pickle=True)
-graph = graph_from_gfa_file(f"{DATA_DIR}/{filename}")
-
-print(f"Normalising by: {normalisation}")
-graph = normalise_node_weights(graph, normalisation)
-
-sample, energy = dwave_sample_qubo(Q, offset, time_limit, label=f"tangle_{filename}")
-path = dwave_sample_to_path(sample, graph)
+sample, energy, path = dwave_sample_qubo(Q, offset, time_limit, label=f"tangle_{filename}")
 
 validate_path(path, graph)
 print(f"Energy of path: {energy}")

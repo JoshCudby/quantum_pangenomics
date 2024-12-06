@@ -2,9 +2,6 @@ import networkx as nx
 import numpy as np
 from itertools import product
 from math import floor
-from dimod.reference.samplers import SimulatedAnnealingSampler
-from dimod import BQM
-from qubo_solvers.tangle.utils.sampling_utils import dwave_sample_to_path, dwave_sample_bqm
 
 
 def get_tangle_qubo_matrix(graph: nx.DiGraph) -> np.ndarray:

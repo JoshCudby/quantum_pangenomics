@@ -1,13 +1,47 @@
 import numpy as np
 import networkx as nx
-import re
+import gurobipy as gp
+import subprocess
+from gurobipy import GRB
 from math import floor
 from greedy import SteepestDescentSolver
-from dimod import Sampler, BQM
+from dimod import BQM
 from dwave.system import LeapHybridSampler
+from qubo_solvers.definitions import MQLIB_DIR
 
 
-def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: int, time_limit=None, label=None):
+def mqlib_sample_qubo(tangle_out_dir: str, filename: str, offset: int, graph: nx.Graph, time_limit: int):
+    input_filepath = f"{tangle_out_dir}/mqlib_input_{filename}.txt"
+
+    # Run the MQLib solver and capture output
+    process = subprocess.run([f"{MQLIB_DIR}/bin/MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
+    out = process.stdout.decode("utf-8")
+
+    # First line of output includes run data. 3rd line contains the solution.
+    out_data = [x for x in out.split('\n') if len(x) > 0]
+    solution = out_data[2].split()
+    solution = [int(x) for x in solution]
+    solution_energy = int(out_data[0].split(',')[3])
+    energy = offset - solution_energy
+    path = qubo_vars_to_path(solution, graph)
+    return solution, energy, path
+
+
+def gurobi_sample_qubo(qubo_matrix: np.ndarray, graph: nx.Graph, offset: int, time_limit: int):
+    with gp.Env() as env, gp.Model(env=env) as model:
+        model_vars = model.addMVar(shape=qubo_matrix.shape[0], vtype=GRB.BINARY, name="x")
+        model.setObjective(model_vars @ qubo_matrix @ model_vars, GRB.MINIMIZE)
+        model.Params.BestObjStop = - offset
+        model.Params.TimeLimit = time_limit
+        model.Params.Seed = np.random.default_rng().integers(0, 1000)
+        model.optimize()
+        
+        energy = model.ObjVal + offset
+        path = qubo_vars_to_path(model_vars.X, graph)
+        return energy, path, model_vars.X
+
+
+def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: int, graph: nx.Graph, time_limit=None, label=None):
     """Solves the max path problem on a node-weighted graph.
 
     Args:
@@ -37,8 +71,9 @@ def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: int, time_limit=None, lab
     
     best_sample = post_processed.first.sample
     best_energy = post_processed.first.energy
+    path = dwave_sample_to_path(best_sample, graph)
 
-    return best_sample, best_energy
+    return list(best_sample.values()), best_energy, path
 
 
 def _index_to_node_time(idx, num_nodes):
