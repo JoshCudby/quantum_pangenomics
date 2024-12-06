@@ -3,8 +3,9 @@
 ## MAIN
 
 memory=128000
-# outdir="/lustre/scratch127/qpg/jc59/out/cotengra"
-outdir="out"
+outdir="$SCRATCH/out/cotengra"
+WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/cotengra_tensor_networks
+source cotengra_venv/bin/activate
 
 # Cotengra Testing
 echo "Cotengra Testing"
