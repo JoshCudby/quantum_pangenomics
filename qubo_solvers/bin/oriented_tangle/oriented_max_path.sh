@@ -2,7 +2,7 @@
 
 usage()
 {
-    echo "usage: build_qubo_input [[[-f file] [-n normalisation] [-m memory]] | [-h]]"
+    echo "usage: oriented_max_path [[[-f file] [-j jobs] [-t times] [-n normalisation] [-m memory] [-s solver]] | [-h]]"
 }
 
 while [ "$1" != "" ]; do
@@ -16,6 +16,15 @@ while [ "$1" != "" ]; do
         -m | --memory )         shift
                                 memory="$1"
                                 ;;
+        -j | --jobs )           shift
+                                jobs="$1"
+                                ;;
+        -s | --solver )         shift
+                                solver="$1"
+                                ;;
+        -t | --times )          shift
+                                times_arr=($1)
+                                ;;
         -h | --help )           usage
                                 exit
                                 ;;
@@ -26,12 +35,11 @@ while [ "$1" != "" ]; do
 done
 
 if [ -f "$filepath" ]; then
-    echo "Reading file: $filepath"
+    echo "Reading file:" $filename
 else
     echo "Could not find input file."
     exit 1
 fi
-
 filename=$(basename -- "$filepath")
 
 case $normalisation in
@@ -46,12 +54,20 @@ case $memory in
     *      ) echo "Memory was not a number."; exit 1
 esac
 
+case $jobs in
+    [0-9]* ) echo "Jobs:" $jobs
+             ;;
+    *      ) echo "Jobs was not a number."; exit 1
+esac
+
+outdir="$SCRATCH/out/oriented"
+mkdir -p $outdir
 
 ## MAIN
-WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
-source ~/.venv/qubo/bin/activate
-outdir="$SCRATCH/out/oriented"
-
-bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
--o "$outdir/build.$filename.%J" -e "$outdir/error.build.$filename.%J" \
-"python3 qubo_solvers/oriented_tangle/build_oriented_qubo_matrix.py $filepath $normalisation"
+for time_limit in "${times_arr[@]}"
+do
+    echo Submitting $solver batch with time limit: $time_limit
+    bsub -J  "maxpath[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"'\
+     -M "$memory" -o "$outdir/$solver.$filename.%J.%I" -e "$outdir/error.$solver.$filename.%J"\
+     -G "qpg" "python3 qubo_solvers/oriented_tangle/oriented_max_path.py $solver $filepath $normalisation $time_limit"
+done

@@ -1,15 +1,16 @@
 H	VN:Z:1.0
-S	u0	TAAC	LN:i:4	SC:f:2.0	st:Z:start
-S	u1	CCCG	LN:i:4	SC:f:1.0
-S	u2	CGGG	LN:i:4	SC:f:1.0
-S	u3	CTTT	LN:i:4	SC:f:1.0	st:Z:end
+S	u0	TAAC	LN:i:4	SC:f:1.0	st:Z:start
+S	u1	CCCG	LN:i:4	SC:f:2.0
+S	u2	CGGG	LN:i:4	SC:f:2.0
+S	u3	CTTT	LN:i:4	SC:f:1.0
+S	u4	CAAA	LN:i:4	SC:f:1.0	st:Z:end
 L	u0	+	u1	+	0M	EC:i:1
 L	u1	-	u0	-	0M	EC:i:1
-L	u1	+	u2	-	0M	EC:i:1
-L	u2	+	u1	-	0M	EC:i:1
+L	u1	+	u2	-	0M	EC:i:2
+L	u2	+	u1	-	0M	EC:i:2
 L	u2	-	u3	+	0M	EC:i:1
 L	u3	-	u2	+	0M	EC:i:1
-L	u0	+	u2	+	0M	EC:i:1
-L	u2	-	u0	-	0M	EC:i:1
-# L	u3	+	u0	+	0M	EC:i:1  
-# L	u0	-	u3	-	0M	EC:i:1  
+L	u2	-	u4	+	0M	EC:i:1
+L	u4	-	u2	+	0M	EC:i:1
+L	u3	+	u1	+	0M	EC:i:1  
+L	u1	-	u3	-	0M	EC:i:1  

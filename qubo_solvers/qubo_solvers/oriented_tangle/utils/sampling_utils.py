@@ -2,11 +2,32 @@ import numpy as np
 import networkx as nx
 import re
 import gurobipy as gp
+import subprocess
+from qubo_solvers.definitions import MQLIB_DIR
 from gurobipy import GRB
 from math import floor
 
 
-def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: float, time_limit=None, label="Oriented QUBO") -> tuple[dict, float]:
+def mqlib_sample_qubo(oriented_out_dir: str, filename: str, offset: int, graph: nx.Graph, T: int, V: int, time_limit: int):
+    input_filepath = f"{oriented_out_dir}/mqlib_input_{filename}.txt"
+
+    # Run the MQLib solver and capture output
+    process = subprocess.run([f"{MQLIB_DIR}/bin/MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
+    out = process.stdout.decode("utf-8")
+
+    # First line of output includes run data. 3rd line contains the solution.
+    out_data = [x for x in out.split('\n') if len(x) > 0]
+    solution = out_data[2].split()
+    solution = [int(x) for x in solution]
+    solution_energy = int(out_data[0].split(',')[3])
+    energy = offset - solution_energy
+    path = sample_list_to_path(solution, graph, T, V)
+    return solution, energy, path
+
+
+def dwave_sample_qubo(
+    qubo_matrix: np.ndarray, offset: float, graph: nx.Graph, T: int, V: int, time_limit=None, label="Oriented QUBO"
+    ) -> tuple[dict, float]:
     """Perform a batch of annealing with greedy post-processing on a given Binary Quadratic Model.
 
     Args:
@@ -36,15 +57,16 @@ def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: float, time_limit=None, l
     
     best_sample = sampleset.first.sample
     best_energy = sampleset.first.energy
-    return best_sample, best_energy
+    path = sample_list_to_path(np.array(list(best_sample.values())), graph, T, V)
+    return best_sample, best_energy, path
 
 
-def gurobi_sample_qubo(qubo_matrix: np.ndarray, graph: nx.Graph, offset: int, T_max: int, time_limit: int):
+def gurobi_sample_qubo(qubo_matrix: np.ndarray, offset: int, graph: nx.Graph, T: int, V: int, time_limit: int):
     total_weight = int(sum(graph.nodes[node]["weight"] for node in list(graph.nodes)) / 2)
     
     print(f'Offset: {offset}')
     print(f'Total weight: {total_weight}')
-    print(f'T_max: {T_max}')
+    print(f'T_max: {T}')
 
     with gp.Env() as env, gp.Model(env=env) as model:
         model_vars = model.addMVar(shape=qubo_matrix.shape[0], vtype=GRB.BINARY, name="x")
@@ -54,7 +76,8 @@ def gurobi_sample_qubo(qubo_matrix: np.ndarray, graph: nx.Graph, offset: int, T_
         model.Params.Seed = np.random.default_rng().integers(0, 1000)
         model.optimize()
         energy = model.ObjVal + offset
-        return model_vars.X, energy
+        path = sample_list_to_path(model_vars.X, graph, T, V)
+        return model_vars.X, energy, path
 
 
 def sample_array_to_path(sample_array: np.ndarray, nodes: list, V: int):
