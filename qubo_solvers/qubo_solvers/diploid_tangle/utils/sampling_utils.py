@@ -1,10 +1,37 @@
 import numpy as np
 import re
 import networkx as nx
+import subprocess
 from math import floor
+import gurobipy as gp
+from gurobipy import GRB
+from qubo_solvers.definitions import MQLIB_DIR
 
 
-def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: float, time_limit=None, label="Diploid QUBO") -> tuple[dict, float]:
+def mqlib_sample_qubo(
+    diploid_out_dir: str, filename: str, normalisation: int, graph: nx.Graph, offset: int, T: int, N: int, time_limit: int,
+    ) -> tuple[np.ndarray, float, list]:
+    mqlib_input_filepath = f'{diploid_out_dir}/mqlib_input_{filename}_normalisation_{normalisation}.txt'
+
+    seed =  np.random.default_rng().integers(0, 1000)
+
+    # Run the MQLib solver and capture output
+    process = subprocess.run([f"{MQLIB_DIR}/bin/MQLib", "-fQ", mqlib_input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps", "-s", str(seed)], capture_output=True)
+    out = process.stdout.decode("utf-8")
+
+    # First line of output includes run data. 3rd line contains the solution.
+    out_data = [x for x in out.split('\n') if len(x) > 0]
+    solution = out_data[2].split()
+    solution = np.array([int(x) for x in solution])
+    solution_energy = int(out_data[0].split(',')[3])
+    energy = offset - solution_energy
+    paths = sample_list_to_paths(solution, list(graph.nodes), T, N)
+    return solution, energy, paths
+
+
+def dwave_sample_qubo(
+    qubo_matrix: np.ndarray, offset: float, graph: nx.Graph, T: int, N: int, time_limit=None, label="Diploid QUBO"
+    ) -> tuple[dict, float, list]:
     """Perform a batch of annealing on a given Binary Quadratic Model.
 
     Args:
@@ -33,7 +60,28 @@ def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: float, time_limit=None, l
     
     best_sample = sampleset.first.sample
     best_energy = sampleset.first.energy
-    return best_sample, best_energy
+    paths = sample_list_to_paths(np.array(list(best_sample.values())), list(graph.nodes), T, N)
+
+    return best_sample, best_energy, paths
+
+
+def gurobi_sample_qubo(qubo_matrix: np.ndarray, offset: int, graph: nx.Graph, T: int, N: int, time_limit: int):
+    total_weight = int(sum(graph.nodes[node]["weight"] for node in list(graph.nodes)) / 2)
+    
+    print(f'Offset: {offset}')
+    print(f'Total weight: {total_weight}')
+    print(f'T_max: {T}')
+
+    with gp.Env() as env, gp.Model(env=env) as model:
+        model_vars = model.addMVar(shape=qubo_matrix.shape[0], vtype=GRB.BINARY, name="x")
+        model.setObjective(model_vars @ qubo_matrix @ model_vars, GRB.MINIMIZE)
+        model.Params.BestObjStop = - offset
+        model.Params.TimeLimit = time_limit
+        model.Params.Seed = np.random.default_rng().integers(0, 1000)
+        model.optimize()
+        energy = model.ObjVal + offset
+        paths = sample_list_to_paths(model_vars.X, graph, T, N)
+        return model_vars.X, energy, paths
 
 
 def sample_array_to_paths(sample_array: np.ndarray, nodes: list, N: int):

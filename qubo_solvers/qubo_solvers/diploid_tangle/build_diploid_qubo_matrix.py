@@ -10,7 +10,7 @@ print("Started Building Matrix")
 if len(sys.argv) > 1:
     filepath = sys.argv[1]
 else:
-    filepath = "../data/test.gfa"
+    filepath = f"{DATA_DIR}/test.gfa"
 
 if len(sys.argv) > 2:
     try:
@@ -27,7 +27,7 @@ print(f'Normalising by {normalisation}')
 graph = normalise_node_weights(graph, normalisation)
 qubo_matrix, offset, T_max, N = qubo_matrix_from_graph(graph)
 
-out_path='out/diploid'
+out_path=f'{OUT_DIR}/diploid'
 Path(out_path).mkdir(exist_ok=True)
 to_save = np.array([qubo_matrix, offset, T_max, N], dtype=object)
 np_data_filepath = f'{out_path}/qubo_data_{filename}_normalisation_{normalisation}'

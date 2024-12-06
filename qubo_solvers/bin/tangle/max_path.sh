@@ -70,3 +70,4 @@ do
      -M "$memory" -o "$outdir/$solver.$filename.%J.%I" -e "$outdir/error.$solver.$filename.%J"\
      -G "qpg" "python3 qubo_solvers/tangle/max_path.py $solver $filepath $normalisation $time_limit"
 done
+exit 0

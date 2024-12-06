@@ -55,3 +55,4 @@ outdir="$SCRATCH/out/oriented"
 bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
 -o "$outdir/build.$filename.%J" -e "$outdir/error.build.$filename.%J" \
 "python3 qubo_solvers/oriented_tangle/build_oriented_qubo_matrix.py $filepath $normalisation"
+exit 0

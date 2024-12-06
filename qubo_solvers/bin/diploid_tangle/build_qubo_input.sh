@@ -49,8 +49,10 @@ esac
 
 ## MAIN
 WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
-source ~/pangenome/bin/activate
+source ~/.venv/qubo/bin/activate
+outdir="$SCRATCH/out/diploid"
 
 bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
--o "./out/diploid/build.$filename.%J" -e "./out/diploid/error.build.$filename.%J" \
-"python3 ./diploid_tangle/build_diploid_qubo_matrix.py $filepath $normalisation"
+-o "$outdir/build.$filename.%J" -e "$outdir/error.build.$filename.%J" \
+"python3 qubo_solvers/diploid_tangle/build_diploid_qubo_matrix.py $filepath $normalisation"
+exit 0
