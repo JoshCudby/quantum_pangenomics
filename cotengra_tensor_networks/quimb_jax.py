@@ -42,7 +42,7 @@ def Q_to_Ising(Q, offset):
 seed = 666
 
 opt = ctg.ReusableHyperOptimizer(
-    methods=['greedy'],
+    methods=['kahypar', 'greedy'],
     optlib='nevergrad',
     max_time='equil:4',
     parallel=True,
@@ -57,8 +57,8 @@ opt = ctg.ReusableHyperOptimizer(
 # Q = qu.randn((N_vars, N_vars), scale=5, loc=-2.5, seed=seed)
 # offset = 0
 
-data = np.load('../qubo_solvers/out/tangle/qubo_data_test.npy', allow_pickle=True)
-Q, offset, W = data
+data = np.load('/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.npy', allow_pickle=True)
+Q, offset, T, W = data
 
 # Move terms to upper triangular part
 Q = np.triu(Q) * 2
@@ -69,7 +69,7 @@ N_vars = Q.shape[0]
 terms, offset = Q_to_Ising(Q, offset)
 
 
-p = 4
+p = 2
 gammas = qu.randn(p, seed=seed)
 betas = qu.randn(p, seed=seed)
 
@@ -80,12 +80,13 @@ eprint(f'Num of vars: {N_vars}')
 eprint(f'Num terms in Hamiltonian: {len(list(terms.items()))}')
 eprint(f'Terms: {list(terms.items())}')
 
-# Use 1 gpu for now
+# Use 1 gpu for now ?
 pool = ThreadPoolExecutor(1)
 
 
-# Shouldn't have to rehearse each time. But need to find the tree to contract
 circ = qtn.circ_qaoa(terms, p, gammas, betas)
+
+# Find a contraction tree for each local expectation
 local_exp_rehs = [
     circ.local_expectation_rehearse(weight * ZZ, edge, optimize=opt)#, simplify_sequence='ADCRS', simplify_equalize_norms=False, backend="jax")
     if not edge[0] == edge[1]
@@ -94,6 +95,7 @@ local_exp_rehs = [
 ]
 eprint('Finished rehearsing')
 trees = [rehs['tree'] for rehs in local_exp_rehs]
+
 contract_cores_jit = [jax.jit(tree.contract_core) for tree in trees]
 
 
@@ -103,11 +105,10 @@ def energy(x):
     betas = x[p:]
     circ = qtn.circ_qaoa(terms, p, gammas, betas)
 
-    # Rehearse = "tn" returns just the tensor network to contract, without optimization
     local_exp_tns = [
-        circ.local_expectation(weight * ZZ, edge, optimize=opt, rehearse="tn")#, simplify_sequence='ADCRS', simplify_equalize_norms=False, backend="jax")
+        circ.local_expectation_tn(weight * ZZ, edge)#, simplify_sequence='ADCRS', simplify_equalize_norms=False, backend="jax")
         if not edge[0] == edge[1]
-        else circ.local_expectation(weight * Z, edge[0], optimize=opt, rehearse="tn")#, simplify_sequence='ADCRS', simplify_equalize_norms=False, backend="jax")
+        else circ.local_expectation_tn(weight * Z, edge[0])#, simplify_sequence='ADCRS', simplify_equalize_norms=False, backend="jax")
         for edge, weight in list(terms.items())
     ]
 
@@ -135,13 +136,12 @@ bounds = (
 
 bopt = Optimizer(bounds, random_state=seed)
 
-for i in tqdm.trange(30):
+for i in tqdm.trange(200):
     x = bopt.ask()
     res = bopt.tell(x, energy(x))
     
 print(res)
+print(offset)
 
-# x = bopt.ask()
-# res = energy(x)
-
-# print(res)
+to_save = np.array([res, offset], dtype=object)
+data = np.save('/lustre/scratch127/qpg/jc59/out/cotengra/cotengra_data_trivial.gfa.npy', allow_pickle=True)
