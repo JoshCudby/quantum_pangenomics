@@ -33,7 +33,7 @@ if [[ $filename =~ ^data/(.*)$ ]]; then
     filename="${BASH_REMATCH[1]}" 
 fi
 
-out_dir="./out/$dir"
+out_dir="$SCRATCH/out/$dir"
 file_pattern="$solver$name.full.$filename*"
 search_pattern="Compilation Data"
 
