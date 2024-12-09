@@ -54,10 +54,6 @@ opt = ctg.ReusableHyperOptimizer(
     directory=True
 )
 
-# N_vars = 15
-# Q = qu.randn((N_vars, N_vars), scale=5, loc=-2.5, seed=seed)
-# offset = 0
-
 data = np.load('/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.npy', allow_pickle=True)
 Q, offset, T, W = data
 
@@ -70,7 +66,7 @@ N_vars = Q.shape[0]
 terms, offset = Q_to_Ising(Q, offset)
 
 
-p = 2
+p = 4
 gammas = qu.randn(p, seed=seed)
 betas = qu.randn(p, seed=seed)
 
@@ -88,17 +84,20 @@ pool = ThreadPoolExecutor(1)
 
 circ = qtn.circ_qaoa(terms, p, gammas, betas)
 
-# Find a contraction tree for each local expectation
-local_exp_rehs = [
-    circ.local_expectation_rehearse(weight * ZZ, edge, optimize=opt)#, simplify_sequence='ADCRS', simplify_equalize_norms=False, backend="jax")
-    if not edge[0] == edge[1]
-    else circ.local_expectation_rehearse(weight * Z, edge[0], optimize=opt)#, simplify_sequence='ADCRS', simplify_equalize_norms=False, backend="jax")
-    for edge, weight in list(terms.items())
-]
-eprint('Finished rehearsing')
-trees = [rehs['tree'] for rehs in local_exp_rehs]
+# This is possibly very slow
+d = 2 ** N_vars
+H = np.zeros((d, d), dtype=complex)
+for edge, weight in list(terms.items()):
+    Z_op = np.diagflat(reduce(np.kron, [[1, 1] if not i in edge else [1,-1] for i in range(N_vars)]))
+    H += weight * Z_op
+H = qu.qarray(H)
 
-contract_cores_jit = [jax.jit(tree.contract_core) for tree in trees]
+# Find a contraction tree
+rehs = circ.local_expectation_rehearse(H, range(N_vars), optimize=opt)
+eprint('Finished rehearsing')
+tree = rehs['tree']
+
+contract_core_jit = jax.jit(tree.contract_core)
 
 
 def energy(x):
@@ -107,25 +106,19 @@ def energy(x):
     betas = x[p:]
     circ = qtn.circ_qaoa(terms, p, gammas, betas)
 
-    local_exp_tns = [
-        circ.local_expectation_tn(weight * ZZ, edge)#, simplify_sequence='ADCRS', simplify_equalize_norms=False, backend="jax")
-        if not edge[0] == edge[1]
-        else circ.local_expectation_tn(weight * Z, edge[0])#, simplify_sequence='ADCRS', simplify_equalize_norms=False, backend="jax")
-        for edge, weight in list(terms.items())
-    ]
+    exp_tn = circ.local_expectation_tn(H, range(N_vars))
 
-    future_groups = [
-        [
-            pool.submit(contract_cores_jit[i], trees[i].slice_arrays(local_exp_tns[i].arrays, j)) 
-            for j in range(trees[i].nslices)
-        ] for i in range(len(trees))
-    ]
+    futures = [
+            pool.submit(contract_core_jit, tree.slice_arrays(exp_tn.arrays, j)) 
+            for j in range(tree.nslices)
+        ] 
+    
 
     # lazily gather all the slices in the main process
-    slices = [(np.array(f.result()) for f in fs) for fs in future_groups]
+    slices = (np.array(f.result()) for f in futures)
 
-    results = [trees[i].gather_slices(slices[i], progbar=False) for i in range(len(slices))]
-    return sum(results).real
+    results = np.sum(list(slices))
+    return results.real
 
 
 from skopt import Optimizer
@@ -146,4 +139,4 @@ print(res)
 print(offset)
 
 to_save = np.array([res, offset], dtype=object)
-data = np.save('/lustre/scratch127/qpg/jc59/out/cotengra/cotengra_data_trivial.gfa.npy', to_save, allow_pickle=True)
+data = np.save('/lustre/scratch127/qpg/jc59/out/cotengra/non_local_exp_data_trivial.gfa.npy', to_save, allow_pickle=True)
