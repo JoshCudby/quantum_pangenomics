@@ -60,6 +60,7 @@ case $jobs in
     *      ) echo "Jobs was not a number."; exit 1
 esac
 
+WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
 outdir="/lustre/scratch127/qpg/jc59/out/tangle"
 
 ## MAIN
@@ -68,6 +69,6 @@ do
     echo Submitting $solver batch with time limit: $time_limit
     bsub -J "maxpath[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q qpg -gpu - \
      -M "$memory" -o "$outdir/$solver.$filename.%J.%I" -e "$outdir/error.$solver.$filename.%J"\
-     -G "qpg" "python3 qubo_solvers/tangle/max_path.py $solver $filepath $normalisation $time_limit"
+     -G "qpg" "python3 $WORKING_DIR/qubo_solvers/tangle/max_path.py $solver $filepath $normalisation $time_limit"
 done
 exit 0
