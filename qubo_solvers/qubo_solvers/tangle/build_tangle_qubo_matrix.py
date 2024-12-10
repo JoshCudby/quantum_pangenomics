@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from qubo_solvers.tangle.utils.graph_utils import graph_with_copy_numbers
 from qubo_solvers.tangle.utils.qubo_utils import get_tangle_qubo_matrix
-from qubo_solvers.definitions import DATA_DIR, OUT_DIR
+from qubo_solvers.definitions import DATA_DIR, OUT_DIR, COVERAGE_SUFFIX
 from qubo_solvers.pathfinder_coverage import run_pathfinder_coverage
 
 if len(sys.argv) > 1:
@@ -14,13 +14,12 @@ else:
     filename = "test.gfa"
     filepath = f"{DATA_DIR}/{filename}"
     
-coverage_suffix = "coverage"
-run_pathfinder_coverage(filepath, coverage_suffix)
+run_pathfinder_coverage(filepath, COVERAGE_SUFFIX)
 
-with open(f"{filepath}_{coverage_suffix}", "r") as f:
+with open(f"{filepath}_{COVERAGE_SUFFIX}", "r") as f:
     lines = f.readlines()
 if len(lines) < 3:
-    raise Exception(f"Could not read copy numbers from {filepath}_{coverage_suffix}")
+    raise Exception(f"Could not read copy numbers from {filepath}_{COVERAGE_SUFFIX}")
 copy_numbers = [int(x) for x in lines[2].split()]
 
 graph = graph_with_copy_numbers(filepath, copy_numbers)

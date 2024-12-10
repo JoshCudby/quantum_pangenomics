@@ -5,12 +5,12 @@ from qubo_solvers.definitions import Solver
 from qubo_solvers.diploid_tangle.utils.setup_utils import setup
 from qubo_solvers.diploid_tangle.utils.sampling_utils import dwave_sample_qubo, mqlib_sample_qubo, gurobi_sample_qubo, validate_paths
 
-filepath, filename, diploid_out_dir, graph, normalisation, time_limit, Q, offset, T_max, N, solver = setup(*sys.argv)
+filepath, filename, diploid_out_dir, graph, time_limit, Q, offset, T_max, N, solver = setup(*sys.argv)
 
 if solver == Solver.DWAVE:
     sample, energy, paths = dwave_sample_qubo(Q, offset, graph, T_max, N, time_limit, label=f"oriented_tangle_{filename}")
 elif solver == Solver.MQLIB:
-    sample, energy, paths = mqlib_sample_qubo(diploid_out_dir, filename, normalisation, graph, offset, T_max, N, time_limit)
+    sample, energy, paths = mqlib_sample_qubo(diploid_out_dir, filename, graph, offset, T_max, N, time_limit)
 elif solver == Solver.GUROBI:
     sample, energy, paths = gurobi_sample_qubo(Q, offset, graph, T_max, N, time_limit)
 

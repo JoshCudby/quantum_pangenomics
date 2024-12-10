@@ -1,7 +1,7 @@
 import os
 import numpy as np
-from qubo_solvers.definitions import DATA_DIR, OUT_DIR, Solver
-from qubo_solvers.tangle.utils.graph_utils import graph_from_gfa_file, normalise_node_weights
+from qubo_solvers.definitions import DATA_DIR, OUT_DIR, Solver, COVERAGE_SUFFIX
+from qubo_solvers.tangle.utils.graph_utils import graph_with_copy_numbers
 
 
 def setup(*args):
@@ -20,20 +20,18 @@ def setup(*args):
 
     if len(args) > 3:
         try:
-            normalisation = int(args[3])
-        except ValueError:
-            normalisation = 1
-    else:
-        normalisation = 1
-
-    if len(args) > 4:
-        try:
             time_limit = int(args[4])
         except ValueError:
             print('Could not parse time limit')
-            time_limit = 5
+            time_limit = 3
     else:
-        time_limit = 5
+        time_limit = 3
+        
+    with open(f"{filepath}_{COVERAGE_SUFFIX}", "r") as f:
+        lines = f.readlines()
+    if len(lines) < 3:
+        raise Exception(f"Could not read copy numbers from {filepath}_{COVERAGE_SUFFIX}")
+    copy_numbers = [int(x) for x in lines[2].split()]
         
     filename = os.path.basename(filepath)
 
@@ -41,9 +39,6 @@ def setup(*args):
     qubo_data_filepath = f"{tangle_out_dir}/qubo_data_{filename}.npy"
 
     Q, offset, T_max, V = np.load(qubo_data_filepath, allow_pickle=True)
-    graph = graph_from_gfa_file(f"{DATA_DIR}/{filename}")
-
-    print(f"Normalising by: {normalisation}")
-    graph = normalise_node_weights(graph, normalisation)
+    graph = graph_with_copy_numbers(f"{DATA_DIR}/{filename}", copy_numbers)
     
     return filepath, filename, tangle_out_dir, graph, time_limit, Q, offset, T_max, V, solver

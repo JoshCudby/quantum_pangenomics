@@ -1,7 +1,7 @@
 import numpy as np
 import os
-from qubo_solvers.definitions import DATA_DIR, OUT_DIR, Solver
-from qubo_solvers.diploid_tangle.utils.graph_utils import oriented_graph_with_copy_numbers, normalise_node_weights
+from qubo_solvers.definitions import DATA_DIR, OUT_DIR, Solver, COVERAGE_SUFFIX
+from qubo_solvers.diploid_tangle.utils.graph_utils import oriented_graph_with_copy_numbers
 
 
 def setup(*args):
@@ -20,26 +20,22 @@ def setup(*args):
 
     if len(args) > 3:
         try:
-            normalisation = int(args[3])
-        except ValueError:
-            normalisation = 1
-    else:
-        normalisation = 1
-
-    if len(args) > 4:
-        try:
-            time_limit = int(args[4])
+            time_limit = int(args[3])
         except ValueError:
             time_limit = 10
     else:
         time_limit = 10
         
+    with open(f"{filepath}_{COVERAGE_SUFFIX}", "r") as f:
+        lines = f.readlines()
+    if len(lines) < 3:
+        raise Exception(f"Could not read copy numbers from {filepath}_{COVERAGE_SUFFIX}")
+    copy_numbers = [int(x) for x in lines[2].split()]
+    
     filename = os.path.basename(filepath)
-    graph = oriented_graph_with_copy_numbers(filepath)
-    print(f'Normalising by: {normalisation}')
-    graph = normalise_node_weights(graph, normalisation)
+    graph = oriented_graph_with_copy_numbers(filepath, copy_numbers)
     
     diploid_out_dir = f'{OUT_DIR}/diploid'
-    to_load = f'{diploid_out_dir}/qubo_data_{filename}_normalisation_{normalisation}.npy'
+    to_load = f'{diploid_out_dir}/qubo_data_{filename}.npy'
     Q, offset, T_max, N = np.load(to_load, allow_pickle=True)
-    return filepath, filename, diploid_out_dir, graph, normalisation, time_limit, Q, offset, T_max, N, solver
+    return filepath, filename, diploid_out_dir, graph, time_limit, Q, offset, T_max, N, solver

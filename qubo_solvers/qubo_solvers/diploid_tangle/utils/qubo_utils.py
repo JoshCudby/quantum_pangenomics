@@ -37,6 +37,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     lambda_t = 10
     lambda_g = 10
     lambda_w = 1
+    lambda_start = 5
 
     # Note: we add an end node with parity 0 and 1, we only want 1 of them. We will delete the other at the end.
     Q = np.zeros((2, T_max, N + 1, 2, 2, T_max, N + 1, 2), dtype=np.int8)
@@ -45,30 +46,18 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     Q_walk_prime = np.ones((N+1, 2, N+1, 2), dtype=np.int8)
     for i, sigma in product(range(N), range(2)):
         Q_walk_prime[i, sigma, i, sigma] = -1
-        Q_walk_prime[N, 1, :, :] = 0
-        Q_walk_prime[:, :, N, 1] = 0
-        Q_walk_prime[N, 0, N, 0] = -1
+    Q_walk_prime[N, 1, :, :] = 0
+    Q_walk_prime[:, :, N, 1] = 0
+    Q_walk_prime[N, 0, N, 0] = -1
     Q_walk_prime *= lambda_t
 
     for X, t in product(range(2), range(T_max)):
         Q[X, t, :, :, X, t, :, :] += Q_walk_prime
-      
         
     # Traverse graph edges constraints
     Q_graph_prime = np.zeros((N+1, 2, N+1, 2), dtype=np.int8)
-
-    # Set end nodes
     Q_graph_prime[N, 0, 0:N, :] = 1
-    end_nodes= set()
-    for node, val in dict(graph.nodes.data('start')).items():
-        if val == 'end':
-            node_index_in_qubo = floor(nodes.index(node)/ 2)
-            end_nodes.add(node_index_in_qubo)
-    if len(end_nodes) > 0:
-        print(f'Setting end nodes: {end_nodes}')
-        Q_graph_prime[0:N, :, N, 0] = 1
-        Q_graph_prime[list(end_nodes), :, N, 0] = 0
-
+    
     for i, sigma, j, tau in product(range(N), range(2), range(N), range(2)):
         if not (nodes[2 * i + sigma], nodes[2 * j + tau]) in graph.edges:
             Q_graph_prime[i, sigma, j, tau] = 1 
@@ -78,24 +67,35 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
         Q[X, t, :, :, X, t + 1, :, :] += Q_graph_prime
         Q[X, t + 1, :, :, X, t, :, :] += Q_graph_prime.reshape(2*(N+1),2*(N+1)).T.reshape(N+1,2,N+1,2)
         
-    # Set start nodes
-    start_nodes= set()
+    end_nodes = set()
+    start_nodes = set()
     for node, val in dict(graph.nodes.data('start')).items():
         if val == 'start':
             node_index_in_qubo = floor(nodes.index(node)/ 2)
             start_nodes.add(node_index_in_qubo)
-    
+        elif val == 'end':
+            node_index_in_qubo = floor(nodes.index(node)/ 2)
+            end_nodes.add(node_index_in_qubo)
+            
     start_nodes = list(start_nodes)
+    end_nodes = list(end_nodes)
+    print(f'Start nodes: {start_nodes}, End nodes: {end_nodes}')
+    
     if len(start_nodes) > 0:
-        print(f'Setting start node: {nodes[2 * start_nodes[0]]}')
-        Q_start_prime = np.ones((2, 2), dtype=np.int8)
-        for sigma in range(2):
-            Q_start_prime[sigma, sigma] = -1
-        Q_start_prime *= lambda_g    
-        
-        for X in range(2):
-            Q[X, 0, start_nodes[0], :, X, 0, start_nodes[0], :] += Q_start_prime
-        
+        for i, j, sigma, tau in product(start_nodes, start_nodes, range(2), range(2)):
+            Q[0, 0, i, sigma, 0, 0, j, tau] += lambda_start * (-1) ** (i==j * sigma == tau)
+            Q[1, 0, i, sigma, 0, 0, j, tau] += lambda_start * (-1) ** (i==j * sigma == tau)
+    
+    if len(end_nodes) > 0:
+        Q_end_prime = np.zeros((N+1, 2, N+1, 2), dtype=np.int8)
+        Q_end_prime[0:N, :, N, 0] = 1
+        Q_end_prime[list(end_nodes), :, N, 0] = 0
+        Q_end_prime *= int(0.5 * lambda_start)
+
+        for X, t in product(range(2), range(T_max - 1)):
+            Q[X, t, :, :, X, t + 1, :, :] += Q_end_prime
+            Q[X, t + 1, :, :, X, t, :, :] += Q_end_prime.reshape(2*(N+1),2*(N+1)).T.reshape(N+1,2,N+1,2)
+            
 
     # Number of visits constraints
     for i in range(N):
@@ -115,5 +115,5 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     
     offset = lambda_t * T_max * 2  \
         + lambda_w * int(sum(graph.nodes[nodes[2 * i]]["weight"] ** 2 for i in range(N))) \
-            + (2 if len(start_nodes) > 0 else 0)  * lambda_g   
+            + (2 * lambda_start if len(start_nodes) > 0 else 0)   
     return Q, offset, T_max, N

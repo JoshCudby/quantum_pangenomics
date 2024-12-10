@@ -9,9 +9,9 @@ from qubo_solvers.definitions import MQLIB_DIR
 
 
 def mqlib_sample_qubo(
-    diploid_out_dir: str, filename: str, normalisation: int, graph: nx.Graph, offset: int, T: int, N: int, time_limit: int,
+    diploid_out_dir: str, filename: str, graph: nx.Graph, offset: int, T: int, N: int, time_limit: int,
     ) -> tuple[np.ndarray, float, list]:
-    mqlib_input_filepath = f'{diploid_out_dir}/mqlib_input_{filename}_normalisation_{normalisation}.txt'
+    mqlib_input_filepath = f'{diploid_out_dir}/mqlib_input_{filename}.txt'
 
     seed =  np.random.default_rng().integers(0, 1000)
 
@@ -88,8 +88,8 @@ def sample_array_to_paths(sample_array: np.ndarray, nodes: list, N: int):
     nz = np.nonzero(sample_array == 1)
     path_list_concat = [
         (
-            nz[0][i],
-            nz[1][i],
+            int(nz[0][i]),
+            int(nz[1][i]),
             'end' if nz[2][i] == N else nodes[nz[2][i] * 2 + nz[3][i]]
         ) for i in range(nz[0].shape[0])
     ]

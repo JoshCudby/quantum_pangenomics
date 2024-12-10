@@ -12,3 +12,5 @@ class Solver(Enum):
     DWAVE = 'dwave'
     MQLIB = 'mqlib'
     GUROBI = 'gurobi'
+
+COVERAGE_SUFFIX = "coverage"

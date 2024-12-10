@@ -84,7 +84,7 @@ def sample_array_to_path(sample_array: np.ndarray, nodes: list, V: int):
     nz = np.nonzero(sample_array == 1)
     return [
         (
-            nz[0][i], 
+            int(nz[0][i]), 
             nodes[nz[1][i] * 2 + nz[2][i]] if nz[1][i] in range(V) else 'end'
         ) for i in range(nz[0].shape[0])
     ]

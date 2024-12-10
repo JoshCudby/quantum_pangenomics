@@ -93,7 +93,7 @@ def _index_to_node_time(idx, num_nodes):
 
 def on_vars_to_path(on_vars, nodes):
     path = [_index_to_node_time(x, len(nodes) + 1) for x in on_vars]
-    path = [(e[0], nodes[e[1]] if e[1] < len(nodes) else 'end') for e in path]
+    path = [(int(e[0]), nodes[e[1]] if e[1] < len(nodes) else 'end') for e in path]
     return path
 
 
