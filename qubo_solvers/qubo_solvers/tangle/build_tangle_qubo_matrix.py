@@ -2,9 +2,10 @@ import sys
 import numpy as np
 import os
 from pathlib import Path
-from qubo_solvers.tangle.utils.graph_utils import graph_from_gfa_file, normalise_node_weights
+from qubo_solvers.tangle.utils.graph_utils import graph_with_copy_numbers
 from qubo_solvers.tangle.utils.qubo_utils import get_tangle_qubo_matrix
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR
+from qubo_solvers.pathfinder_coverage import run_pathfinder_coverage
 
 if len(sys.argv) > 1:
     filepath = sys.argv[1]
@@ -12,19 +13,17 @@ if len(sys.argv) > 1:
 else:
     filename = "test.gfa"
     filepath = f"{DATA_DIR}/{filename}"
-
-if len(sys.argv) > 2:
-    try:
-        normalisation = int(sys.argv[2])
-    except ValueError:
-        normalisation = 1
-else:
-    normalisation = 1
     
-graph = graph_from_gfa_file(filepath)
+coverage_suffix = "coverage"
+run_pathfinder_coverage(filepath, coverage_suffix)
 
-print(f'Normalising by {normalisation}')
-graph = normalise_node_weights(graph, normalisation)
+with open(f"{filepath}_{coverage_suffix}", "r") as f:
+    lines = f.readlines()
+if len(lines) < 3:
+    raise Exception(f"Could not read copy numbers from {filepath}_{coverage_suffix}")
+copy_numbers = [int(x) for x in lines[2].split()]
+
+graph = graph_with_copy_numbers(filepath, copy_numbers)
 
 qubo_matrix, offset, T_max, V = get_tangle_qubo_matrix(graph)
 

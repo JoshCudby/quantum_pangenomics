@@ -3,7 +3,8 @@ import numpy as np
 import os
 from pathlib import Path
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR
-from qubo_solvers.diploid_tangle.utils.graph_utils import oriented_graph_from_file, normalise_node_weights
+from qubo_solvers.pathfinder_coverage import run_pathfinder_coverage
+from qubo_solvers.diploid_tangle.utils.graph_utils import oriented_graph_with_copy_numbers
 from qubo_solvers.diploid_tangle.utils.qubo_utils import qubo_matrix_from_graph
 
 print("Started Building Matrix")
@@ -12,29 +13,30 @@ if len(sys.argv) > 1:
 else:
     filepath = f"{DATA_DIR}/test.gfa"
 
-if len(sys.argv) > 2:
-    try:
-        normalisation = int(sys.argv[2])
-    except ValueError:
-        normalisation = 1
-else:
-    normalisation = 1
+
+coverage_suffix = "coverage"
+run_pathfinder_coverage(filepath, coverage_suffix)
+
+with open(f"{filepath}_{coverage_suffix}", "r") as f:
+    lines = f.readlines()
+if len(lines) < 3:
+    raise Exception(f"Could not read copy numbers from {filepath}_{coverage_suffix}")
+copy_numbers = [int(x) for x in lines[2].split()]
 
 filename = os.path.basename(filepath)
 
-graph = oriented_graph_from_file(filepath)
-print(f'Normalising by {normalisation}')
-graph = normalise_node_weights(graph, normalisation)
+graph = oriented_graph_with_copy_numbers(filepath)
+
 qubo_matrix, offset, T_max, N = qubo_matrix_from_graph(graph)
 
 out_path=f'{OUT_DIR}/diploid'
 Path(out_path).mkdir(exist_ok=True)
 to_save = np.array([qubo_matrix, offset, T_max, N], dtype=object)
-np_data_filepath = f'{out_path}/qubo_data_{filename}_normalisation_{normalisation}'
+np_data_filepath = f'{out_path}/qubo_data_{filename}'
 np.save(np_data_filepath, to_save)
 
 # Write to MQLib Format
-mqlib_data_filepath = f'{out_path}/mqlib_input_{filename}_normalisation_{normalisation}.txt'
+mqlib_data_filepath = f'{out_path}/mqlib_input_{filename}.txt'
 ut_qubo_matrix = np.triu(qubo_matrix)
 non_zero = np.nonzero(ut_qubo_matrix)
 non_zero_count = int(non_zero[0].shape[0])

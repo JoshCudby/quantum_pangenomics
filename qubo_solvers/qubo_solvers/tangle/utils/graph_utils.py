@@ -1,25 +1,8 @@
 import networkx as nx
 import gfapy
-from math import remainder
-from scipy.optimize import minimize
 
 
-def normalise_node_weights(graph: nx.Graph, normalisation: float) -> nx.Graph:
-    """Normalises weights of nodes in a graph by a constant factor.
-
-    Args:
-        graph (nx.Graph): a node-weighted graph, with node attribute "weight".
-        normalisation (float): the constant factor to normalise weights by.
-
-    Returns:
-        nx.Graph: a graph with node attributes "weight".
-    """
-    for node in graph.nodes:
-        graph.nodes[node]["weight"] = round(graph.nodes[node]["weight"] / normalisation)
-    return graph
-
-
-def graph_from_gfa_file(filename: str) -> nx.Graph:
+def graph_with_copy_numbers(filename: str, copy_numbers: list) -> nx.Graph:
     """Reads a .gfa file into a graph.
 
     Args:
@@ -30,14 +13,8 @@ def graph_from_gfa_file(filename: str) -> nx.Graph:
     """
     gfa = gfapy.Gfa.from_file(filename)
     graph = nx.Graph()
-    for segment_line in gfa.segments:
-        if segment_line.SC is not None:
-            weight = segment_line.SC
-        elif segment_line.LN is not None and segment_line.KC is not None:
-            weight = segment_line.KC / segment_line.LN
-        else:
-            raise Exception('Could not compute graph weights from .gfa file')
-        graph.add_node(segment_line.name, weight=weight, start=segment_line.st)
+    for index, segment_line in enumerate(gfa.segments):
+        graph.add_node(segment_line.name, weight=copy_numbers[index], start=segment_line.st)
     for edge_line in gfa.edges:
         graph.add_edges_from([
             (edge_line.sid1.name, edge_line.sid2.name)

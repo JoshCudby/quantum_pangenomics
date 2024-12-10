@@ -1,7 +1,7 @@
 import numpy as np
 import os
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR, Solver
-from qubo_solvers.diploid_tangle.utils.graph_utils import oriented_graph_from_file, normalise_node_weights
+from qubo_solvers.diploid_tangle.utils.graph_utils import oriented_graph_with_copy_numbers, normalise_node_weights
 
 
 def setup(*args):
@@ -35,7 +35,7 @@ def setup(*args):
         time_limit = 10
         
     filename = os.path.basename(filepath)
-    graph = oriented_graph_from_file(filepath)
+    graph = oriented_graph_with_copy_numbers(filepath)
     print(f'Normalising by: {normalisation}')
     graph = normalise_node_weights(graph, normalisation)
     

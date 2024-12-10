@@ -2,28 +2,29 @@ import sys
 import numpy as np
 import os
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR
-from qubo_solvers.oriented_tangle.utils.graph_utils import oriented_graph_from_file, normalise_node_weights
+from qubo_solvers.oriented_tangle.utils.graph_utils import oriented_graph_with_copy_numbers, normalise_node_weights
 from qubo_solvers.oriented_tangle.utils.qubo_utils import qubo_matrix_from_graph
+from qubo_solvers.pathfinder_coverage import run_pathfinder_coverage
 
 if len(sys.argv) > 1:
     filepath = sys.argv[1]
 else:
     filepath = f"{DATA_DIR}/test.gfa"
+    
+    
+coverage_suffix = "coverage"
+run_pathfinder_coverage(filepath, coverage_suffix)
 
-if len(sys.argv) > 2:
-    try:
-        normalisation = int(sys.argv[2])
-    except ValueError:
-        normalisation = 1
-else:
-    normalisation = 1
+with open(f"{filepath}_{coverage_suffix}", "r") as f:
+    lines = f.readlines()
+if len(lines) < 3:
+    raise Exception(f"Could not read copy numbers from {filepath}_{coverage_suffix}")
+copy_numbers = [int(x) for x in lines[2].split()]
    
 filename = os.path.basename(filepath)
 out_dir = f"{OUT_DIR}/oriented"
 
-graph = oriented_graph_from_file(filepath)
-print(f"Normalising by {normalisation}")
-graph = normalise_node_weights(graph, normalisation)
+graph = oriented_graph_with_copy_numbers(filepath, copy_numbers)
 qubo_matrix, offset, T_max, V = qubo_matrix_from_graph(graph)
 
 to_save = np.array([qubo_matrix, offset, T_max, V], dtype=object)

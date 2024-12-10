@@ -2,16 +2,13 @@
 
 usage()
 {
-    echo "usage: build_qubo_input [[[-f file] [-n normalisation] [-m memory]] | [-h]]"
+    echo "usage: build_qubo_input [[[-f file] [-m memory]] | [-h]]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )           shift
                                 filepath="$1"
-                                ;;
-        -n | --normalisation )  shift
-                                normalisation="$1"
                                 ;;
         -m | --memory )         shift
                                 memory="$1"
@@ -34,12 +31,6 @@ fi
 
 filename=$(basename -- "$filepath")
 
-case $normalisation in
-    [0-9]* ) echo "Normalising node weights by:" $normalisation
-             ;;
-    *      ) echo "Normalisation was not a number."; exit 1
-esac
-
 case $memory in
     [0-9]* ) echo "Memory:" $memory
              ;;
@@ -49,9 +40,9 @@ esac
 ## MAIN
 WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
 source ~/.venv/qubo/bin/activate
-outdir="/lustre/scratch127/qpg/jc59/out/tangle"
+outdir="$SCRATCH/out/tangle"
 
 bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
--o "$outdir/build.$filename.%J" -e "$outdir/error.build.$filename.%J" \
-"python3 qubo_solvers/tangle/build_tangle_qubo_matrix.py $filepath $normalisation"
+-o "$outdir/build.$filename.%J" -e "$outdir/error.build.$filename.%J" -q qpg -gpu - \
+"python3 $WORKING_DIR/qubo_solvers/tangle/build_tangle_qubo_matrix.py $filepath"
 exit 0 

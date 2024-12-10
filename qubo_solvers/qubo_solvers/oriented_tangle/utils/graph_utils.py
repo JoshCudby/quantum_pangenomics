@@ -1,7 +1,7 @@
 import gfapy
 import networkx as nx
 
-def oriented_graph_from_file(filename):
+def oriented_graph_with_copy_numbers(filename, copy_numbers):
     """Reads a .gfa file into an oriented graph, where each node has a positive and negative version.
 
     Args:
@@ -12,15 +12,9 @@ def oriented_graph_from_file(filename):
     """
     gfa = gfapy.Gfa.from_file(filename, vlevel=0)
     graph = nx.DiGraph()
-    for segment_line in gfa.segments:
-        if segment_line.SC is not None:
-            weight = segment_line.SC
-        elif segment_line.LN is not None and segment_line.KC is not None:
-            weight = segment_line.KC / segment_line.LN
-        else:
-            raise Exception('Could not compute graph weights from .gfa file')
-        graph.add_node(f'{segment_line.name}_+', weight=weight, start=segment_line.st)
-        graph.add_node(f'{segment_line.name}_-', weight=weight, start=segment_line.st)
+    for index, segment_line in enumerate(gfa.segments):
+        graph.add_node(f'{segment_line.name}_+', weight=copy_numbers[index], start=segment_line.st)
+        graph.add_node(f'{segment_line.name}_-', weight=copy_numbers[index], start=segment_line.st)
     for edge_line in gfa.edges:
         v1 = edge_line.sid1
         v2 = edge_line.sid2
@@ -32,19 +26,4 @@ def oriented_graph_from_file(filename):
         graph.add_edges_from([
             (f'{v2.name}_{v2.orient}', f'{v1.name}_{v1.orient}'),
         ])
-    return graph
-
-
-def normalise_node_weights(graph: nx.Graph, normalisation: float) -> nx.Graph:
-    """Normalises weights of nodes in a graph by a constant factor.
-
-    Args:
-        graph (nx.Graph): a node-weighted graph, with node attribute "weight".
-        normalisation (float): the constant factor to normalise weights by.
-
-    Returns:
-        nx.Graph: a graph with node attributes "weight".
-    """
-    for node in graph.nodes:
-        graph.nodes[node]["weight"] = round(graph.nodes[node]["weight"] / normalisation)
     return graph

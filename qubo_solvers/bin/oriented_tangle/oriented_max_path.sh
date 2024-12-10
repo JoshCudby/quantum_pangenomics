@@ -67,7 +67,7 @@ mkdir -p $outdir
 for time_limit in "${times_arr[@]}"
 do
     echo Submitting $solver batch with time limit: $time_limit
-    bsub -J  "ori_maxpath[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"'\
+    bsub -J  "ori_maxpath[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q qpg -gpu - \
      -M "$memory" -o "$outdir/$solver.$filename.%J.%I" -e "$outdir/error.$solver.$filename.%J"\
      -G "qpg" "python3 qubo_solvers/oriented_tangle/oriented_max_path.py $solver $filepath $normalisation $time_limit"
 done
