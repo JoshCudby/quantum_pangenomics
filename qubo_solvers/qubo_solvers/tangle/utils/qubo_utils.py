@@ -76,8 +76,8 @@ def get_tangle_qubo_matrix(graph: nx.DiGraph) -> np.ndarray:
             np.ones((len(start_nodes), len(start_nodes)), dtype=np.int16) 
             - 2 * np.diagflat(np.ones((len(start_nodes)), dtype=np.int16))
             )
-        for i, j in product(start_nodes, start_nodes):
-            qubo_matrix[0, i, 0, j] += S_qubo_matrix[i, j]
+        for i, j in product(range(len(start_nodes)), range(len(start_nodes))):
+            qubo_matrix[0, start_nodes[i], 0, start_nodes[j]] += S_qubo_matrix[i, j]
         offset += lambda_start
     
     if exist_end_nodes:

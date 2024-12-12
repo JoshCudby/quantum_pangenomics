@@ -20,7 +20,7 @@ def setup(*args):
 
     if len(args) > 3:
         try:
-            time_limit = int(args[4])
+            time_limit = int(args[3])
         except ValueError:
             print('Could not parse time limit')
             time_limit = 3
@@ -39,6 +39,6 @@ def setup(*args):
     qubo_data_filepath = f"{tangle_out_dir}/qubo_data_{filename}.npy"
 
     Q, offset, T_max, V = np.load(qubo_data_filepath, allow_pickle=True)
-    graph = graph_with_copy_numbers(f"{DATA_DIR}/{filename}", copy_numbers)
+    graph = graph_with_copy_numbers(filepath, copy_numbers)
     
     return filepath, filename, tangle_out_dir, graph, time_limit, Q, offset, T_max, V, solver

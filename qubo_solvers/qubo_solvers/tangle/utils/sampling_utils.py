@@ -34,11 +34,12 @@ def gurobi_sample_qubo(qubo_matrix: np.ndarray, graph: nx.Graph, offset: int, ti
         model.Params.BestObjStop = - offset
         model.Params.TimeLimit = time_limit
         model.Params.Seed = np.random.default_rng().integers(0, 1000)
+        model.Params.MIPFocus = 1
         model.optimize()
         
         energy = model.ObjVal + offset
         path = qubo_vars_to_path(model_vars.X, graph)
-        return energy, path, model_vars.X
+        return model_vars.X, energy, path 
 
 
 def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: int, graph: nx.Graph, time_limit=None, label=None):

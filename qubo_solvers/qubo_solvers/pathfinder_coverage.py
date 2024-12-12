@@ -1,11 +1,12 @@
 from pathfinder import pathfinder
+import os
 
 def run_pathfinder_coverage(gfa_file, coverage_suffix):
     max_copy = 10
     min_cfrac = 0
     max_path = 1000000
     do_part = False
-    do_adjust = False
+    do_adjust = not os.path.basename(gfa_file) in ['trivial.gfa', 'test.gfa']
     s_source = None
     s_target = None
     ec_tag = None

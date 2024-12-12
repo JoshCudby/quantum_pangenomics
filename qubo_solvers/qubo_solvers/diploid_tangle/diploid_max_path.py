@@ -23,5 +23,6 @@ save_file = diploid_out_dir + f"/mqlib_{filename}_{now}"
     
 to_save = np.array([sample, energy, paths], dtype=object)
 np.save(save_file, to_save)
-print('Compilation Data')
-print(f'[{time_limit}, {energy}],')
+compile_path = diploid_out_dir + f"/{solver.value}.{filename}.compiled.txt"
+with open(compile_path, "w") as f:
+    f.write(f'[{time_limit}, {energy}],')

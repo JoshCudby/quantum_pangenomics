@@ -16,6 +16,7 @@ elif solver == Solver.GUROBI:
 
 validate_path(path, graph)
 print(f"Energy of path: {energy}")
+print(f"Time limit: {time_limit}")
     
 now = datetime.now().strftime("%d%m%Y_%H%M")
 save_file = tangle_out_dir + f"/{solver.value}_{filename}_{now}"   
@@ -23,5 +24,6 @@ save_file = tangle_out_dir + f"/{solver.value}_{filename}_{now}"
 to_save = np.array([sample, energy, path], dtype=object)
 np.save(save_file, to_save)
 
-print('Compilation Data')
-print(f'[{time_limit}, {energy}],')
+compile_path = tangle_out_dir + f"/{solver.value}.{filename}.compiled.txt"
+with open(compile_path, "a") as f:
+    f.write(f'[{time_limit}, {energy}],')
