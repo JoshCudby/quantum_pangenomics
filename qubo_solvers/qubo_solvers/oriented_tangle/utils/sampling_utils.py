@@ -74,7 +74,6 @@ def gurobi_sample_qubo(qubo_matrix: np.ndarray, offset: int, graph: nx.Graph, T:
         model.Params.BestObjStop = - offset
         model.Params.TimeLimit = time_limit
         model.Params.Seed = np.random.default_rng().integers(0, 1000)
-        model.Params.MIPFocus = 1
         model.optimize()
         energy = model.ObjVal + offset
         path = sample_list_to_path(model_vars.X, graph, T, V)

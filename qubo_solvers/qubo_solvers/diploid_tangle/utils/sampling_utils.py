@@ -81,7 +81,7 @@ def gurobi_sample_qubo(qubo_matrix: np.ndarray, offset: int, graph: nx.Graph, T:
         model.Params.MIPFocus = 1
         model.optimize()
         energy = model.ObjVal + offset
-        paths = sample_list_to_paths(model_vars.X, graph, T, N)
+        paths = sample_list_to_paths(model_vars.X, list(graph.nodes), T, N)
         return model_vars.X, energy, paths
 
 
