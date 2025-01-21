@@ -2,15 +2,16 @@
 
 ## MAIN
 
-memory=4000
+memory=32000
 
 module load cuda-12.1.1
-LD_LIBRARY_PATH=$CUDA_HOME/lib64
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CUDA_HOME/lib64
 WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qokit_simulation
-source ~/qokit-311/bin/activate
+outdir="$SCRATCH/out/qokit"
+source /nfs/users/nfs_j/jc59/.venv/qokit/bin/activate
 
 # QOKit Testing
 echo "QOKit Testing"
-bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=2:j_exclusive=yes" -M "$memory" -o "out/qokit.test.%J" -e "out/error.qokit.test.%J" -G "qpg" -q "qpg" "python3 ./qokit_job_testing.py"
+bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -n 32 -gpu - -M "$memory" -o "$outdir/qokit.test.%J" -e "$outdir/error.qokit.test.%J" -G "qpg" -q "qpg" "python3 $WORKING_DIR/qokit_job_testing.py"
 
 exit 0

@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import os
+import pickle
 from pathlib import Path
 from qubo_solvers.tangle.utils.graph_utils import graph_with_copy_numbers
 from qubo_solvers.tangle.utils.qubo_utils import get_tangle_qubo_matrix
@@ -32,6 +33,15 @@ Path(tangle_out_dir).mkdir(exist_ok=True, parents=True)
 savepath = f'{tangle_out_dir}/qubo_data_{filename}'
 to_save = np.array([qubo_matrix, offset, T_max, V], dtype=object)
 np.save(savepath, to_save, allow_pickle=True)
+
+to_save = {
+    'qubo_matrix': qubo_matrix.tolist(),
+    'offset': offset,
+    'T_max': T_max,
+    'V': V
+}
+with open(savepath, 'wb') as file:
+    pickle.dump(to_save, file)
 
 # Write to MQLib Format
 mqlib_savepath = f'{tangle_out_dir}/mqlib_input_{filename}.txt'

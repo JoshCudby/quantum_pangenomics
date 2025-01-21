@@ -32,7 +32,7 @@ while [ "$1" != "" ]; do
 done
 
 if [ -f "$filepath" ]; then
-    echo "Reading file:" $filename
+    echo "Reading file:" $filepath
 else
     echo "Could not find input file."
     exit 1
@@ -58,8 +58,8 @@ mkdir -p $outdir
 ## MAIN
 for time_limit in "${times_arr[@]}"
 do
-    echo Submitting $solver batch with time limit: $time_limit
-    bsub -J  "ori_maxpath[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q qpg -gpu - \
+    echo "Submitting $solver batch with time limit: $time_limit"
+    bsub -J  "ori_$solver[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q qpg -gpu - \
      -M "$memory" -o "$outdir/$solver.$filename.%J.%I" -e "$outdir/error.$solver.$filename.%J"\
      -G "qpg" "python3 $WORKING_DIR/qubo_solvers/oriented_tangle/oriented_max_path.py $solver $filepath $time_limit"
 done
