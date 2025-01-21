@@ -58,7 +58,7 @@ outdir="/lustre/scratch127/qpg/jc59/out/tangle"
 for time_limit in "${times_arr[@]}"
 do
     echo Submitting $solver batch with time limit: $time_limit
-    bsub -J "maxpath[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q qpg -gpu - \
+    bsub -J "$solver.maxpath[1-$jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q qpg -gpu - \
      -M "$memory" -o "$outdir/$solver.$filename.%J.%I" -e "$outdir/error.$solver.$filename.%J"\
      -G "qpg" "python3 $WORKING_DIR/qubo_solvers/tangle/max_path.py $solver $filepath $time_limit"
 done
