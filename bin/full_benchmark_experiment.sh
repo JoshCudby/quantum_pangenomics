@@ -34,6 +34,7 @@ syncasm -k 301 $shredded_seqfile -o $outdir/assembled.syncasm >> $outdir/error.s
 memory=1000
 
 gfa_filepath=$outdir/assembled.syncasm.utg.final.gfa
+qubo_data_filepath=$outdir/qubo_data_assembled.syncasm.utg.final.gfa.npy
 
 # Pathfinder
 bsub -J "$out_suffix.$seed.pathfinder" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q qpg -gpu - \
@@ -48,8 +49,8 @@ bsub -J "$out_suffix.$seed.build_qubo" -R '"select[mem>'$memory'] rusage[mem='$m
      -M "$memory" -o "$outdir/build.txt" -e "$outdir/error.build.txt" -G "qpg" \
      "python3 $QUBO_DIR/qubo_solvers/oriented_tangle/build_oriented_qubo_matrix.py $gfa_filepath $outdir"
 
-num_jobs=10
-for time_limit in 15 30 60
+num_jobs=1
+for time_limit in 15
 do
   bsub -J "$out_suffix.$seed.mqlib[1-$num_jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q qpg -gpu - \
        -M "$memory" -o "$outdir/mqlib.$time_limit.%I.txt" -e "$outdir/error.mqlib.txt" -G "qpg"  \
@@ -73,9 +74,10 @@ memory=64000
 COTENGRA_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/cotengra_tensor_networks
 source $COTENGRA_DIR/cotengra_venv/bin/activate
 
-bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory"\
- -o "$outdir/cotengra.txt" -e "$outdir/error.cotengra.txt"\
- -n 32\
- -G "qpg" -q "qpg" -gpu - "python3 $COTENGRA_DIR/non_local_exp.py $outdir $gfa_filepath"
+bsub -J "$out_suffix.$seed.cotengra" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory"\
+     -o "$outdir/cotengra.txt" -e "$outdir/error.cotengra.txt" -n 32\
+     -w "done($out_suffix.$seed.build_qubo)" \
+     -G "qpg" -q "qpg" -gpu - \
+     "python3 $COTENGRA_DIR/non_local_exp.py $outdir $qubo_data_filepath"
 
 exit 0
