@@ -1,39 +1,66 @@
-# Generate synthetic data 
-JamesSimulateSequenceScript
 
-repeat 100: # More for just classical softwares
+### Generate synthetic data or pick real FASTA
 
-# Over many runs, consider rotations of the same input
-RotateSequence # Save first 100
 
-# Shotgun Sequence
+  
+## repeat 100:  
+(More for classical softwares?)
+
+  
+### Over many runs, consider rotations of the same input
+RotateSequence 
+  
+
+### Shotgun Sequence
 JamesShotgunSequenceScript
 
-# Create node-weighted graph
-JamesGraphCreationScript
+ 
+### Create node-weighted graph
+Syncasm
 
-# Solve with each software package some number of times
+  
 
-# Classical de novo assembly
+### Solve with each software package some number of times
+#### Classical de novo assembly
 DeBruijnGraphSolver
 SequenceOverlapGraphSolver
 
-# Classical exhaustive
+  
+
+#### Classical exhaustive
 Pathfinder
 
-# Classical QUBO
+  
+
+#### Classical QUBO
+
 Mqlib
 Gurobi
 
-# Quantum Annealing
+  
+
+#### Quantum Annealing
+
 Dwave
 
-# QAOA Simulation
+  
+
+#### QAOA Simulation
+
 QiskitSimulator
 PytketSimulator
 QOKitSimulator
 
-# Score solutions
+  
+
+#### Make FASTAs from paths
+OatkPathToFasta
+
+  
+
+#### Score solutions
 AssemblathonScoringScripts
 
-endRepeat
+  
+
+## endRepeat

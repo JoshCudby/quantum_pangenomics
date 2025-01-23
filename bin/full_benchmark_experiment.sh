@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 qpg=/lustre/scratch127/qpg
 root_dir=$qpg/jc59/full_benchmark
 out_suffix=test
@@ -27,21 +27,27 @@ export LD_LIBRARY_PATH=/software/badger/opt/pangenomes/lib
 syncasm -k 301 $shredded_seqfile -o $outdir/assembled.syncasm
 
 # Run solvers
+
+# TODO: memory change
+memory=1000
+
+gfa_filepath=$outdir/assembled.syncasm.utg.final.gfa
+
 bsub -J "$out_suffix.$run_index.pathfinder" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q qpg -gpu - \
      -M "$memory" -o "$outdir/pathfinder.txt" -e "$outdir/error.pathfinder.txt"\
-     -G "qpg" "$qpg/cz3/QuantumTangle/pathfinder/pathfinder $outdir/assembled.syncasm.utg.final.gfa"
+     -G "qpg" "$qpg/cz3/QuantumTangle/pathfinder/pathfinder $gfa_filepath"
 
 QUBO_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
-source ~/.venv/qubo/bin/activate
+source $QUBO_DIR/.venv/bin/activate
 
-bsub -J "$out_suffix.$run_index.build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
- -o "$outdir/build.txt" -e "$outdir/error.build.txt" -q qpg -gpu - \
- "python3 $QUBO_DIR/qubo_solvers/oriented_tangle/build_oriented_qubo_matrix.py $filepath"
+bsub -J "$out_suffix.$run_index.build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q qpg -gpu - \
+     -M "$memory" -o "$outdir/build.txt" -e "$outdir/error.build.txt"\
+     -G "qpg" "python3 $QUBO_DIR/qubo_solvers/oriented_tangle/build_oriented_qubo_matrix.py $gfa_filepath $outdir"
 
 # TODO: build will output to wrong dir??
 # TODO: multiple timelimits
 time_limit=10
 bsub -J "$out_suffix.$run_index.mqlib" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
- -o "$outdir/build.txt" -e "$outdir/error.build.txt" -q qpg -gpu - \
+ -o "$outdir/mqlib.txt" -e "$outdir/error.mqlib.txt" -q qpg -gpu - \
  -w "done($out_suffix.$run_index.build_qubo)" \
- "python3 $QUBO_DIR/qubo_solvers/oriented_tangle/oriented_max_path.py mqlib $filepath $time_limit"
+ "python3 $QUBO_DIR/qubo_solvers/oriented_tangle/oriented_max_path.py mqlib $gfa_filepath $time_limit $outdir"

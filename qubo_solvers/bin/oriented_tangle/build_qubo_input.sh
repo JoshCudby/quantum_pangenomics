@@ -13,6 +13,9 @@ while [ "$1" != "" ]; do
         -m | --memory )         shift
                                 memory="$1"
                                 ;;
+        -o | --out )            shift
+                                outpath="$1"
+                                ;;
         -h | --help )           usage
                                 exit
                                 ;;
@@ -45,5 +48,5 @@ outdir="$SCRATCH/out/oriented"
 
 bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
  -o "$outdir/build.$filename.%J" -e "$outdir/error.build.$filename.%J" -q qpg -gpu - \
- "python3 $WORKING_DIR/qubo_solvers/oriented_tangle/build_oriented_qubo_matrix.py $filepath"
+ "python3 $WORKING_DIR/qubo_solvers/oriented_tangle/build_oriented_qubo_matrix.py $filepath $outpath"
 exit 0

@@ -16,7 +16,9 @@ def setup(*args):
     if len(args) > 2:
         filepath = args[2]
     else:
-        filepath = f"{DATA_DIR}/test.gfa"
+        filepath = f'{DATA_DIR}/test.gfa'
+    filename = os.path.basename(filepath)
+
 
     if len(args) > 3:
         try:
@@ -25,17 +27,21 @@ def setup(*args):
             time_limit = 10
     else:
         time_limit = 10
+
+    if len(args) > 4:
+        qubo_data_dir = args[4]
+    else:
+        qubo_data_dir = f'{OUT_DIR}/oriented'
+    qubo_data_path = f'{qubo_data_dir}/qubo_data_{filename}.npy'
         
-    with open(f"{filepath}_{COVERAGE_SUFFIX}", "r") as f:
+    with open(f'{qubo_data_dir}/{filename}_{COVERAGE_SUFFIX}', 'r') as f:
         lines = f.readlines()
     if len(lines) < 3:
-        raise Exception(f"Could not read copy numbers from {filepath}_{COVERAGE_SUFFIX}")
+        raise Exception(f'Could not read copy numbers from {filepath}_{COVERAGE_SUFFIX}')
     copy_numbers = [int(x) for x in lines[2].split()]
         
-    filename = os.path.basename(filepath)
     graph = oriented_graph_with_copy_numbers(filepath, copy_numbers)
     
-    oriented_out_dir = f'{OUT_DIR}/oriented'
-    to_load = f'{oriented_out_dir}/qubo_data_{filename}.npy'
-    Q, offset, T_max, V = np.load(to_load, allow_pickle=True)
-    return filepath, filename, oriented_out_dir, graph, time_limit, Q, offset, T_max, V, solver
+    Q, offset, T_max, V = np.load(qubo_data_path, allow_pickle=True)
+
+    return filepath, filename, qubo_data_dir, graph, time_limit, Q, offset, T_max, V, solver
