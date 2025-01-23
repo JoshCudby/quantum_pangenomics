@@ -6,8 +6,20 @@ import quimb as qu
 from concurrent.futures import ThreadPoolExecutor
 import sys
 import tqdm
+import os
 from itertools import product
 from skopt import Optimizer
+
+if len(sys.argv) > 1:
+    out_dir = sys.argv[1]
+else:
+    out_dir = '/lustre/scratch127/qpg/jc59/out/cotengra'
+
+if len(sys.argv) > 2:
+    filepath = sys.argv[2]
+else:
+    filepath = '/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.npy'
+filename = os.path.basename(filepath)
 
 seed = 666
 p = 4
@@ -49,7 +61,7 @@ opt = ctg.ReusableHyperOptimizer(
     directory=True
 )
 
-data = np.load('/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.npy', allow_pickle=True)
+data = np.load(filepath, allow_pickle=True)
 Q, offset, T, W = data
 
 # Move terms to upper triangular part
@@ -60,8 +72,7 @@ N_vars = Q.shape[0]
 # Get Hamiltonian terms
 h, J, offset = Q_to_Ising(Q, offset)
 
-
-p = 16
+p = 4
 gammas = qu.randn(p, seed=seed)
 betas = qu.randn(p, seed=seed)
 
@@ -128,7 +139,7 @@ bounds = (
 
 bopt = Optimizer(bounds, random_state=seed)
 
-for i in tqdm.trange(400):
+for i in tqdm.trange(100):
     x = bopt.ask()
     res = bopt.tell(x, energy(x))
     
@@ -136,5 +147,4 @@ print(res)
 print(offset)
 
 to_save = np.array([res, offset], dtype=object)
-data = np.save(f'/lustre/scratch127/qpg/jc59/out/cotengra/non_local_exp_data_p_{p}_trivial.gfa.npy', to_save, allow_pickle=True)
-
+data = np.save(f'{out_dir}/non_local_exp_data_p_{p}_{filename}.npy', to_save, allow_pickle=True)

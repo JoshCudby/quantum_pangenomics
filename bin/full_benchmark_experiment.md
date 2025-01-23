@@ -51,6 +51,12 @@ QiskitSimulator
 PytketSimulator
 QOKitSimulator
 
+
+
+#### Tensor Network Simulation
+
+CotengraSimulator
+
   
 
 #### Make FASTAs from paths
