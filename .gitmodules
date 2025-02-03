@@ -1,6 +1,3 @@
-[submodule "pggb"]
-	path = modules/pggb
-	url = https://github.com/pangenome/pggb.git
 [submodule "mqlib_fork"]
 	path = qubo_solvers/MQLib
 	url = https://github.com/JoshCudby/MQLib.git
