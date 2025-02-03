@@ -21,7 +21,12 @@ else:
     filepath = '/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.npy'
 filename = os.path.basename(filepath)
 
-seed = 666
+if len(sys.argv) > 3:
+    seed = int(sys.argv[3])
+else:
+    seed = 100
+
+rng = np.random.default_rng(seed)
 p = 4
 
 def eprint(*args, **kwargs):
@@ -47,8 +52,6 @@ def Q_to_Ising(Q, offset):
     return h, J, offset
 
 
-gammas = qu.randn(p, seed=seed)
-betas = qu.randn(p, seed=seed)
 opt = ctg.ReusableHyperOptimizer(
     methods=['kahypar', 'greedy'],
     optlib='nevergrad',
@@ -86,7 +89,6 @@ eprint(f'Terms: {list(h.items())} {list(J.items())}')
 
 # Use 1 gpu for now ?
 pool = ThreadPoolExecutor(1)
-
 
 circ = qtn.circ_qaoa(h, J, p, gammas, betas)
 

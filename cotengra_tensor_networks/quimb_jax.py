@@ -5,8 +5,28 @@ import quimb.tensor as qtn
 import quimb as qu
 from concurrent.futures import ThreadPoolExecutor
 import sys
+import os
 import tqdm
 from functools import reduce
+
+
+if len(sys.argv) > 1:
+    out_dir = sys.argv[1]
+else:
+    out_dir = '/lustre/scratch127/qpg/jc59/out/cotengra'
+
+if len(sys.argv) > 2:
+    filepath = sys.argv[2]
+else:
+    filepath = '/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.npy'
+filename = os.path.basename(filepath)
+
+if len(sys.argv) > 3:
+    seed = int(sys.argv[3])
+else:
+    seed = 100
+
+rng = np.random.default_rng(seed)
 
 
 def eprint(*args, **kwargs):
@@ -40,8 +60,6 @@ def Q_to_Ising(Q, offset):
     return J, offset
 
 
-seed = 666
-
 opt = ctg.ReusableHyperOptimizer(
     methods=['kahypar', 'greedy'],
     optlib='nevergrad',
@@ -58,7 +76,7 @@ opt = ctg.ReusableHyperOptimizer(
 # Q = qu.randn((N_vars, N_vars), scale=5, loc=-2.5, seed=seed)
 # offset = 0
 
-data = np.load('/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.npy', allow_pickle=True)
+data = np.load(filepath, allow_pickle=True)
 Q, offset, T, W = data
 
 # Move terms to upper triangular part
@@ -70,7 +88,7 @@ N_vars = Q.shape[0]
 terms, offset = Q_to_Ising(Q, offset)
 
 
-p = 2
+p = 4
 gammas = qu.randn(p, seed=seed)
 betas = qu.randn(p, seed=seed)
 
@@ -138,7 +156,7 @@ bounds = (
 
 bopt = Optimizer(bounds, random_state=seed)
 
-for i in tqdm.trange(200):
+for i in tqdm.trange(100):
     x = bopt.ask()
     res = bopt.tell(x, energy(x))
     
@@ -146,4 +164,4 @@ print(res)
 print(offset)
 
 to_save = np.array([res, offset], dtype=object)
-data = np.save('/lustre/scratch127/qpg/jc59/out/cotengra/cotengra_data_trivial.gfa.npy', to_save, allow_pickle=True)
+data = np.save(f'{out_dir}/cotengra_data_p_{p}_{filename}.npy', to_save, allow_pickle=True)
