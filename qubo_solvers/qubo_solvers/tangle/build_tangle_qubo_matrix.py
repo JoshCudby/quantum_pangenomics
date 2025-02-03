@@ -21,8 +21,12 @@ else:
     out_dir = f'{OUT_DIR}/tangle'
 Path(out_dir).mkdir(exist_ok=True, parents=True)
 
-    
-copy_numbers = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
+if len(sys.argv) > 3:
+    copy_numbers = sys.argv[3].split(',')
+    copy_numbers = [int(x) for x in copy_numbers]
+else:
+    copy_numbers = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
+print(copy_numbers)
 
 graph = graph_with_copy_numbers(filepath, copy_numbers)
 

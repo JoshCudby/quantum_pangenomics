@@ -13,6 +13,9 @@ while [ "$1" != "" ]; do
         -m | --memory )         shift
                                 memory="$1"
                                 ;;
+        -c | --copy )           shift
+                                copy="$1"
+                                ;;
         -h | --help )           usage
                                 exit
                                 ;;
@@ -39,10 +42,10 @@ esac
 
 ## MAIN
 WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
-source ~/.venv/qubo/bin/activate
+source $WORKING_DIR/.venv/bin/activate
 outdir="$SCRATCH/out/tangle"
 
 bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
  -o "$outdir/build.$filename.%J" -e "$outdir/error.build.$filename.%J" -q qpg -gpu - \
- "python3 $WORKING_DIR/qubo_solvers/tangle/build_tangle_qubo_matrix.py $filepath"
+ "python3 $WORKING_DIR/qubo_solvers/tangle/build_tangle_qubo_matrix.py $filepath $outdir $copy"
 exit 0 
