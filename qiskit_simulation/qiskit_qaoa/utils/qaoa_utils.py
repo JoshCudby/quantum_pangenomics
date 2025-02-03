@@ -19,16 +19,25 @@ def _cost_func_estimator(
     job = estimator.run([pub])
 
     results = job.result()
+    try:
+        print(results[0].to_dict()['metadata'])
+    except:
+        pass
+    try:
+        print(results.to_dict()['metadata'])
+    except:
+        pass
+
     cost = results[0].data.evs
 
     return cost
 
 def optimize_qaoa_parameters(
         backend,
-        init_params,
+        init_params: list[float],
         circuit: QuantumCircuit,
-        hamiltonian,
-        reps,
+        hamiltonian: SparsePauliOp,
+        reps: int,
         estimator_shots=100000
 ):
     with Session(backend=backend) as session:
@@ -41,6 +50,7 @@ def optimize_qaoa_parameters(
         # estimator.options.dynamical_decoupling.sequence_type = "XY4"
         # estimator.options.twirling.enable_gates = True
         # estimator.options.twirling.num_randomizations = "auto"
+        
 
         return minimize(
             _cost_func_estimator,
@@ -49,5 +59,5 @@ def optimize_qaoa_parameters(
             method="COBYLA",
             bounds=[(0, np.pi/2), (0, np.pi)] * reps,
             options={'rhobeg': 0.01 / circuit.num_qubits,},
-            tol=1e-5,
+            tol=1e-3,
         )

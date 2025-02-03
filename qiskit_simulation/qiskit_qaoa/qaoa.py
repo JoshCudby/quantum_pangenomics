@@ -40,22 +40,22 @@ op, offset = mod.to_ising()
 op = op.sort(weight=True)
 
 
-p = 8
+p = 4
 circuit = QAOAAnsatz(cost_operator=op, reps=p, flatten=True)
 circuit.measure_all()
+print(circuit.num_qubits)
 
 try:
     ideal_aer = AerSimulator(
         method=method,
         matrix_product_state_max_bond_dimension=5,
         device='GPU' if use_gpu else 'CPU',
-        # blocking_enable=True, blocking_qubits=27
+        blocking_enable=True, blocking_qubits=20
     )
 except AerError as error:
     print(error)
 
 print(ideal_aer.available_devices())
-print(ideal_aer.available_methods())
 
 # Create pass manager for transpilation
 ideal_pm = generate_preset_pass_manager(optimization_level=3, backend=ideal_aer)
@@ -76,6 +76,7 @@ opt_result = optimize_qaoa_parameters(
     ideal_circuit,
     op,
     p,
+    estimator_shots=1e5
 )
 optimized_params = [float(param) for param in opt_result.x] 
 
@@ -93,7 +94,7 @@ most_likely_bitstring.reverse()
 
 print(f'Result bitstring: {most_likely_bitstring}')
 print(f'Prob of most likely: {np.max(np.abs(values))}')
-print(f'Most likely energy: {bitstring_to_energy(most_likely_bitstring)}')
+print(f'Most likely energy: {bitstring_to_energy(most_likely_bitstring, op)}')
 
 print(f'Uniform random prob: {2 ** -Q.shape[0]}')
 
@@ -101,9 +102,22 @@ if data_file == "/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.np
     optimal = [1,0,0,0,0,1,0,0,0,0,1,0]
     optimal.reverse()
     print(f'Optimal bitstring: {optimal}')
-    print(f'Optimal energy: {bitstring_to_energy(optimal)}')
+    print(f'Optimal energy: {bitstring_to_energy(optimal, op)}')
     print(f'Prob of optimal: {sample["".join([str(x) for x in optimal])]}')
-elif data_file == "/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.npy":
+elif data_file == "/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_small_test.gfa.npy":
+    optimal = [
+        1,0,0,0,
+        0,1,0,0,
+        0,0,1,0,
+        1,0,0,0,
+        0,1,0,0,
+        0,0,0,1
+    ]
+    optimal.reverse()
+    print(f'Optimal bitstring: {optimal}')
+    print(f'Optimal energy: {bitstring_to_energy(optimal, op)}')
+    print(f'Prob of optimal: {sample["".join([str(x) for x in optimal])]}')
+elif data_file == "/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_test.gfa.npy":
     optimal = [
         1,0,0,0,0,0,
         0,1,0,0,0,0,
@@ -116,7 +130,7 @@ elif data_file == "/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.
     ]
     optimal.reverse()
     print(f'Optimal bitstring: {optimal}')
-    print(f'Optimal energy: {bitstring_to_energy(optimal)}')
+    print(f'Optimal energy: {bitstring_to_energy(optimal, op)}')
     print(f'Prob of optimal: {sample["".join([str(x) for x in optimal])]}')
 
     optimal = [
@@ -131,5 +145,5 @@ elif data_file == "/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_trivial.gfa.
     ]
     optimal.reverse()
     print(f'Optimal bitstring: {optimal}')
-    print(f'Optimal energy: {bitstring_to_energy(optimal)}')
+    print(f'Optimal energy: {bitstring_to_energy(optimal, op)}')
     print(f'Prob of optimal: {sample["".join([str(x) for x in optimal])]}')
