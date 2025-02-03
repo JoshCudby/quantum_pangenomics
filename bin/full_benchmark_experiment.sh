@@ -13,9 +13,8 @@ mkdir -p "$outdir"
 
 # Rotate sequence
 rotated_seqfile="$outdir/rotated_input.fa"
-# rotate_sequence.script $seqfile > $seqfile.rotated
-# TODO: delete next line
-cat $seqfile > $rotated_seqfile
+/nfs/users/nfs_j/jc59/quantumwork/pangenome/bin/rotate_sequence.pl $seed $seqfile > $rotated_seqfile
+
 
 # Simulate sequencing data
 shredded_seqfile="$outdir/shredded.fa"
@@ -70,7 +69,6 @@ done
 
 # Tensor Networks
 export COTENGRA_NUM_WORKERS=32
-memory=64000
 COTENGRA_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/cotengra_tensor_networks
 source $COTENGRA_DIR/cotengra_venv/bin/activate
 
@@ -80,4 +78,13 @@ bsub -J "$out_suffix.$seed.cotengra" -R '"select[mem>'$memory'] rusage[mem='$mem
      -G "qpg" -q "qpg" -gpu - \
      "python3 $COTENGRA_DIR/non_local_exp.py $outdir $qubo_data_filepath"
 
+
+# QOKit
+QOKIT_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qokit_simulation
+source $QOKIT_DIR/qokit_venv/bin/activate
+bsub -J "$out_suffix.$seed.qokit" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory"\
+     -o "$outdir/qokit.txt" -e "$outdir/error.qokit.txt" -n 32\
+     -w "done($out_suffix.$seed.build_qubo)" \
+     -G "qpg" -q "qpg" -gpu - \
+     "python3 $QOKIT_DIR/qokit_gpu.py $outdir $qubo_data_filepath"
 exit 0
