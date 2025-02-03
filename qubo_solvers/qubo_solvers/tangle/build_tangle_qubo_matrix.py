@@ -14,23 +14,22 @@ if len(sys.argv) > 1:
 else:
     filename = "test.gfa"
     filepath = f"{DATA_DIR}/{filename}"
-    
-run_pathfinder_coverage(filepath, COVERAGE_SUFFIX)
 
-with open(f"{filepath}_{COVERAGE_SUFFIX}", "r") as f:
-    lines = f.readlines()
-if len(lines) < 3:
-    raise Exception(f"Could not read copy numbers from {filepath}_{COVERAGE_SUFFIX}")
-copy_numbers = [int(x) for x in lines[2].split()]
+if len(sys.argv) > 2:
+    out_dir = sys.argv[2]
+else:
+    out_dir = f'{OUT_DIR}/tangle'
+Path(out_dir).mkdir(exist_ok=True, parents=True)
+
+    
+copy_numbers = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
 
 graph = graph_with_copy_numbers(filepath, copy_numbers)
 
 qubo_matrix, offset, T_max, V = get_tangle_qubo_matrix(graph)
 
-tangle_out_dir = f"{OUT_DIR}/tangle"
-Path(tangle_out_dir).mkdir(exist_ok=True, parents=True)
 
-savepath = f'{tangle_out_dir}/qubo_data_{filename}'
+savepath = f'{out_dir}/qubo_data_{filename}'
 to_save = np.array([qubo_matrix, offset, T_max, V], dtype=object)
 np.save(savepath, to_save, allow_pickle=True)
 
@@ -44,7 +43,7 @@ with open(savepath, 'wb') as file:
     pickle.dump(to_save, file)
 
 # Write to MQLib Format
-mqlib_savepath = f'{tangle_out_dir}/mqlib_input_{filename}.txt'
+mqlib_savepath = f'{out_dir}/mqlib_input_{filename}.txt'
 
 ut_qubo_matrix = np.triu(qubo_matrix)
 non_zero = np.nonzero(ut_qubo_matrix)

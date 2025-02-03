@@ -13,14 +13,13 @@ if len(sys.argv) > 1:
 else:
     filepath = f"{DATA_DIR}/test.gfa"
 
+if len(sys.argv) > 2:
+    out_dir = sys.argv[2]
+else:
+    out_dir = f'{OUT_DIR}/diploid'
 
-run_pathfinder_coverage(filepath, COVERAGE_SUFFIX)
 
-with open(f"{filepath}_{COVERAGE_SUFFIX}", "r") as f:
-    lines = f.readlines()
-if len(lines) < 3:
-    raise Exception(f"Could not read copy numbers from {filepath}_{COVERAGE_SUFFIX}")
-copy_numbers = [int(x) for x in lines[2].split()]
+copy_numbers = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
 
 filename = os.path.basename(filepath)
 
@@ -28,14 +27,12 @@ graph = oriented_graph_with_copy_numbers(filepath, copy_numbers)
 
 qubo_matrix, offset, T_max, N = qubo_matrix_from_graph(graph)
 
-out_path=f'{OUT_DIR}/diploid'
-Path(out_path).mkdir(exist_ok=True)
 to_save = np.array([qubo_matrix, offset, T_max, N], dtype=object)
-np_data_filepath = f'{out_path}/qubo_data_{filename}'
+np_data_filepath = f'{out_dir}/qubo_data_{filename}'
 np.save(np_data_filepath, to_save)
 
 # Write to MQLib Format
-mqlib_data_filepath = f'{out_path}/mqlib_input_{filename}.txt'
+mqlib_data_filepath = f'{out_dir}/mqlib_input_{filename}.txt'
 ut_qubo_matrix = np.triu(qubo_matrix)
 non_zero = np.nonzero(ut_qubo_matrix)
 non_zero_count = int(non_zero[0].shape[0])

@@ -7,15 +7,15 @@ def run_pathfinder_coverage(out_dir, gfa_file, coverage_suffix):
     min_cfrac = 0
     max_path = 1000000
     do_part = False
-    do_adjust = not filename in ['trivial.gfa', 'test.gfa']
+    do_adjust = filename not in ['trivial.gfa', 'small_test.gfa', 'test.gfa']
     s_source = None
     s_target = None
     ec_tag = None
     kc_tag = None
-    sc_tag = None # "SC:f"
+    sc_tag = "SC:f"
     VERBOSE = 0
 
-    to_save = f'{out_dir}/{filename}_{coverage_suffix}'
+    to_save = f'{out_dir}/{filename}.{coverage_suffix}'
 
     pathfinder(
         gfa_file, max_copy, min_cfrac, max_path, do_part, do_adjust, s_source, s_target, 

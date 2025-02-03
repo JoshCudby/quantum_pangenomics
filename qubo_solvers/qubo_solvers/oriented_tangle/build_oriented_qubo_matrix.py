@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import os
+from pathlib import Path
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR, COVERAGE_SUFFIX
 from qubo_solvers.oriented_tangle.utils.graph_utils import oriented_graph_with_copy_numbers
 from qubo_solvers.oriented_tangle.utils.qubo_utils import qubo_matrix_from_graph
@@ -15,6 +16,8 @@ if len(sys.argv) > 2:
     out_dir = sys.argv[2]
 else:
     out_dir = f'{OUT_DIR}/oriented'
+Path(out_dir).mkdir(exist_ok=True, parents=True)
+
     
 filename = os.path.basename(filepath)
 
