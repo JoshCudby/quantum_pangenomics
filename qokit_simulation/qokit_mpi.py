@@ -57,7 +57,7 @@ theta = np.hstack([gamma, beta])
 f = get_qaoa_objective(N, p, terms=terms, parameterization='theta', objective='overlap')
 # print(f"Success probability at p = {p} before optimization is {1-f(theta)}")
 
-res = scipy.optimize.minimize(f, theta, method='COBYLA', options={'rhobeg': 0.01/N, 'tol': 10**-7})
+res = scipy.optimize.minimize(f, theta, method='COBYLA', options={'rhobeg': 0.01/N})
 gamma_opt, beta_opt = res.x[:p], res.x[p:]
 theta = np.hstack([gamma_opt, beta_opt])
 # print(f"Success probability at p = {p} after optimization is {1-f(theta)}")
@@ -73,7 +73,7 @@ while(1-f(theta) < 10 ** -2 and p < 6):
     # print(f'Init theta at p = {p}: {init_theta}')
     # print(f"Success probability at p = {p} before optimization is {1-f(init_theta)}")
 
-    res = scipy.optimize.minimize(f, init_theta, method='COBYLA', options={'rhobeg': 0.01/N, 'tol': 10**-7})
+    res = scipy.optimize.minimize(f, init_theta, method='COBYLA', options={'rhobeg': 0.01/N})
     gamma_opt, beta_opt = res.x[:p], res.x[p:]
     theta = np.hstack([gamma_opt, beta_opt])
     # print(f"Success probability at p = {p} after optimization is {1-f(theta)}")

@@ -13,6 +13,6 @@ outdir="$SCRATCH/out/qokit"
 echo "QOKit Testing"
 bsub -R '"select[mem>'$memory'] rusage[mem='$memory']"' -n 32 -gpu "num=2" -M "$memory"\
  -o "$outdir/qokit.test.%J" -e "$outdir/error.qokit.test.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/qokit.py"
+ "python3 $WORKING_DIR/qokit_gpu.py"
 
 exit 0
