@@ -1,0 +1,14 @@
+[project]
+name = "qiskit_qaoa"
+version = "0.1.0"
+description = "QPG Qiskit QAOA for Tangle Resolution"
+dependencies = [
+  "qiskit",
+  "qiskit-optimization",
+  "qiskit-ibm-runtime",
+  "qiskit-aer-gpu"
+]
+
+[build-system]
+build-backend = "flit_core.buildapi"
+requires = ["flit_core >=3.2,<4"]
