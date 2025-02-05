@@ -45,6 +45,6 @@ outdir="$SCRATCH/out/qiskit"
 echo "Qiskit Testing"
 bsub -J "$sim_method.$use_gpu" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no:j_exclusive=yes" -M "$memory"\
  -o "$outdir/qiskit.test.$sim_method.gpu$use_gpu.num$num_gpu.%J" -e "$outdir/error.qiskit.test.$sim_method.gpu$use_gpu.num$num_gpu.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/qaoa.py $filepath $sim_method $reps $use_gpu $memory"
+ "python3 $WORKING_DIR/qaoa.py $filepath $sim_method $reps $use_gpu $memory scikit"
 
 exit 0

@@ -7,7 +7,7 @@ logging.basicConfig(
 
 class InfoFilter(logging.Filter):
     def filter(self, rec):
-        return rec.levelno in (logging.INFO)
+        return rec.levelno in [logging.INFO]
 
 def get_logger(name: str):
     root = logging.getLogger(name)
