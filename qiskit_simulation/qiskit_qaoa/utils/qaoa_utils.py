@@ -3,7 +3,9 @@ from scipy.optimize import minimize
 from qiskit_ibm_runtime import Session, EstimatorV2 as Estimator
 from qiskit.quantum_info import SparsePauliOp
 from qiskit import QuantumCircuit
+from .logging import get_logger
 
+logger = get_logger(__name__)
 
 def _cost_func_estimator(
     params: list,
@@ -20,13 +22,11 @@ def _cost_func_estimator(
 
     results = job.result()
     try:
-        print(results[0].to_dict()['metadata'])
-    except:
-        pass
-    try:
-        print(results.to_dict()['metadata'])
-    except:
-        pass
+        logger.debug(results)
+        logger.debug(results[0].metadata)
+        # print(results.to_dict()['results'][0]['metadata']['cacheblocking'])
+    except Exception as error:
+        logger.error(error)
 
     cost = results[0].data.evs
 
