@@ -2,12 +2,16 @@ import logging
 import sys
 
 logging.basicConfig(
-    level=logging.WARN,
+    level=logging.INFO,
     )
+
+class InfoFilter(logging.Filter):
+    def filter(self, rec):
+        return rec.levelno in (logging.INFO)
 
 def get_logger(name: str):
     root = logging.getLogger(name)
-
+    root.setLevel(logging.INFO)
     if (root.hasHandlers()):
         root.handlers.clear()
 
@@ -15,10 +19,11 @@ def get_logger(name: str):
 
     out_handler = logging.StreamHandler(sys.stdout)
     out_handler.setLevel(logging.INFO)
+    out_handler.addFilter(InfoFilter())
     out_handler.setFormatter(formatter)
 
     err_handler = logging.StreamHandler(sys.stderr)
-    err_handler.setLevel(logging.DEBUG)
+    err_handler.setLevel(logging.WARN)
     err_handler.setFormatter(formatter)
 
     root.addHandler(out_handler)

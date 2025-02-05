@@ -6,7 +6,9 @@ dependencies = [
   "qiskit",
   "qiskit-optimization",
   "qiskit-ibm-runtime",
-  "qiskit-aer-gpu"
+  "qiskit-aer-gpu",
+  "scipy",
+  "scikit-optimize"
 ]
 
 [build-system]

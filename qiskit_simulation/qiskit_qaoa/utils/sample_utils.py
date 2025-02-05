@@ -17,12 +17,15 @@ def sample_optimized_circuit(
             batched_shots_gpu=batched_shots_gpu, batched_shots_gpu_max_qubits=batched_shots_gpu_max_qubits
             ))
     )
+
     optimized_circuit = circuit.assign_parameters(optimized_params)
     pub= (optimized_circuit, )
     shots=int(min(10 * 2 ** optimized_circuit.num_qubits, 1e7))
+
     logger.info('About to sample')
     job = sampler.run(pubs=[pub], shots=shots)
     logger.info('Sampling finished')
+    
     counts_bin = job.result()[0].data.meas.get_counts()
     final_distribution_bin = {key: val/shots for key, val in counts_bin.items()}
     return final_distribution_bin
