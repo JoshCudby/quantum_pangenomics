@@ -1,0 +1,18 @@
+[project]
+name = "pytket_qaoa"
+version = "0.1.0"
+description = "QPG PyTket QAOA for Tangle Resolution"
+dependencies = [
+  "pytket",
+  "pytket-quantinuum",
+  "qnexus",
+  "jax[cuda12]",
+  "qujax",
+  "pytket-qujax",
+  "sympy",
+  "matplotlib"
+]
+
+[build-system]
+build-backend = "flit_core.buildapi"
+requires = ["flit_core >=3.2,<4"]
