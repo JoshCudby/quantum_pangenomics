@@ -1,5 +1,5 @@
 #!/bin/bash
-use_gpu="0"
+use_gpu="1"
 memory=4000
 reps=4
 num_gpu=1
@@ -31,7 +31,6 @@ while [ "$1" != "" ]; do
     esac
     shift
 done
-filename=$(basename "${filepath}")
 
 ## MAIN
 
@@ -44,8 +43,8 @@ mkdir -p $outdir
 
 # Pytket Testing
 echo "Pytket Testing"
-bsub -J "pytket.qaoa" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no:j_exclusive=yes" -M "$memory"\
- -o "$outdir/pytket.$filename.%J" -e "$outdir/error.pytket.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/qaoa.py $filepath $reps"
+bsub -J "local_circuit" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no:j_exclusive=yes" -M "$memory"\
+ -o "$outdir/local_circuit.%J" -e "$outdir/error.local_circuit.test.%J" -G "qpg" -q "qpg" \
+ "python3 $WORKING_DIR/local_execute_circuit.py"
 
 exit 0

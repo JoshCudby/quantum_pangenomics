@@ -7,7 +7,7 @@ class InfoFilter(logging.Filter):
     
 class WarnErrorFilter(logging.Filter):
     def filter(self, rec):
-        return rec.levelno in [logging.WARN, logging.ERROR]
+        return rec.levelno in [logging.DEBUG, logging.WARN, logging.ERROR]
 
 def get_logger(name: str):
     root = logging.getLogger(name)
