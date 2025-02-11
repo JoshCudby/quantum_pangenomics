@@ -1,13 +1,16 @@
 import logging
 import sys
 
-logging.basicConfig(
-    level=logging.INFO,
-    )
 
 class InfoFilter(logging.Filter):
     def filter(self, rec):
         return rec.levelno in [logging.INFO]
+    
+
+class WarnErrorFilter(logging.Filter):
+    def filter(self, rec):
+        return rec.levelno in [logging.WARN, logging.ERROR]
+
 
 def get_logger(name: str):
     root = logging.getLogger(name)
@@ -24,6 +27,7 @@ def get_logger(name: str):
 
     err_handler = logging.StreamHandler(sys.stderr)
     err_handler.setLevel(logging.WARN)
+    err_handler.addFilter(WarnErrorFilter())
     err_handler.setFormatter(formatter)
 
     root.addHandler(out_handler)

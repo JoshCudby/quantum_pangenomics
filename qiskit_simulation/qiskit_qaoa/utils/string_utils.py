@@ -20,11 +20,12 @@ def bitstring_to_energy(bitstring: list, op: SparsePauliOp):
 def print_optimal_solution_properties(
         optimal: list[int],
         op: SparsePauliOp,
-        sample: dict
+        sample: dict,
+        offset: float
 ):
     optimal.reverse()
     logger.info(f'Optimal bitstring: {optimal}')
-    logger.info(f'Optimal energy: {bitstring_to_energy(optimal, op)}')
+    logger.info(f'Optimal cost: {bitstring_to_energy(optimal, op) + offset}')
     try:
         logger.info(f'Prob of optimal: {sample["".join([str(x) for x in optimal])]}')
     except KeyError:

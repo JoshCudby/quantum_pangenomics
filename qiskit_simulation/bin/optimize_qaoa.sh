@@ -1,9 +1,9 @@
 #!/bin/bash
 sim_method="automatic"
-use_gpu="0"
+use_gpu="1"
 memory=4000
 reps=4
-num_gpu=4
+num_gpu=1
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )           shift
@@ -32,6 +32,7 @@ while [ "$1" != "" ]; do
     esac
     shift
 done
+filename=$(basename "${filepath}")
 
 ## MAIN
 
@@ -44,7 +45,7 @@ outdir="$SCRATCH/out/qiskit"
 # Qiskit Testing
 echo "Qiskit Testing"
 bsub -J "$sim_method.$use_gpu" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no:j_exclusive=yes" -M "$memory"\
- -o "$outdir/qiskit.test.$sim_method.gpu$use_gpu.num$num_gpu.%J" -e "$outdir/error.qiskit.test.$sim_method.gpu$use_gpu.num$num_gpu.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/qaoa.py $filepath $sim_method $reps $use_gpu $memory scikit"
+ -o "$outdir/qiskit.$filename.$sim_method.gpu$use_gpu.num$num_gpu.%J" -e "$outdir/error.qiskit.$filename.$sim_method.gpu$use_gpu.num$num_gpu.%J" -G "qpg" -q "qpg" \
+ "python3 $WORKING_DIR/optimize_qaoa.py $filepath $sim_method $reps $use_gpu $memory scipy"
 
 exit 0
