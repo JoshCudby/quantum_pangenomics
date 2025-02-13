@@ -1,0 +1,12 @@
+For trivial
+Seed 45 is a good run
+sampling job 3301 has the optimal as joint most likely - 0.03499
+(1-0.03499)^K < 0.1 => K > log_(1-0.03499)(0.1) = log(0.1)/log(1-0.03499)
+
+For small_test
+Seed 1 is a good run
+Sampling job 0150 has optimal quite well supported - 0.0001069
+
+For test_N4_W5
+Seed 1 is an ok run
+Sampling job 1015 has optimal fairly well supported - 3.25e-5

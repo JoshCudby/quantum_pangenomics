@@ -43,7 +43,7 @@ offset = offset / normalisation
 # TODO: better data save/load
 to_load = f'/lustre/scratch127/qpg/jc59/out/qiskit/qaoa_params_n{Q.shape[0]}_p{p}_seed{seed}.npy'
 optimized_params = np.load(to_load)
-
+np.save()
 
 mod = QuadraticProgram("QUBO test")
 mod.binary_var_list(Q.shape[0])
@@ -63,10 +63,12 @@ sampler = Sampler(
         # batched_shots_gpu=batched_shots_gpu, batched_shots_gpu_max_qubits=batched_shots_gpu_max_qubits
         ))
 )
+shots=int(min(100 * 2 ** circuit.num_qubits, 1e7))
 sample = sample_optimized_circuit(
     circuit,
     optimized_params,
-    sampler
+    sampler,
+    shots
 )
 
 keys = list(sample.keys())
@@ -132,5 +134,5 @@ elif data_file == "/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_test_N4_W5.g
 
 
 
-probs = get_optimized_circuit_probabilities(circuit, optimized_params)
-logger.info(probs)
+# probs = get_optimized_circuit_probabilities(circuit, optimized_params)
+# logger.info(probs)

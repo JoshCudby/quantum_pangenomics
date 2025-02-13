@@ -1,9 +1,6 @@
 #!/bin/bash
-sim_method="automatic"
-use_gpu="1"
-memory=4000
+memory=16000
 reps=4
-num_gpu=1
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )           shift
@@ -11,15 +8,6 @@ while [ "$1" != "" ]; do
                                 ;;
         -m | --memory )         shift
                                 memory="$1"
-                                ;;
-        -s | --sim-method )     shift
-                                sim_method="$1"
-                                ;;
-        -g | --gpu )            shift
-                                use_gpu="$1"
-                                ;;
-        -n | --num-gpu )        shift
-                                num_gpu="$1"
                                 ;;
         -p | --reps )           shift
                                 reps="$1"
@@ -45,8 +33,8 @@ outdir="$SCRATCH/out/qiskit"
 
 # Qiskit Testing
 echo "Qiskit Testing"
-bsub -J "$sim_method.$use_gpu" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no:j_exclusive=yes" -M "$memory"\
- -o "$outdir/qiskit.$filename.$sim_method.gpu$use_gpu.num$num_gpu.$seed.%J" -e "$outdir/error.qiskit.$filename.$sim_method.gpu$use_gpu.num$num_gpu.$seed.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/optimize_qaoa.py $seed $filepath $sim_method $reps $use_gpu $memory scipy"
+bsub -J "mps" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu - -M "$memory"\
+ -o "$outdir/qiskit.$filename.mps.$seed" -e "$outdir/error.qiskit.$filename.mps.$seed" -G "qpg" -q "qpg" \
+ "python3 $WORKING_DIR/mps_optimize_qaoa.py $seed $filepath $reps $memory scipy"
 
 exit 0

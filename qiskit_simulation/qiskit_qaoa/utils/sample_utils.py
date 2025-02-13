@@ -10,12 +10,12 @@ logger = get_logger(__name__)
 def sample_optimized_circuit(
     circuit: QuantumCircuit,
     optimized_params: np.ndarray,
-    sampler: Sampler
+    sampler: Sampler,
+    shots: int
 ):
     optimized_circuit = circuit.assign_parameters(optimized_params)
     optimized_circuit.measure_all()
     pub= (optimized_circuit, )
-    shots=int(min(10 * 2 ** optimized_circuit.num_qubits, 1e7))
 
     logger.info('About to sample')
     job = sampler.run(pubs=[pub], shots=shots)
