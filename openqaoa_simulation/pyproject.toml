@@ -1,0 +1,11 @@
+[project]
+name = "openqaoa_tangle"
+version = "0.1.0"
+description = "QPG OpenQAOA for Tangle Resolution"
+dependencies = [
+    "openqaoa-qiskit"
+]
+
+[build-system]
+build-backend = "flit_core.buildapi"
+requires = ["flit_core >=3.2,<4"]
