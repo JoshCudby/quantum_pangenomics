@@ -4,7 +4,7 @@ from qiskit_optimization import QuadraticProgram
 from qiskit.circuit.library import QAOAAnsatz
 from qiskit_aer import AerSimulator, AerError
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
-from qiskit_qaoa.utils.qaoa_utils import optimize_qaoa_parameters, bayesian_optimize_qaoa_parameters
+from qiskit_qaoa.utils.qaoa_utils import basinhopping_optimize_qaoa_parameters, bayesian_optimize_qaoa_parameters
 
 from qiskit_qaoa.utils.logging import get_logger
 
@@ -95,7 +95,7 @@ match optimization_method:
             estimator_shots=1e5
         )
     case 'scipy':
-        opt_result = optimize_qaoa_parameters(
+        opt_result = basinhopping_optimize_qaoa_parameters(
             ideal_aer,
             init_params,
             compiled_circuit,

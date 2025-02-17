@@ -1,43 +1,48 @@
+import numpy as np
 from scipy.optimize import minimize, basinhopping
 from skopt import Optimizer
 from qiskit_aer.primitives import EstimatorV2 as Estimator
 from qiskit.quantum_info import SparsePauliOp
 from qiskit import QuantumCircuit
+from .estimator_with_history import EstimatorWithHistory
 from .logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _parse_strings_to_binary_array(data: list[str]):
+    return np.array([[int(y) for y in list(x)] for x in data])
 
 
 def _cost_func_estimator(
     params: list,
     ansatz: QuantumCircuit,
     hamiltonian: SparsePauliOp,
-    estimator: Estimator,
+    estimator: EstimatorWithHistory,
+    costs_history: list,
+    cost_fun: np.vectorize
 ):
     pub = (ansatz, hamiltonian, params)
     job = estimator.run([pub])
 
     results = job.result()
-    cost = results[0].data.evs
+    outcomes = _parse_strings_to_binary_array(list(results[0].data.counts.keys()))
+    costs_history.extend(cost_fun(outcomes))
 
-    return float(cost)
+    return float(results[0].data.evs)
 
 
 def bayesian_optimize_qaoa_parameters(
-    backend,
+    estimator: EstimatorWithHistory,
     init_params: list[float],
     circuit: QuantumCircuit,
     hamiltonian: SparsePauliOp,
     reps: int,
-    bounds: list[tuple],
-    estimator_shots=10000
+    bounds: list[tuple]
 ):
     bounds = bounds * reps
 
     bopt = Optimizer(bounds, random_state=10)
-    estimator = Estimator.from_backend(backend)
-    estimator.options.default_shots = estimator_shots
-    estimator.options.default_precision = 0
     
     x = init_params
     logger.info('Starting Bayesian optimization')
@@ -49,19 +54,14 @@ def bayesian_optimize_qaoa_parameters(
     return res
 
 
-def optimize_qaoa_parameters(
-        backend,
+def basinhopping_optimize_qaoa_parameters(
+        estimator: EstimatorWithHistory,
         init_params: list[float],
         circuit: QuantumCircuit,
         hamiltonian: SparsePauliOp,
         reps: int,
         bounds: list[tuple],
-        estimator_shots=10000,
 ):
-    estimator = Estimator.from_backend(backend)
-    estimator.options.default_shots = estimator_shots
-    estimator.options.default_precision = 0
-
     # transform the observable defined on virtual qubits to
     # an observable defined on all physical qubits
     isa_hamiltonian = hamiltonian.apply_layout(circuit.layout)
@@ -84,12 +84,35 @@ def optimize_qaoa_parameters(
             'tol':1e-4,
             }
     )
-    # return minimize(
-    #     _cost_func_estimator,
-    #     init_params,
-    #     args=(circuit, hamiltonian, estimator),
-    #     method='COBYLA',
-    #     bounds=[(0, np.pi/2), (0, np.pi)] * reps,
-    #     options={'rhobeg': 0.01 / circuit.num_qubits,},
-    #     tol=1e-3,
-    # )
+
+
+def local_optimize_qaoa_parameters(
+        estimator: Estimator,
+        init_params: list[float],
+        circuit: QuantumCircuit,
+        hamiltonian: SparsePauliOp,
+        bounds: list[tuple],
+        costs_history: list,
+        cost_fun: np.vectorize,
+        ftol=1e-2,
+):
+    # transform the observable defined on virtual qubits to
+    # an observable defined on all physical qubits
+    isa_hamiltonian = hamiltonian.apply_layout(circuit.layout)
+    
+    def _callback(intermediate_result):
+        logger.info(f'Inter result: {intermediate_result.fun}')
+        if len(costs_history) and np.min(costs_history) < 1e-6 == 0:
+            raise StopIteration
+
+    logger.info('Starting minimization')
+
+    return minimize(
+        _cost_func_estimator,
+        init_params,
+        args=(circuit, isa_hamiltonian, estimator, costs_history, cost_fun),
+        method='powell',
+        bounds=bounds,
+        options={'ftol': ftol, 'disp': True},
+        callback=_callback
+    )

@@ -3,7 +3,8 @@ import sys
 from qiskit.circuit.library import QAOAAnsatz
 from qiskit_aer import AerSimulator, AerError
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
-from qiskit_qaoa.utils.qaoa_utils import optimize_qaoa_parameters, bayesian_optimize_qaoa_parameters
+from qiskit_qaoa.utils.estimator_with_history import EstimatorWithHistory
+from qiskit_qaoa.utils.qaoa_utils import basinhopping_optimize_qaoa_parameters, bayesian_optimize_qaoa_parameters
 from qiskit_qaoa.utils.hamiltonian_utils import get_objective_and_hamiltonian
 from qiskit_qaoa.utils.logging import get_logger
 
@@ -71,6 +72,10 @@ try:
 except AerError as error:
     logger.error(error)
 
+estimator = EstimatorWithHistory.from_backend(ideal_aer)
+estimator.options.default_shots = 1e4
+estimator.options.default_precision = 0
+
 # Create pass manager for transpilation
 pass_manager = generate_preset_pass_manager(optimization_level=3, backend=ideal_aer)
 compiled_circuit = pass_manager.run(circuit)
@@ -86,7 +91,7 @@ init_params = rng.random((2*p,)) \
 match optimization_method:
     case 'scikit':
         opt_result = bayesian_optimize_qaoa_parameters(
-            ideal_aer,
+            estimator,
             init_params,
             compiled_circuit,
             hamiltonian,
@@ -96,8 +101,8 @@ match optimization_method:
             
         )
     case 'scipy':
-        opt_result = optimize_qaoa_parameters(
-            ideal_aer,
+        opt_result = basinhopping_optimize_qaoa_parameters(
+            estimator,
             init_params,
             compiled_circuit,
             hamiltonian,
