@@ -14,3 +14,6 @@
 [submodule "pangene_fork"]
 	path = modules/pangene_fork
 	url = git@gitlab.internal.sanger.ac.uk:QPG/pangene_fork.git
+[submodule "modules/openqaoa"]
+	path = modules/openqaoa
+	url = git@gitlab.internal.sanger.ac.uk:QPG/openqaoa_fork.git
