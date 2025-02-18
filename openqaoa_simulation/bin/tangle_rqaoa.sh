@@ -1,5 +1,5 @@
 #!/bin/bash
-memory=64000
+memory=128000
 num_gpu=1
 
 usage()

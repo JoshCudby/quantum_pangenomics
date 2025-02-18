@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 filename = sys.argv[1]
 maxiter = 100
-p = 2
+p = 4
 
 logger.info(filename)
 logger.info(p)
@@ -56,6 +56,7 @@ fig, ax = opt_results.plot_cost()
 fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/openqaoa_simulation/out/qaoa_costs.{filename}.p{p}.maxiter{maxiter}.png')
 
 logger.info(opt_results.optimized)
+logger.info(opt_results.lowest_cost_bitstrings())
 
 logger.info('Probability of uniform random')
 logger.info(2 ** -n)
@@ -87,9 +88,8 @@ variational_params = q.optimizer.variational_params
 #create the optimized QAOA circuit for qiskit backend
 optimized_angles = opt_results.optimized['angles']
 variational_params.update_from_raw(optimized_angles)
-optimized_circuit = q.backend.qaoa_circuit(variational_params)
 
 logger.info(variational_params)
 
-with open(f'/lustre/scratch127/qpg/jc59/out/openqaoa/qaoa_results.{filename}.p{p}.maxiter{maxiter}', 'wb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/out/openqaoa/qaoa_results.{filename}.p{p}.maxiter{maxiter}.pkl', 'wb') as f:
     pickle.dump(opt_results, f)

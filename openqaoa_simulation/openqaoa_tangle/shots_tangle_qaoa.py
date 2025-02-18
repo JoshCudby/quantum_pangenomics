@@ -1,22 +1,28 @@
+import numpy as np
 import sys
 import pickle
 from openqaoa.utilities import ground_state_hamiltonian
 from openqaoa import QAOA
 from openqaoa.backends.qaoa_device import create_device
+from qiskit.quantum_info import Statevector
 from openqaoa_tangle.utils.get_qubo import get_qubo
 from openqaoa_tangle.utils.logging import get_logger
 
+outdir = '/lustre/scratch127/qpg/jc59/out/openqaoa'
+plotdir = '/nfs/users/nfs_j/jc59/quantumwork/pangenome/openqaoa_simulation/out'
 logger = get_logger(__name__)
 
 filename = sys.argv[1]
 maxiter = 100
-n_shots = 2 ** 15
+n_shots_min = 10
+n_shots_max = 1000
 p = 4
 
 logger.info(filename)
 logger.info(f'p: {p}')
 logger.info(f'Max iter: {maxiter}')
-logger.info(f'n shots: {n_shots}')
+logger.info(f'n shots min: {n_shots_min}')
+logger.info(f'n shots max: {n_shots_max}')
 
 
 ising_qubo = get_qubo(filename)
@@ -35,7 +41,7 @@ if n < 15:
 q = QAOA()
 
 # optionally configure the following properties of the model
-q.set_backend_properties(use_gpu=True, n_shots=n_shots)
+q.set_backend_properties(use_gpu=True, n_shots=500)
 
 # device
 device = create_device(location='local', name='qiskit.shot_simulator')
@@ -52,12 +58,11 @@ q.set_classical_optimizer(
     jac="param_shift", 
     maxiter=maxiter,
     optimizer_options=dict(
-        stepsize=0.001,
+        stepsize=0.01, # stepsize < 2 /L, L < sum(terms in hamil) < nC2
         mu=0.95,
         b=0.001,        
-        n_shots_min=10,
-        n_shots_max=100,
-        n_shots_budget=50000,
+        n_shots_min=n_shots_min,
+        n_shots_max=n_shots_max,
     ),
     optimization_progress=True, cost_progress=True, parameter_log=True
 )
@@ -68,9 +73,10 @@ q.optimize()
 
 opt_results = q.result
 fig, ax = opt_results.plot_cost()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/openqaoa_simulation/out/shots_qaoa_costs.{filename}.p{p}.maxiter{maxiter}.n_shots{n_shots}.png')
+fig.savefig(f'{plotdir}/shots_qaoa_costs.{filename}.p{p}.maxiter{maxiter}.n_shots{n_shots_min}_{n_shots_max}.png')
 
 logger.info(opt_results.optimized)
+logger.info(opt_results.lowest_cost_bitstrings())
 
 logger.info('Probability of uniform random')
 logger.info(2 ** -n)
@@ -106,8 +112,18 @@ variational_params = q.optimizer.variational_params
 optimized_angles = opt_results.optimized['angles']
 variational_params.update_from_raw(optimized_angles)
 optimized_circuit = q.backend.qaoa_circuit(variational_params)
+optimized_circuit.remove_final_measurements()
 
 logger.info(variational_params)
 
-with open(f'/lustre/scratch127/qpg/jc59/out/openqaoa/shots_qaoa_results.{filename}.p{p}.maxiter{maxiter}.n_shots{n_shots}', 'wb') as f:
+statevector = Statevector(optimized_circuit)
+if optimal is not None:
+    optimal_idx = sum([optimal[i] * 2**(len(optimal)-1-i) for i in range(len(optimal))])
+    logger.info('Probability of optimal')
+    logger.info(np.abs(statevector[optimal_idx]) ** 2)
+
+with open(f'{outdir}/shots_qaoa_results.{filename}.p{p}.maxiter{maxiter}.n_shots{n_shots_min}_{n_shots_max}.pkl', 'wb') as f:
     pickle.dump(opt_results, f)
+    
+fig = opt_results.plot_n_shots()[0]
+fig.savefig(f'{plotdir}/shots_qaoa_num_shots.{filename}.p{p}.maxiter{maxiter}.n_shots{n_shots_min}_{n_shots_max}.png')

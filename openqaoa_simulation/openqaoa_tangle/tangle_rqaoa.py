@@ -7,6 +7,8 @@ from openqaoa.backends.qaoa_device import create_device
 from openqaoa_tangle.utils.get_qubo import get_qubo
 from openqaoa_tangle.utils.logging import get_logger
 
+outdir = '/lustre/scratch127/qpg/jc59/out/openqaoa'
+plotdir = '/nfs/users/nfs_j/jc59/quantumwork/pangenome/openqaoa_simulation/out'
 logger = get_logger(__name__)
 
 filename = sys.argv[1]
@@ -45,7 +47,10 @@ r.set_classical_optimizer(method='cobyla', maxiter=max_iter)
 
 r.compile(ising_qubo)
 
-r.optimize()
+r.optimize(
+    dump=True,
+    dump_options={"file_name":"rqaoa_results", "file_path": outdir, "prepend_id": True}
+)
 
 # Extract results
 opt_results = r.result
@@ -57,5 +62,5 @@ for i in range(num_steps):
 fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/openqaoa_simulation/out/rqaoa_costs.{filename}.p{p}.n_max{n_max}.maxiter{max_iter}.png')
 
 logger.info(opt_results['solution'])
-with open(f'/lustre/scratch127/qpg/jc59/out/openqaoa/rqaoa_results.{filename}.p{p}.n_max{n_max}.maxiter{max_iter}', 'wb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/out/openqaoa/rqaoa_results.{filename}.p{p}.n_max{n_max}.maxiter{max_iter}.pkl', 'wb') as f:
     pickle.dump(opt_results, f)
