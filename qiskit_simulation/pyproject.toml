@@ -4,12 +4,13 @@ version = "0.1.0"
 description = "QPG Qiskit QAOA for Tangle Resolution"
 dependencies = [
   "qiskit",
-  "qiskit-optimization",
+  "qiskit-optimization[cplex]",
   "qiskit-ibm-runtime",
   "qiskit-aer-gpu",
   "scipy",
   "scikit-optimize",
   "matplotlib"
+  # qopt best practices
 ]
 
 [build-system]

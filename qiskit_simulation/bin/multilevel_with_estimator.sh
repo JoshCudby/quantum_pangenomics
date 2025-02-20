@@ -3,7 +3,7 @@ memory=16000
 num_gpu=1
 
 
-WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_qaoa
+WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_qaoa/standard
 
 outdir="$SCRATCH/out/qiskit/multilevel_estimator"
 mkdir -p $outdir

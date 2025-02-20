@@ -27,7 +27,7 @@ done
 # module load cuda-12.1.1
 # LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CUDA_HOME/lib64
 # module load ISG/experimental/fg12/openmpi/5.0.4-cuda12.1-lsf
-WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_qaoa
+WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_qaoa/standard
 outdir="$SCRATCH/out/qiskit"
 
 # Qiskit Testing

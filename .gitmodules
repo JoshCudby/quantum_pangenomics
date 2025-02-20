@@ -17,3 +17,6 @@
 [submodule "modules/openqaoa"]
 	path = modules/openqaoa
 	url = git@gitlab.internal.sanger.ac.uk:QPG/openqaoa_fork.git
+[submodule "qiskit_simulation/qopt-best-practices"]
+	path = qiskit_simulation/qopt-best-practices
+	url = https://github.com/qiskit-community/qopt-best-practices.git

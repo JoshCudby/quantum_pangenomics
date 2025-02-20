@@ -8,7 +8,7 @@ usage()
 }
 
 
-WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_qaoa
+WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_qaoa/standard
 
 outdir="$SCRATCH/out/qiskit/multilevel"
 mkdir -p $outdir
