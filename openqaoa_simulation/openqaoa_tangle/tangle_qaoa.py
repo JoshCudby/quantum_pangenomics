@@ -7,6 +7,8 @@ from openqaoa.backends.qaoa_device import create_device
 from openqaoa_tangle.utils.get_qubo import get_qubo
 from openqaoa_tangle.utils.logging import get_logger
 
+outdir = '/lustre/scratch127/qpg/jc59/out/openqaoa'
+plotdir = '/nfs/users/nfs_j/jc59/quantumwork/pangenome/openqaoa_simulation/out'
 logger = get_logger(__name__)
 
 filename = sys.argv[1]
@@ -53,7 +55,7 @@ q.optimize()
 
 opt_results = q.result
 fig, ax = opt_results.plot_cost()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/openqaoa_simulation/out/qaoa_costs.{filename}.p{p}.maxiter{maxiter}.png')
+fig.savefig(f'{plotdir}/qaoa_costs.{filename}.p{p}.maxiter{maxiter}.png')
 
 logger.info(opt_results.optimized)
 logger.info(opt_results.lowest_cost_bitstrings())
@@ -91,5 +93,5 @@ variational_params.update_from_raw(optimized_angles)
 
 logger.info(variational_params)
 
-with open(f'/lustre/scratch127/qpg/jc59/out/openqaoa/qaoa_results.{filename}.p{p}.maxiter{maxiter}.pkl', 'wb') as f:
+with open(f'{outdir}/qaoa_results.{filename}.p{p}.maxiter{maxiter}.pkl', 'wb') as f:
     pickle.dump(opt_results, f)
