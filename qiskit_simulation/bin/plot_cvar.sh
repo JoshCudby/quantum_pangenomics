@@ -2,7 +2,7 @@
 
 usage()
 {
-    echo "usage: plot_cvar.sh [[-f file -m memory -p reps] | [-h]]"
+    echo "usage: plot_cvar.sh [[-f file -m memory -p reps --hardware] | [-h]]"
 }
 
 memory=4000

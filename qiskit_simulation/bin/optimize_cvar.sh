@@ -2,12 +2,13 @@
 
 usage()
 {
-    echo "usage: optimize_cvar.sh [[-f file -m memory -p reps] | [-h]]"
+    echo "usage: optimize_cvar.sh [[-f file -m memory -p reps -n shots -g num_gpu -i init --hardware --noisy] | [-h]]"
 }
 
-memory=4000
-reps=4
-num_gpu=1
+memory="4000"
+reps="4"
+num_gpu="1"
+init="random"
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -26,7 +27,12 @@ while [ "$1" != "" ]; do
         -g | --num-gpu )        shift
                                 num_gpu="$1"
                                 ;;
+        -i | --init )           shift
+                                init="$1"
+                                ;;
         --hardware )            hardware="--hardware"
+                                ;;
+        --noisy )               noisy="--noisy"
                                 ;;
         -h | --help )           usage
                                 exit
@@ -42,13 +48,13 @@ done
 # module load cuda-12.1.1
 # LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CUDA_HOME/lib64
 # module load ISG/experimental/fg12/openmpi/5.0.4-cuda12.1-lsf
-WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_qaoa/cvar
+WORKING_DIR="/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_qaoa/cvar"
 outdir="$SCRATCH/out/qiskit/cvar"
 
 # Qiskit Testing
 echo "Qiskit Testing"
 bsub -J "optimize_cvar" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no" -M "$memory"\
  -o "$outdir/$filename.%J" -e "$outdir/error.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/optimize.py -f $filename -p $reps -m $memory -n $shots $hardware"
+ "python3 $WORKING_DIR/optimize.py -f $filename -p $reps -m $memory -n $shots --init $init $hardware $noisy"
 
 exit 0

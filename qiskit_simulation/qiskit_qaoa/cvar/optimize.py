@@ -13,29 +13,42 @@ from qiskit_aer.primitives import SamplerV2 as Sampler, EstimatorV2 as Estimator
 
 from qiskit_ibm_runtime.fake_provider import FakeFez
 
-
 from qopt_best_practices.sat_mapping import SATMapper
-
 
 from qiskit_qaoa.utils.circuit_graph_utils import circuit_to_graph, graph_to_operator, circuit_construction
 from qiskit_qaoa.utils.hamiltonian_utils import get_objective_and_hamiltonian
 from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
+from qiskit_qaoa.utils.argparser import get_parser
 from qiskit_qaoa.utils.logging import get_logger
 
 logger = get_logger(__name__)
+parser = get_parser()
+args = parser.parse_args()
+
+logger.info(args)
+
+filename = args.filename
+p: int = args.reps
+hardware = args.hardware
+shots = args.shots
+noisy = args.noisy
+init_type = args.init
+
 seed = 1
 rng = np.random.default_rng(seed=seed)
-p = 4
 
 backend_options = dict(
     method='statevector',
     device='GPU',
-    max_memory_mb=16000*0.9,
+    max_memory_mb=args.memory*0.9,
+    cuStateVec_enable=True,
+    blocking_enable=True,
+    blocking_qubits=23,
+    precision='single'
 )
 fake_fez = FakeFez()
 backend = AerSimulator.from_backend(fake_fez, **backend_options)
 
-filename = 'small_test'
 data_file = f'/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_{filename}.gfa.npy'
 
 _, hamiltonian = get_objective_and_hamiltonian(data_file)
@@ -45,8 +58,14 @@ qc = QAOAAnsatz(
     flatten=True
 )
 transpiled_qc = transpile(qc, backend, optimization_level=3, seed_transpiler=seed)
-logger.info(f'(Transpiled) Circuit has {transpiled_qc.count_ops().get("cz", 0) + transpiled_qc.count_ops().get("rzz", 0) + transpiled_qc.count_ops().get("cx", 0)} 2Q gates and {transpiled_qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
 
+
+def print_circuit_info(qc, circuit_name):
+    logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
+    and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
+
+
+print_circuit_info(transpiled_qc, '(Transpiled) Circuit')
 
 graph = circuit_to_graph(qc, qc.parameters[p]) # Why 4??
 
@@ -65,21 +84,20 @@ circ_dict = circuit_construction(singles, doubles, backend, swap_strat, edge_col
 
 
 backend_circ = circ_dict["backend"]
-logger.info(f'(Transpiled) Remapped Circuit has {backend_circ.count_ops().get("cz", 0) + backend_circ.count_ops().get("rzz", 0) + backend_circ.count_ops().get("cx", 0)} 2Q gates and {backend_circ.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
+print_circuit_info(backend_circ, '(Transpiled) Remapped Circuit')
 
 
-# Sanity check
-# test_vals = rng.uniform(0, 0.1 * np.pi, 2*p)
-# test_tcirc = circ_dict["circuit_to_sample"].assign_parameters(test_vals, inplace=False)
-# original_circ = qc.assign_parameters(test_vals, inplace=False)
-# estimator = Estimator(options=dict(backend_options=backend_options))
-# cost_op_pre_sat = graph_to_operator(graph)
-# test_res = estimator.run([(test_tcirc, cost_op), (original_circ, cost_op_pre_sat)], precision=0.001).result()
-# logger.info(test_res[0].data.evs)
-# logger.info(test_res[1].data.evs)
+if filename == 'trivial':
+    # Sanity check
+    test_vals = rng.uniform(0, 0.1 * np.pi, 2*p)
+    test_tcirc = circ_dict["circuit_to_sample"].assign_parameters(test_vals, inplace=False)
+    original_circ = qc.assign_parameters(test_vals, inplace=False)
+    estimator = Estimator(options=dict(backend_options=backend_options))
+    cost_op_pre_sat = graph_to_operator(graph)
+    test_res = estimator.run([(test_tcirc, cost_op), (original_circ, cost_op_pre_sat)], precision=0.001).result()
+    logger.info(test_res[0].data.evs)
+    logger.info(test_res[1].data.evs)
 
-
-hardware = True
 
 if hardware:
     # transpiled again for the FakeFez backend
@@ -90,11 +108,24 @@ else:
 
 qaoa_depth = len(circuit.parameters) // 2
 
-init_params = rng.uniform(0, 0.9 * np.pi, qaoa_depth).tolist() + rng.uniform(0, 0.5 * np.pi, qaoa_depth).tolist()
-shots = 2000
 
+if init_type == 'ramp':
+    t = 0.7 * p
+    betas = np.linspace(
+        (1 / p) * (t * (1 - 0.5 / p)), (1 / p) * (t * 0.5 / p), p
+    )
+    gammas = betas[::-1]
+    init_params = betas.tolist() + gammas.tolist()
+else:
+    init_params = rng.uniform(0, 0.9 * np.pi, qaoa_depth).tolist() + rng.uniform(0, 0.5 * np.pi, qaoa_depth).tolist()
+logger.info(f'Init: {init_params}')
 
-sampler = Sampler(seed=seed, options=dict(backend_options=backend_options))
+if noisy:
+    sampler = Sampler.from_backend(backend=backend, seed=seed)
+else:
+    sampler = Sampler(seed=seed, options=dict(backend_options=backend_options))
+logger.info(f'Noise model: {getattr(sampler._backend.options, "noise_model", "Ideal noise")}')
+
 history = []
 
 
@@ -131,5 +162,5 @@ logger.info(result)
 obj_to_dump = dict(
     result=result, history=history, singles=singles, doubles=doubles, sat_map=sat_map, graph=graph
 )
-with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/cvar/{filename}_cvar.p{p}.hardware{hardware}.pkl', 'wb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/cvar/{filename}_cvar.p{p}.shots{shots}.hardware{hardware}.noisy{noisy}.init{init_type}.pkl', 'wb') as f:
     pickle.dump(obj_to_dump, f)
