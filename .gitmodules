@@ -7,7 +7,7 @@
 	url = https://github.com/jkbonfield/qpg/
 [submodule "QOKit"]
 	path = modules/QOKit
-	url = https://github.com/jpmorganchase/QOKit.git
+	url = https://github.com/JoshCudby/qokit_fork
 [submodule "modules/quimb_fork"]
 	path = modules/quimb_fork
 	url = https://github.com/JoshCudby/quimb_fork.git
