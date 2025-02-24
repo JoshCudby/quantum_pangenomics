@@ -131,7 +131,7 @@ def validate_path(path: list, graph: nx.Graph):
         path (list): _description_
         graph (nx.Graph): _description_
     """
-    print(f"Best path:")
+    print("Best path:")
     print_path(path)
     
     end_nodes = set()
@@ -141,10 +141,11 @@ def validate_path(path: list, graph: nx.Graph):
             end_nodes.add(node)
         elif val == 'start':
             start_nodes.add(node)
-    end_nodes.add('end')
+    if len(end_nodes) > 0:
+        end_nodes.add('end')
     
-    if len(start_nodes) > 0 and not path[0][1] in start_nodes:
-        print(f'Did not start at start')
+    if len(start_nodes) > 0 and path[0][1] not in start_nodes:
+        print('Did not start at start')
     
     time_offset = 0
     i = 0
@@ -172,9 +173,9 @@ def validate_path(path: list, graph: nx.Graph):
         v2 = path[x + 1][1]            
         if v1 == 'end' and not v2 == 'end':
             print(f'Left the end node at path entry {x}')
-        elif (not v1 == 'end') and (not v2 == 'end') and (not (v1, v2) in graph.edges):
+        elif (not v1 == 'end') and (not v2 == 'end') and ((v1, v2) not in graph.edges):
             print(f'Broke graph edge at path entry {x}')
-        elif len(end_nodes) > 0 and (v2 == 'end') and (not v1 in end_nodes):
+        elif len(end_nodes) > 0 and (v2 == 'end') and (v1 not in end_nodes):
             print(f'Went to end node illegally at path entry {x}')
     node_dict[v2] += 1
     

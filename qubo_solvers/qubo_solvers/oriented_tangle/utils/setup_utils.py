@@ -34,10 +34,10 @@ def setup(*args):
         qubo_data_dir = f'{OUT_DIR}/oriented'
     qubo_data_path = f'{qubo_data_dir}/qubo_data_{filename}.npy'
         
-    with open(f'{qubo_data_dir}/{filename}_{COVERAGE_SUFFIX}', 'r') as f:
+    with open(f'{qubo_data_dir}/{filename}.{COVERAGE_SUFFIX}', 'r') as f:
         lines = f.readlines()
     if len(lines) < 3:
-        raise Exception(f'Could not read copy numbers from {filepath}_{COVERAGE_SUFFIX}')
+        raise Exception(f'Could not read copy numbers from {filepath}.{COVERAGE_SUFFIX}')
     copy_numbers = [int(x) for x in lines[2].split()]
         
     graph = oriented_graph_with_copy_numbers(filepath, copy_numbers)

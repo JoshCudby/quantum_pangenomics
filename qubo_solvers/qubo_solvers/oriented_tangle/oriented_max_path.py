@@ -19,7 +19,7 @@ validate_path(path, graph)
 print(f'Energy of path: {energy}')
 
 now = datetime.now().strftime('%d%m%Y_%H%M')
-save_file = out_dir + f'/mqlib_{filename}_{now}'   
+save_file = out_dir + f'/{solver.value}_{filename}_{now}'   
     
 to_save = np.array([sample, energy, path], dtype=object)
 np.save(save_file, to_save)

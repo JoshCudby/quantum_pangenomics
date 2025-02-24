@@ -20,3 +20,6 @@
 [submodule "qiskit_simulation/qopt-best-practices"]
 	path = qiskit_simulation/qopt-best-practices
 	url = https://github.com/qiskit-community/qopt-best-practices.git
+[submodule "modules/oatk"]
+	path = modules/oatk
+	url = https://github.com/c-zhou/oatk.git
