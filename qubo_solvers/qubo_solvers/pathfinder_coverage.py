@@ -1,26 +1,18 @@
-from pathfinder import pathfinder
+import subprocess
 import os
+from qubo_solvers.definitions import QUANTUM_DIR
 
 def run_pathfinder_coverage(out_dir, gfa_file, coverage_suffix):
     filename = os.path.basename(gfa_file)
-    max_copy = 10
-    min_cfrac = 0
-    max_path = 1000000
-    do_part = False
     do_adjust = filename not in ['trivial.gfa', 'small_test.gfa', 'test.gfa']
-    s_source = None
-    s_target = None
-    ec_tag = None
-    kc_tag = None
-    sc_tag = "SC:f"
-    VERBOSE = 0
 
     to_save = f'{out_dir}/{filename}.{coverage_suffix}'
-
-    pathfinder(
-        gfa_file, max_copy, min_cfrac, max_path, do_part, do_adjust, s_source, s_target, 
-        ec_tag, kc_tag, sc_tag, VERBOSE, to_save
-    )
+    
+    args = [f"{QUANTUM_DIR}/pathfinder/pathfinder", "-o", to_save]
+    if do_adjust:
+        args.append("-a")
+    args.append(gfa_file)
+    subprocess.run(args, capture_output=True)
     
     with open(to_save, 'r') as f:
         lines = f.readlines()
