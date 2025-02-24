@@ -2,6 +2,9 @@ import numpy as np
 import networkx as nx
 from itertools import product
 from math import floor
+from qubo_solvers.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple[np.ndarray, float, int, int]:
@@ -22,11 +25,12 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     if alpha is None:
         alpha = 1.2
     T_max = floor(total_weight * alpha)
-
+    logger.info(f'V: {V}, T: {T_max}')
     # Penalty Values
     lambda_t = 10
-    lambda_g = 10
+    lambda_g = 5
     lambda_w = 1
+    logger.info(f'Penalties. t: {lambda_t}, g: {lambda_g}, w: {lambda_w}')
 
     # Note: we add an end node with parity 0 and 1, we only want 1 of them. We will delete the other at the end.
     qubo_matrix = np.zeros((T_max, V + 1, 2, T_max, V + 1, 2), dtype=np.int8)

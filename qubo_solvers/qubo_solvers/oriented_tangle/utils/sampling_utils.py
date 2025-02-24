@@ -3,81 +3,101 @@ import networkx as nx
 import re
 import gurobipy as gp
 import subprocess
-from qubo_solvers.definitions import MQLIB_DIR
+from qubo_solvers.definitions import MQLIB_DIR, QuboDescription
+from qubo_solvers.logging import get_logger
 from gurobipy import GRB
 from math import floor
 
+logger = get_logger(__name__)
 
-def mqlib_sample_qubo(oriented_out_dir: str, filename: str, offset: int, graph: nx.Graph, T: int, V: int, time_limit: int):
-    input_filepath = f"{oriented_out_dir}/mqlib_input_{filename}.txt"
+rng = np.random.default_rng()
 
-    # Run the MQLib solver and capture output
-    process = subprocess.run([f"{MQLIB_DIR}/bin/MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
-    out = process.stdout.decode("utf-8")
+def mqlib_sample_qubo(qubo_description: QuboDescription):
+    input_filepath = f"{qubo_description.data_dir}/mqlib_input_{qubo_description.filename}.txt"
 
-    # First line of output includes run data. 3rd line contains the solution.
-    out_data = [x for x in out.split('\n') if len(x) > 0]
-    solution = out_data[2].split()
-    solution = [int(x) for x in solution]
-    solution_energy = int(out_data[0].split(',')[3])
-    energy = offset - solution_energy
-    path = sample_list_to_path(solution, graph, T, V)
-    return solution, energy, path
+    paths = {}
+    for time_limit in qubo_description.time_limits:
+        paths[time_limit] = []
+        
+        for _ in range(qubo_description.jobs):
+            # Run the MQLib solver and capture output
+            process = subprocess.run([f"{MQLIB_DIR}/bin/MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-s", str(rng.integers(0, 65535)), "-ps"], capture_output=True)
+            out = process.stdout.decode("utf-8")
+
+            try:
+                # First line of output includes run data. 3rd line contains the solution.
+                out_data = [x for x in out.split('\n') if len(x) > 0]
+                solution = out_data[2].split()
+                solution = [int(x) for x in solution]
+                solution_energy = int(out_data[0].split(',')[3])
+                energy = qubo_description.offset - solution_energy
+                path = sample_list_to_path(solution, qubo_description.graph, qubo_description.T, qubo_description.V)
+                paths[time_limit].append((solution, energy, path))
+            except ValueError:
+                logger.error('Could not parse mqlib data')
+                logger.error(out)
+                paths[time_limit].append(([], np.inf, []))
+            
+    return paths
 
 
-def dwave_sample_qubo(
-    qubo_matrix: np.ndarray, offset: float, graph: nx.Graph, T: int, V: int, time_limit=None, label="Oriented QUBO"
-    ) -> tuple[dict, float]:
-    """Perform a batch of annealing with greedy post-processing on a given Binary Quadratic Model.
+def dwave_sample_qubo(qubo_description: QuboDescription) -> dict[int, tuple]:
+    """Perform a batch of annealing on a given Binary Quadratic Model.
 
     Args:
-        sampler (Sampler): The sampler to anneal with.
-        bqm (BQM): The model to anneal.
-        time_limit (int, optional): The time limit.
-        label (str, optional): The label for sample submission on DWave platform.
+        qubo_description (QuboDescription): a description of the problem
         
     Returns:
-        (dict, float): Returns the best sample and best energy of the batch.
+        (dict): Returns the best sample, energy and path for each job run.
     """
     
     from dimod import BQM
     from dwave.system import LeapHybridSampler
-    bqm = BQM(qubo_matrix, 'BINARY')
-    bqm.offset = offset
+    bqm = BQM(qubo_description.Q, 'BINARY')
+    bqm.offset = qubo_description.offset
     sampler = LeapHybridSampler()
-    if time_limit == -1:
-        time_limit = sampler.min_time_limit(bqm)
-        print(f"Using default min time limit: {time_limit}")
-    sampleset = sampler.sample(bqm, time_limit, label=label)
     
-    try:
-        print(f"D-Wave access time: {round(sampleset.info['run_time'] / 10 ** 6)}")
-    except:
-        pass
-    
-    best_sample = sampleset.first.sample
-    best_energy = sampleset.first.energy
-    path = sample_list_to_path(np.array(list(best_sample.values())), graph, T, V)
-    return best_sample, best_energy, path
+    paths = {}
+    for time_limit in qubo_description.time_limits:
+        paths[time_limit] = []
+        for _ in range(qubo_description.jobs):
+            sampleset = sampler.sample(bqm, time_limit, label=f'oriented_{qubo_description.filename}')
+            try:
+                print(f"D-Wave access time: {round(sampleset.info['run_time'] / 10 ** 6)}")
+            except:
+                pass
+            best_sample = sampleset.first.sample
+            best_energy = sampleset.first.energy
+            path = sample_list_to_path(np.array(list(best_sample.values())), qubo_description.graph, qubo_description.T, qubo_description.V)
+            paths[time_limit].append((best_sample, best_energy, path))
+            
+    return paths
 
 
-def gurobi_sample_qubo(qubo_matrix: np.ndarray, offset: int, graph: nx.Graph, T: int, V: int, time_limit: int):
-    total_weight = int(sum(graph.nodes[node]["weight"] for node in list(graph.nodes)) / 2)
+def gurobi_sample_qubo(qubo_description: QuboDescription):
+    total_weight = int(sum(qubo_description.graph.nodes[node]["weight"] for node in list(qubo_description.graph.nodes)) / 2)
     
-    print(f'Offset: {offset}')
+    print(f'Offset: {qubo_description.offset}')
     print(f'Total weight: {total_weight}')
-    print(f'T_max: {T}')
-
+    print(f'T_max: {qubo_description.T}')
+    
+    paths = {}
     with gp.Env() as env, gp.Model(env=env) as model:
-        model_vars = model.addMVar(shape=qubo_matrix.shape[0], vtype=GRB.BINARY, name="x")
-        model.setObjective(model_vars @ qubo_matrix @ model_vars, GRB.MINIMIZE)
-        model.Params.BestObjStop = - offset
-        model.Params.TimeLimit = time_limit
-        model.Params.Seed = np.random.default_rng().integers(0, 1000)
-        model.optimize()
-        energy = model.ObjVal + offset
-        path = sample_list_to_path(model_vars.X, graph, T, V)
-        return model_vars.X, energy, path
+        model_vars = model.addMVar(shape=qubo_description.Q.shape[0], vtype=GRB.BINARY, name="x")
+        model.setObjective(model_vars @ qubo_description.Q @ model_vars, GRB.MINIMIZE)
+        model.Params.BestObjStop = - qubo_description.offset
+        
+        for time_limit in qubo_description.time_limits:
+            paths[time_limit] = []
+            model.Params.TimeLimit = time_limit
+            for _ in range(qubo_description.jobs):
+                model.Params.Seed = rng.integers(0, 100000)
+                model.optimize()
+                energy = model.ObjVal + qubo_description.offset
+                path = sample_list_to_path(model_vars.X, qubo_description.graph, qubo_description.T, qubo_description.V)
+                paths[time_limit].append((model_vars.X, energy, path))
+    
+    return paths
 
 
 def sample_array_to_path(sample_array: np.ndarray, nodes: list, V: int):
@@ -133,6 +153,8 @@ def validate_path(path: list, graph: nx.Graph):
     """
     print("Best path:")
     print_path(path)
+    if not len(path):
+        return
     
     end_nodes = set()
     start_nodes = set()

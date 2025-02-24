@@ -1,47 +1,39 @@
 import numpy as np
 import os
-from qubo_solvers.definitions import DATA_DIR, OUT_DIR, Solver, COVERAGE_SUFFIX
+import argparse
+from qubo_solvers.definitions import DATA_DIR, OUT_DIR, Solver, COVERAGE_SUFFIX, QuboDescription
 from qubo_solvers.oriented_tangle.utils.graph_utils import oriented_graph_with_copy_numbers
 
+parser = argparse.ArgumentParser()
+parser.add_argument('-f', '--filepath', default=f'{DATA_DIR}/test.gfa')
+parser.add_argument('-t', '--times', help='delimited list input', 
+    type=lambda s: [int(item) for item in s.split(',')])
+parser.add_argument('-j', '--jobs', type=int)
+parser.add_argument('-s', '--solver', required=True)
+parser.add_argument('-d', '--data-dir', default=f'{OUT_DIR}/oriented')
 
-def setup(*args):
-    if len(args) > 1:
-        if args[1] in set(item.value for item in Solver):
-            solver = Solver(args[1])
-        else:
-            raise Exception(f'Solver {args[1]} not implemented yet.')
+
+def setup() -> QuboDescription:
+    args = parser.parse_args()
+
+    if args.solver in set(item.value for item in Solver):
+        solver = Solver(args.solver)
     else:
-        raise Exception('No solver specified.')
+        raise Exception(f'Solver {args.solver} not implemented yet.')
+
     
-    if len(args) > 2:
-        filepath = args[2]
-    else:
-        filepath = f'{DATA_DIR}/test.gfa'
-    filename = os.path.basename(filepath)
-
-
-    if len(args) > 3:
-        try:
-            time_limit = int(args[3])
-        except ValueError:
-            time_limit = 10
-    else:
-        time_limit = 10
-
-    if len(args) > 4:
-        qubo_data_dir = args[4]
-    else:
-        qubo_data_dir = f'{OUT_DIR}/oriented'
-    qubo_data_path = f'{qubo_data_dir}/qubo_data_{filename}.npy'
+    filename = os.path.basename(args.filepath)
+    qubo_data_path = f'{args.data_dir}/qubo_data_{filename}.npy'
         
-    with open(f'{qubo_data_dir}/{filename}.{COVERAGE_SUFFIX}', 'r') as f:
+    with open(f'{args.data_dir}/{filename}.{COVERAGE_SUFFIX}', 'r') as f:
         lines = f.readlines()
     if len(lines) < 3:
-        raise Exception(f'Could not read copy numbers from {filepath}.{COVERAGE_SUFFIX}')
+        raise Exception(f'Could not read copy numbers from {args.data_dir}/{filename}.{COVERAGE_SUFFIX}')
     copy_numbers = [int(x) for x in lines[2].split()]
         
-    graph = oriented_graph_with_copy_numbers(filepath, copy_numbers)
+    graph = oriented_graph_with_copy_numbers(args.filepath, copy_numbers)
     
     Q, offset, T_max, V = np.load(qubo_data_path, allow_pickle=True)
-
-    return filepath, filename, qubo_data_dir, graph, time_limit, Q, offset, T_max, V, solver
+    
+    return QuboDescription(filename=filename, data_dir=args.data_dir, graph=graph, time_limits=args.times, jobs=args.jobs,
+                        Q=Q, offset=offset, T=T_max, V=V, solver=solver)
