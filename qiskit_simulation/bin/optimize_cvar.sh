@@ -9,6 +9,7 @@ memory="4000"
 reps="4"
 num_gpu="1"
 init="random"
+shots=2000
 
 while [ "$1" != "" ]; do
     case $1 in

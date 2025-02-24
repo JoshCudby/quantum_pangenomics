@@ -7,6 +7,7 @@ usage()
 
 memory=4000
 reps=4
+init="random"
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -22,7 +23,12 @@ while [ "$1" != "" ]; do
         -n | --shots )          shift
                                 shots="$1"
                                 ;;
+        -i | --init )           shift
+                                init="$1"
+                                ;;
         --hardware )            hardware="--hardware"
+                                ;;
+        --noisy )               noisy="--noisy"
                                 ;;
         -h | --help )           usage
                                 exit
@@ -45,6 +51,6 @@ outdir="$SCRATCH/out/qiskit/cvar"
 echo "Qiskit Testing"
 bsub -J "plot_cvar" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory"\
  -o "$outdir/qiskit.$filename.plot.%J" -e "$outdir/error.qiskit.$filename.plot.%J" -G "qpg" -q "normal" \
- "python3 $WORKING_DIR/plot_cvar.py -f $filename -p $reps -n $shots $hardware"
+ "python3 $WORKING_DIR/plot_cvar.py -f $filename -p $reps -n $shots --init $init $hardware $noisy"
 
 exit 0

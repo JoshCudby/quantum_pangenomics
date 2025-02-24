@@ -41,9 +41,11 @@ backend_options = dict(
     method='statevector',
     device='GPU',
     max_memory_mb=args.memory*0.9,
-    cuStateVec_enable=True,
-    blocking_enable=True,
-    blocking_qubits=23,
+    # cuStateVec_enable=True,
+    # blocking_enable=True,
+    # blocking_qubits=24,
+    batched_shots_gpu_max_qubits=24,
+    batched_shots_gpu=noisy,
     precision='single'
 )
 fake_fez = FakeFez()
