@@ -10,6 +10,9 @@ while [ "$1" != "" ]; do
         -k | --kmer )           shift
                                 kmer="$1"
                                 ;;
+        -p | --problem )        shift
+                                problem="$1"
+                                ;;
         -h | --help )           usage
                                 exit
                                 ;;
@@ -19,7 +22,15 @@ while [ "$1" != "" ]; do
     shift
 done
 
-out_suffix=$kmer.$dt
+problem_types=("tangle", "oriented")
+if [[ ! " ${problem_types[*]} " =~ ${problem} ]]; then
+    echo "Solver must be one of ${problem_types[*]}"
+    exit 1
+fi
+
+outdir=$root_dir/$problem/$kmer.$dt
+mkdir -p $outdir
+
 bsub -J "run_benchmark" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q normal \
-     -M "$memory" -o "$root_dir/$out_suffix/log.txt" -e "$root_dir/error.$out_suffix/err.txt" -G "qpg" \
-     "/nfs/users/nfs_j/jc59/quantumwork/pangenome/bin/full_benchmark_experiment.sh $kmer $dt"
+     -M "$memory" -o "$outdir/log.txt" -e "$outdir/err.txt" -G "qpg" \
+     "/nfs/users/nfs_j/jc59/quantumwork/pangenome/bin/full_benchmark_$problem.sh $kmer $dt"

@@ -1,6 +1,6 @@
 #!/bin/bash
 qpg=/lustre/scratch127/qpg
-root_dir=$qpg/jc59/full_benchmark
+root_dir=$qpg/jc59/full_benchmark/oriented
 
 kmer="$1"
 dt="$2"
@@ -16,7 +16,7 @@ source $QUBO_DIR/.venv/bin/activate
 # TODO: memory change?
 memory=2000
 num_jobs=5
-
+time_limits="5,15,30,60"
 
 # Get input sequence
 seqfile=/nfs/srpipe_references/references/Treponema_pallidum/default/all/fasta/NC_016844.1.fa
@@ -55,7 +55,7 @@ for run in {1..5}; do
           depend_cond=""
      else
           let prev_run="$run-2"
-          depend_cond="numended($out_suffix.$prev_run.gurobi,*)"
+          depend_cond="ended($out_suffix.$prev_run.gurobi)"
      fi
 
      bsub -J "$out_suffix.$run.build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q normal \
@@ -63,23 +63,21 @@ for run in {1..5}; do
           -w "$depend_cond" \
           "python3 $QUBO_DIR/qubo_solvers/oriented_tangle/build_oriented_qubo_matrix.py $gfa_filepath $outdir"
 
+     bsub -J "$out_suffix.$run.mqlib" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q normal \
+          -M "$memory" -o "$outdir/mqlib.txt" -e "$outdir/error.mqlib.txt" -G "qpg"  \
+          -w "done($out_suffix.$run.build_qubo)" \
+          python3 "$QUBO_DIR"/qubo_solvers/oriented_tangle/oriented_max_path.py -s mqlib -f "$gfa_filepath" -d "$outdir" -j "$num_jobs" -t $time_limits
+
+     bsub -J "$out_suffix.$run.gurobi" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q normal \
+          -M "$memory" -o "$outdir/gurobi.txt" -e "$outdir/error.gurobi.txt" -G "qpg"  \
+          -w "done($out_suffix.$run.build_qubo)" \
+          python3 "$QUBO_DIR"/qubo_solvers/oriented_tangle/oriented_max_path.py -s gurobi -f "$gfa_filepath" -d "$outdir" -j "$num_jobs" -t $time_limits
+
+     bsub -J "$out_suffix.$run.dwave" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q normal \
+          -M "$memory" -o "$outdir/dwave.txt" -e "$outdir/error.dwave.txt" -G "qpg"  \
+          -w "done($out_suffix.$run.build_qubo)" \
+          python3 "$QUBO_DIR"/qubo_solvers/oriented_tangle/oriented_max_path.py -s dwave -f "$gfa_filepath" -d "$outdir" -j "$num_jobs" -t $time_limits
      
-     for time_limit in 5 15 30 60; do
-          bsub -J "$out_suffix.$run.mqlib[1-$num_jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q normal \
-               -M "$memory" -o "$outdir/mqlib.$time_limit.%I.txt" -e "$outdir/error.mqlib.txt" -G "qpg"  \
-               -w "done($out_suffix.$run.build_qubo)" \
-               "python3 $QUBO_DIR/qubo_solvers/oriented_tangle/oriented_max_path.py mqlib $gfa_filepath $time_limit $outdir"
-
-          bsub -J "$out_suffix.$run.gurobi[1-$num_jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q normal \
-               -M "$memory" -o "$outdir/gurobi.$time_limit.%I.txt" -e "$outdir/error.gurobi.txt" -G "qpg"  \
-               -w "done($out_suffix.$run.build_qubo)" \
-               "python3 $QUBO_DIR/qubo_solvers/oriented_tangle/oriented_max_path.py gurobi $gfa_filepath $time_limit $outdir"
-
-          bsub -J "$out_suffix.$run.dwave[1-$num_jobs]" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q normal \
-               -M "$memory" -o "$outdir/dwave.$time_limit.%I.txt" -e "$outdir/error.dwave.txt" -G "qpg"  \
-               -w "done($out_suffix.$run.build_qubo)" \
-               "python3 $QUBO_DIR/qubo_solvers/oriented_tangle/oriented_max_path.py dwave $gfa_filepath $time_limit $outdir"
-     done
 done
 
 exit 0
