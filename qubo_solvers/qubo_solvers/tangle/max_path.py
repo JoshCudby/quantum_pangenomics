@@ -5,6 +5,7 @@ from qubo_solvers.definitions import Solver
 from qubo_solvers.tangle.utils.setup_utils import setup
 from qubo_solvers.tangle.utils.sampling_utils import dwave_sample_qubo, mqlib_sample_qubo, gurobi_sample_qubo, validate_path
 
+# TODO: move setup here?
 qubo_description = setup()
 
 if qubo_description.solver == Solver.DWAVE:

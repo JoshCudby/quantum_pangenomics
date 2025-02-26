@@ -1,66 +1,74 @@
-import sys
 import numpy as np
 import os
 import pickle
+import argparse
 from pathlib import Path
 from qubo_solvers.tangle.utils.graph_utils import graph_with_copy_numbers
 from qubo_solvers.tangle.utils.qubo_utils import get_tangle_qubo_matrix
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR, COVERAGE_SUFFIX
 from qubo_solvers.pathfinder_coverage import run_pathfinder_coverage
+from qubo_solvers.logging import get_logger
 
-if len(sys.argv) > 1:
-    filepath = sys.argv[1]
-    filename = os.path.basename(filepath)
-else:
-    filename = "test.gfa"
-    filepath = f"{DATA_DIR}/{filename}"
-
-if len(sys.argv) > 2:
-    out_dir = sys.argv[2]
-else:
-    out_dir = f'{OUT_DIR}/tangle'
-Path(out_dir).mkdir(exist_ok=True, parents=True)
-
-if len(sys.argv) > 3:
-    copy_numbers = sys.argv[3].split(',')
-    copy_numbers = [int(x) for x in copy_numbers]
-else:
-    copy_numbers, nodes = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
-print(nodes)
-print(copy_numbers)
-
-graph = graph_with_copy_numbers(filepath, copy_numbers, nodes)
-
-qubo_matrix, offset, T_max, V = get_tangle_qubo_matrix(graph)
+logger = get_logger(__name__)
 
 
-savepath = f'{out_dir}/qubo_data_{filename}'
-to_save = np.array([qubo_matrix, offset, T_max, V], dtype=object)
-np.save(savepath, to_save, allow_pickle=True)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--filepath', default=f'{DATA_DIR}/test.gfa')
+    parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
+        type=lambda s: [int(item) for item in s.split(',')])
+    parser.add_argument('-d', '--data-dir', default=f"{OUT_DIR}/tangle")
 
-to_save = {
-    'qubo_matrix': qubo_matrix.tolist(),
-    'offset': offset,
-    'T_max': T_max,
-    'V': V
-}
-with open(f'{savepath}.pkl', 'wb') as file:
-    pickle.dump(to_save, file)
+    args = parser.parse_args()
 
-# Write to MQLib Format
-mqlib_savepath = f'{out_dir}/mqlib_input_{filename}.txt'
+    logger.info(f'Building qubo matrix for {args.filepath}')
 
-ut_qubo_matrix = np.triu(qubo_matrix)
-non_zero = np.nonzero(ut_qubo_matrix)
-non_zero_count = int(non_zero[0].shape[0])
-f = open(mqlib_savepath, 'w')
-f.write(f'{qubo_matrix.shape[0]} {non_zero_count}\n')
-to_write = ''
-for i in range(len(non_zero[0])):
-    to_write += f'{non_zero[0][i] + 1} {non_zero[1][i] + 1} {-qubo_matrix[non_zero[0][i], non_zero[1][i]]} \n'
-    if i % 500 == 0:
-        f.write(to_write)
-        to_write = ''
+    filename = os.path.basename(args.filepath)
+    Path(args.data_dir).mkdir(exist_ok=True, parents=True)
+    if args.copy_numbers is None:
+        logger.info('Running pathfinder to get coverage')
+        copy_numbers, nodes = run_pathfinder_coverage(args.data_dir, args.filepath, COVERAGE_SUFFIX)
+    else:
+        logger.info(f'Copy numbers provided: {args.copy_numbers}')
+        copy_numbers = args.copy_numbers
+        nodes = None
 
-f.write(to_write)
-f.close()
+    graph = graph_with_copy_numbers(args.filepath, copy_numbers, nodes)
+
+    Q, offset, T_max, V = get_tangle_qubo_matrix(graph)
+
+
+    savepath = f'{args.data_dir}/qubo_data_{filename}.pkl'
+
+    to_save = {
+        'Q': Q.tolist(),
+        'offset': offset,
+        'T_max': T_max,
+        'V': V
+    }
+    with open(savepath, 'wb') as file:
+        pickle.dump(to_save, file)
+
+    # Write to MQLib Format
+    mqlib_savepath = f'{args.data_dir}/mqlib_input_{filename}.txt'
+
+    ut_qubo_matrix = np.triu(Q)
+    non_zero = np.nonzero(ut_qubo_matrix)
+    non_zero_count = int(non_zero[0].shape[0])
+    f = open(mqlib_savepath, 'w')
+    f.write(f'{Q.shape[0]} {non_zero_count}\n')
+    to_write = ''
+    for i in range(len(non_zero[0])):
+        to_write += f'{non_zero[0][i] + 1} {non_zero[1][i] + 1} {-Q[non_zero[0][i], non_zero[1][i]]} \n'
+        if i % 500 == 0:
+            f.write(to_write)
+            to_write = ''
+
+    f.write(to_write)
+    f.close()
+
+    return 0
+
+
+if __name__ == "__main__":
+    exit(main())

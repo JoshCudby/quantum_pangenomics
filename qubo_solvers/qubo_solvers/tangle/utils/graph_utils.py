@@ -2,7 +2,7 @@ import networkx as nx
 import gfapy
 
 
-def graph_with_copy_numbers(filename: str, copy_numbers: list, nodes: list) -> nx.Graph:
+def graph_with_copy_numbers(filename: str, copy_numbers: list, nodes: list | None=None) -> nx.Graph:
     """Reads a .gfa file into a graph.
 
     Args:
@@ -12,7 +12,10 @@ def graph_with_copy_numbers(filename: str, copy_numbers: list, nodes: list) -> n
         nx.Graph: corresponding graph.
     """
     gfa = gfapy.Gfa.from_file(filename)
-    gfa.connected_components()
+
+    if nodes is None:
+        nodes = gfa.names
+
     graph = nx.Graph()
     index_offset = 0
     for index, segment_line in enumerate(gfa.segments):
