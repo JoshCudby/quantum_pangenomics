@@ -44,12 +44,13 @@ def main():
         'Q': Q.tolist(),
         'offset': offset,
         'T_max': T_max,
-        'V': V
+        'V': V,
+        'graph': graph
     }
     with open(savepath, 'wb') as file:
         pickle.dump(to_save, file)
 
-    # Write to MQLib Format
+    logger.info('Writing to MQLib format')
     mqlib_savepath = f'{args.data_dir}/mqlib_input_{filename}.txt'
 
     ut_qubo_matrix = np.triu(Q)
