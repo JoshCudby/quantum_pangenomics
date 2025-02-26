@@ -7,6 +7,7 @@ from qubo_solvers.tangle.utils.sampling_utils import dwave_sample_qubo, mqlib_sa
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR, Solver, QuboDescription
 from qubo_solvers.logging import get_logger
 
+
 logger = get_logger(__name__)
 
 
@@ -28,9 +29,12 @@ def setup() -> QuboDescription:
         raise Exception(f'Solver {args.solver} not implemented yet.')
     
     filename = os.path.basename(args.filepath)
-        
-    with open(f'{args.data_dir}/qubo_data_{filename}.pkl', 'rb') as f:
-        data = pickle.load(f)
+
+    try:
+        with open(f'{args.data_dir}/qubo_data_{filename}.pkl', 'rb') as f:
+            data = pickle.load(f)
+    except FileNotFoundError:
+        raise Exception('Run build_tangle_qubo_matrix first!')
     
     return QuboDescription(
         filename=filename, data_dir=args.data_dir, graph=data['graph'], time_limits=args.times, 

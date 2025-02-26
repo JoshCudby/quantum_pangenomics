@@ -46,9 +46,9 @@ def mqlib_sample_qubo(qubo_description: QuboDescription):
 def gurobi_sample_qubo(qubo_description: QuboDescription):
     total_weight = int(sum(qubo_description.graph.nodes[node]["weight"] for node in list(qubo_description.graph.nodes)) / 2)
     
-    print(f'Offset: {qubo_description.offset}')
-    print(f'Total weight: {total_weight}')
-    print(f'T_max: {qubo_description.T}')
+    logger.info(f'Offset: {qubo_description.offset}')
+    logger.info(f'Total weight: {total_weight}')
+    logger.info(f'T_max: {qubo_description.T}')
     
     paths = {}
     with gp.Env() as env, gp.Model(env=env) as model:
@@ -87,8 +87,8 @@ def dwave_sample_qubo(qubo_description: QuboDescription):
         for _ in range(qubo_description.jobs):
             sampleset = sampler.sample(bqm, time_limit, label=f'tangle_{qubo_description.filename}')
             try:
-                print(f"D-Wave access time: {round(sampleset.info['run_time'] / 10 ** 6)}")
-            except:
+                logger.info(f"D-Wave access time: {round(sampleset.info['run_time'] / 10 ** 6)}")
+            except KeyError:
                 pass
             greedy_solver = SteepestDescentSolver()
             post_processed = greedy_solver.sample(bqm, initial_states=sampleset)
@@ -161,12 +161,12 @@ def print_path(path: list):
     """Pretty print a path"""
     num_per_line = 8
     if len(path) < num_per_line:
-        print(path)
+        logger.info(path)
         return
     for i in range(floor(len(path) / num_per_line)):
-        print(path[i * num_per_line: (i + 1) * num_per_line])
+        logger.info(path[i * num_per_line: (i + 1) * num_per_line])
     if not (i + 1) * num_per_line == len(path) - 1:
-        print(path[(i + 1)*num_per_line:])
+        logger.info(path[(i + 1)*num_per_line:])
 
         
         
@@ -182,10 +182,10 @@ def validate_path(path: list, graph: nx.Graph):
         path (list): _description_
         graph (nx.Graph): _description_
     """
-    print("Best path:")
+    logger.info("Best path:")
     print_path(path)
     if len(path) == 0:
-        print("No path")
+        logger.info("No path")
         return
     
     end_nodes = set()
@@ -199,7 +199,7 @@ def validate_path(path: list, graph: nx.Graph):
         end_nodes.add('end')
     
     if len(start_nodes) > 0 and path[0][1] not in start_nodes:
-        print('Did not start at start')
+        logger.info('Did not start at start')
     
     time_offset = 0
     i = 0
@@ -208,12 +208,12 @@ def validate_path(path: list, graph: nx.Graph):
             i += 1
             continue
         if path[i][0] < i + time_offset:
-            print(f'Extra node at time {path[i][0]}')
+            logger.info(f'Extra node at time {path[i][0]}')
             time_offset -= 1
             i += 1
             continue
         if path[i][0] > i + time_offset:
-            print(f'Skipped time {path[i][0] - 1}')
+            logger.info(f'Skipped time {path[i][0] - 1}')
             time_offset += 1
             i += 1
             continue
@@ -226,11 +226,11 @@ def validate_path(path: list, graph: nx.Graph):
         node_dict[v1] += 1
         v2 = path[x + 1][1]            
         if v1 == 'end' and not v2 == 'end':
-            print(f'Left the end node at path entry {x}')
+            logger.info(f'Left the end node at path entry {x}')
         elif (not v1 == 'end') and (not v2 == 'end') and ((v1, v2) not in graph.edges):
-            print(f'Broke graph edge at path entry {x}')
+            logger.info(f'Broke graph edge at path entry {x}')
         elif len(end_nodes) > 0 and (v2 == 'end') and (v1 not in end_nodes):
-            print(f'Went to end node illegally at path entry {x}')
+            logger.info(f'Went to end node illegally at path entry {x}')
     node_dict[v2] += 1
     
     nodes = list(graph.nodes)
@@ -238,5 +238,5 @@ def validate_path(path: list, graph: nx.Graph):
         visits = node_dict[nodes[i]]
         missing_visits = graph.nodes[nodes[i]]["weight"] - visits
         if  missing_visits != 0:
-            print(f'Did not meet node weight for node: {nodes[i]}. Missing visits: {missing_visits}')
+            logger.info(f'Did not meet node weight for node: {nodes[i]}. Missing visits: {missing_visits}')
     
