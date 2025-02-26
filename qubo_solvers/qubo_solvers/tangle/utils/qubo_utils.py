@@ -89,4 +89,8 @@ def get_tangle_qubo_matrix(graph: nx.DiGraph) -> np.ndarray:
     qubo_matrix = qubo_matrix.reshape((T * (W+1), T * (W+1)))
     qubo_matrix = 0.5 * (qubo_matrix + qubo_matrix.T)
     
+    normalisation = np.max(np.abs(qubo_matrix))
+    qubo_matrix = qubo_matrix / normalisation
+    offset = offset / normalisation
+
     return qubo_matrix, offset, T, W

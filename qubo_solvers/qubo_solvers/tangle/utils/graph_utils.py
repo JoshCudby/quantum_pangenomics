@@ -2,7 +2,7 @@ import networkx as nx
 import gfapy
 
 
-def graph_with_copy_numbers(filename: str, copy_numbers: list) -> nx.Graph:
+def graph_with_copy_numbers(filename: str, copy_numbers: list, nodes: list) -> nx.Graph:
     """Reads a .gfa file into a graph.
 
     Args:
@@ -12,13 +12,19 @@ def graph_with_copy_numbers(filename: str, copy_numbers: list) -> nx.Graph:
         nx.Graph: corresponding graph.
     """
     gfa = gfapy.Gfa.from_file(filename)
+    gfa.connected_components()
     graph = nx.Graph()
+    index_offset = 0
     for index, segment_line in enumerate(gfa.segments):
-        graph.add_node(segment_line.name, weight=copy_numbers[index], start=segment_line.st)
+        if segment_line.name in nodes:
+            graph.add_node(segment_line.name, weight=copy_numbers[index + index_offset], start=segment_line.st)
+        else:
+            index_offset -= 1
     for edge_line in gfa.edges:
-        graph.add_edges_from([
-            (edge_line.sid1.name, edge_line.sid2.name)
-        ])
+        if edge_line.sid1.name in nodes and edge_line.sid2.name in nodes:
+            graph.add_edges_from([
+                (edge_line.sid1.name, edge_line.sid2.name)
+            ])
     return graph
 
 

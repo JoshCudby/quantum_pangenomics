@@ -19,4 +19,5 @@ def run_pathfinder_coverage(out_dir, gfa_file, coverage_suffix):
     if len(lines) < 3:
         raise Exception(f'Could not read copy numbers from {to_save}')
     copy_numbers = [int(x) for x in lines[2].split()]
-    return copy_numbers
+    nodes = [x for x in lines[1].split()]
+    return copy_numbers, nodes

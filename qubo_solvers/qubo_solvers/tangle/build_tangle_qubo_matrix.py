@@ -25,10 +25,11 @@ if len(sys.argv) > 3:
     copy_numbers = sys.argv[3].split(',')
     copy_numbers = [int(x) for x in copy_numbers]
 else:
-    copy_numbers = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
+    copy_numbers, nodes = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
+print(nodes)
 print(copy_numbers)
 
-graph = graph_with_copy_numbers(filepath, copy_numbers)
+graph = graph_with_copy_numbers(filepath, copy_numbers, nodes)
 
 qubo_matrix, offset, T_max, V = get_tangle_qubo_matrix(graph)
 
@@ -43,7 +44,7 @@ to_save = {
     'T_max': T_max,
     'V': V
 }
-with open(savepath, 'wb') as file:
+with open(f'{savepath}.pkl', 'wb') as file:
     pickle.dump(to_save, file)
 
 # Write to MQLib Format

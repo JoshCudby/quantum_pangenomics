@@ -1,4 +1,5 @@
 import numpy as np
+import pickle
 import os
 import argparse
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR, Solver, COVERAGE_SUFFIX, QuboDescription
@@ -23,7 +24,6 @@ def setup() -> QuboDescription:
 
     
     filename = os.path.basename(args.filepath)
-    qubo_data_path = f'{args.data_dir}/qubo_data_{filename}.npy'
         
     with open(f'{args.data_dir}/{filename}.{COVERAGE_SUFFIX}', 'r') as f:
         lines = f.readlines()
@@ -33,7 +33,9 @@ def setup() -> QuboDescription:
         
     graph = oriented_graph_with_copy_numbers(args.filepath, copy_numbers)
     
-    Q, offset, T_max, V = np.load(qubo_data_path, allow_pickle=True)
+    with open(f'{args.data_dir}/qubo_data_{filename}.pkl', 'rb') as f:
+        data = pickle.load(f)
+    
     
     return QuboDescription(filename=filename, data_dir=args.data_dir, graph=graph, time_limits=args.times, jobs=args.jobs,
-                        Q=Q, offset=offset, T=T_max, V=V, solver=solver)
+                        Q=data['qubo_matrix'], offset=data['offset'], T=data['T_max'], V=data['V'], solver=solver)

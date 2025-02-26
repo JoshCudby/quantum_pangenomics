@@ -19,7 +19,7 @@ else:
     out_dir = f'{OUT_DIR}/diploid'
 
 
-copy_numbers = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
+copy_numbers, nodes = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
 
 filename = os.path.basename(filepath)
 

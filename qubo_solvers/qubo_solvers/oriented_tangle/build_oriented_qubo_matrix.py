@@ -26,7 +26,7 @@ Path(out_dir).mkdir(exist_ok=True, parents=True)
 filename = os.path.basename(filepath)
 
 logger.info(f'Getting coverage from {filepath}')
-copy_numbers = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
+copy_numbers, nodes = run_pathfinder_coverage(out_dir, filepath, COVERAGE_SUFFIX)
 logger.info(f'Copy numbers: {copy_numbers}')
 
 filename = os.path.basename(filepath)

@@ -103,4 +103,8 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     
     offset = lambda_t * T_max  + lambda_w * int(sum(graph.nodes[nodes[2 * i]]["weight"] ** 2 for i in range(V))) + (1 if exist_start_nodes else 0)  * lambda_g
     
+    normalisation = np.max(np.abs(qubo_matrix))
+    qubo_matrix = qubo_matrix / normalisation
+    offset = offset / normalisation
+    
     return qubo_matrix, offset, T_max, V

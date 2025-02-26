@@ -7,74 +7,98 @@ from math import floor
 from greedy import SteepestDescentSolver
 from dimod import BQM
 from dwave.system import LeapHybridSampler
-from qubo_solvers.definitions import MQLIB_DIR
+from qubo_solvers.definitions import MQLIB_DIR, QuboDescription
+from qubo_solvers.logging import get_logger
 
+rng = np.random.default_rng()
 
-def mqlib_sample_qubo(tangle_out_dir: str, filename: str, offset: int, graph: nx.Graph, time_limit: int):
-    input_filepath = f"{tangle_out_dir}/mqlib_input_{filename}.txt"
+logger = get_logger(__name__)
 
-    # Run the MQLib solver and capture output
-    process = subprocess.run([f"{MQLIB_DIR}/bin/MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-ps"], capture_output=True)
-    out = process.stdout.decode("utf-8")
+def mqlib_sample_qubo(qubo_description: QuboDescription):
+    input_filepath = f"{qubo_description.data_dir}/mqlib_input_{qubo_description.filename}.txt"
 
-    # First line of output includes run data. 3rd line contains the solution.
-    out_data = [x for x in out.split('\n') if len(x) > 0]
-    solution = out_data[2].split()
-    solution = [int(x) for x in solution]
-    solution_energy = int(out_data[0].split(',')[3])
-    energy = offset - solution_energy
-    path = qubo_vars_to_path(solution, graph)
-    return solution, energy, path
-
-
-def gurobi_sample_qubo(qubo_matrix: np.ndarray, graph: nx.Graph, offset: int, time_limit: int):
-    with gp.Env() as env, gp.Model(env=env) as model:
-        model_vars = model.addMVar(shape=qubo_matrix.shape[0], vtype=GRB.BINARY, name="x")
-        model.setObjective(model_vars @ qubo_matrix @ model_vars, GRB.MINIMIZE)
-        model.Params.BestObjStop = - offset
-        model.Params.TimeLimit = time_limit
-        model.Params.Seed = np.random.default_rng().integers(0, 1000)
-        model.Params.MIPFocus = 1
-        model.optimize()
+    paths = {}
+    for time_limit in qubo_description.time_limits:
+        paths[time_limit] = []
         
-        energy = model.ObjVal + offset
-        path = qubo_vars_to_path(model_vars.X, graph)
-        return model_vars.X, energy, path 
+        for _ in range(qubo_description.jobs):
+            # Run the MQLib solver and capture output
+            process = subprocess.run([f"{MQLIB_DIR}/bin/MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-s", str(rng.integers(0, 65535)), "-ps"], capture_output=True)
+            out = process.stdout.decode("utf-8")
+
+            try:
+                # First line of output includes run data. 3rd line contains the solution.
+                out_data = [x for x in out.split('\n') if len(x) > 0]
+                solution = out_data[2].split()
+                solution = [int(x) for x in solution]
+                solution_energy = float(out_data[0].split(',')[3])
+                energy = qubo_description.offset - solution_energy
+                path = qubo_vars_to_path(solution, qubo_description.graph)
+                paths[time_limit].append((solution, energy, path))
+            except ValueError:
+                logger.error('Could not parse mqlib data')
+                logger.error(out)
+                paths[time_limit].append(([], np.inf, []))
+            
+    return paths
 
 
-def dwave_sample_qubo(qubo_matrix: np.ndarray, offset: int, graph: nx.Graph, time_limit=None, label=None):
+def gurobi_sample_qubo(qubo_description: QuboDescription):
+    total_weight = int(sum(qubo_description.graph.nodes[node]["weight"] for node in list(qubo_description.graph.nodes)) / 2)
+    
+    print(f'Offset: {qubo_description.offset}')
+    print(f'Total weight: {total_weight}')
+    print(f'T_max: {qubo_description.T}')
+    
+    paths = {}
+    with gp.Env() as env, gp.Model(env=env) as model:
+        model_vars = model.addMVar(shape=qubo_description.Q.shape[0], vtype=GRB.BINARY, name="x")
+        model.setObjective(model_vars @ qubo_description.Q @ model_vars, GRB.MINIMIZE)
+        model.Params.BestObjStop = - qubo_description.offset
+        
+        for time_limit in qubo_description.time_limits:
+            paths[time_limit] = []
+            model.Params.TimeLimit = time_limit
+            for _ in range(qubo_description.jobs):
+                model.Params.Seed = rng.integers(0, 100000)
+                model.reset()
+                model.optimize()
+                energy = model.ObjVal + qubo_description.offset
+                path = qubo_vars_to_path(model_vars.X, qubo_description.graph)
+                paths[time_limit].append((model_vars.X, energy, path))
+    
+    return paths    
+
+
+def dwave_sample_qubo(qubo_description: QuboDescription):
     """Solves the max path problem on a node-weighted graph.
 
     Args:
         qubo_matrix (np.ndarray): The QUBO matrix to sample from.
         time_limit (int, optional): The time limit passed to the sampler.
     """
-    if label is None:
-        label = "Tangle"
+    bqm = BQM(qubo_description.Q, 'BINARY')
+    bqm.offset = qubo_description.offset
     sampler = LeapHybridSampler()
     
-    bqm = BQM(qubo_matrix, 'BINARY')
-    bqm.offset = offset
-    print(f'Number of QUBO vars: {len(bqm.variables)}')
-        
-    if time_limit == -1:
-        time_limit = sampler.min_time_limit(bqm)
-        print(f"Using default min time limit: {time_limit}")
-    sampleset = sampler.sample(bqm, time_limit, label=label)
- 
-    try:
-        print(f"D-Wave access time: {round(sampleset.info['run_time'] / 10 ** 6)}")
-    except:
-        pass
-    
-    greedy_solver = SteepestDescentSolver()
-    post_processed = greedy_solver.sample(bqm, initial_states=sampleset)
-    
-    best_sample = post_processed.first.sample
-    best_energy = post_processed.first.energy
-    path = dwave_sample_to_path(best_sample, graph)
+    paths = {}
+    for time_limit in qubo_description.time_limits:
+        paths[time_limit] = []
+        for _ in range(qubo_description.jobs):
+            sampleset = sampler.sample(bqm, time_limit, label=f'tangle_{qubo_description.filename}')
+            try:
+                print(f"D-Wave access time: {round(sampleset.info['run_time'] / 10 ** 6)}")
+            except:
+                pass
+            greedy_solver = SteepestDescentSolver()
+            post_processed = greedy_solver.sample(bqm, initial_states=sampleset)
 
-    return list(best_sample.values()), best_energy, path
+            best_sample = post_processed.first.sample
+            best_energy = post_processed.first.energy
+            path = dwave_sample_to_path(best_sample, qubo_description.graph)
+            paths[time_limit].append((best_sample, best_energy, path))
+            
+    return paths
 
 
 def _index_to_node_time(idx, num_nodes):
@@ -158,7 +182,7 @@ def validate_path(path: list, graph: nx.Graph):
         path (list): _description_
         graph (nx.Graph): _description_
     """
-    print(f"Best path:")
+    print("Best path:")
     print_path(path)
     if len(path) == 0:
         print("No path")
@@ -171,10 +195,11 @@ def validate_path(path: list, graph: nx.Graph):
             end_nodes.add(node)
         elif val == 'start':
             start_nodes.add(node)
-    end_nodes.add('end')
+    if len(end_nodes):
+        end_nodes.add('end')
     
-    if len(start_nodes) > 0 and not path[0][1] in start_nodes:
-        print(f'Did not start at start')
+    if len(start_nodes) > 0 and path[0][1] not in start_nodes:
+        print('Did not start at start')
     
     time_offset = 0
     i = 0
@@ -202,9 +227,9 @@ def validate_path(path: list, graph: nx.Graph):
         v2 = path[x + 1][1]            
         if v1 == 'end' and not v2 == 'end':
             print(f'Left the end node at path entry {x}')
-        elif (not v1 == 'end') and (not v2 == 'end') and (not (v1, v2) in graph.edges):
+        elif (not v1 == 'end') and (not v2 == 'end') and ((v1, v2) not in graph.edges):
             print(f'Broke graph edge at path entry {x}')
-        elif len(end_nodes) > 0 and (v2 == 'end') and (not v1 in end_nodes):
+        elif len(end_nodes) > 0 and (v2 == 'end') and (v1 not in end_nodes):
             print(f'Went to end node illegally at path entry {x}')
     node_dict[v2] += 1
     
