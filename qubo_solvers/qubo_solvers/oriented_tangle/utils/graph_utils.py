@@ -1,7 +1,7 @@
 import gfapy
 import networkx as nx
 
-def oriented_graph_with_copy_numbers(filename, copy_numbers):
+def oriented_graph_with_copy_numbers(filename, copy_numbers, nodes: list | None=None):
     """Reads a .gfa file into an oriented graph, where each node has a positive and negative version.
 
     Args:
@@ -10,6 +10,7 @@ def oriented_graph_with_copy_numbers(filename, copy_numbers):
     Returns:
         nx.Graph: corresponding oriented graph.
     """
+    # TODO: deal with subgraphs via the nodes parameter
     gfa = gfapy.Gfa.from_file(filename, vlevel=0)
     graph = nx.DiGraph()
     for index, segment_line in enumerate(gfa.segments):

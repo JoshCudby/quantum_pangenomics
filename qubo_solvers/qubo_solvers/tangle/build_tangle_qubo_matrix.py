@@ -25,6 +25,7 @@ def main():
 
     filename = os.path.basename(args.filepath)
     Path(args.data_dir).mkdir(exist_ok=True, parents=True)
+    
     if args.copy_numbers is None:
         logger.info('Running pathfinder to get coverage')
         copy_numbers, nodes = run_pathfinder_coverage(args.data_dir, args.filepath, COVERAGE_SUFFIX)
