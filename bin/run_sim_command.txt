@@ -1,0 +1,18 @@
+seed=1; mode=1; for solver in mqlib dwave gurobi pathfinder; do bsub -q normal -G qpg -J gfa$solver -o $mode.$solver.$seed.log.txt -e $mode.$solver.$seed.err.txt -R 'select[mem>4000] rusage[mem=4000]' -M 4000  "bash ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh $seed $solver $solver 30,60 5 $mode; exit 0"; done;
+
+solver=pathfinder; mode=1; for seed in $(seq 1 20); do bsub -q normal -G qpg -J gfa$solver$seed -o $mode.$solver.$seed.log.txt -e $mode.$solver.$seed.err.txt -R 'select[mem>4000] rusage[mem=4000]' -M 4000  "bash ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh $seed $solver $solver 30,60,120 5 $mode 5; exit 0"; done;
+
+
+solver=gurobi; mode=1; 
+for seed in $(seq 3 4); do bsub -q normal -G qpg -J gfa$solver$seed -o $mode.$solver.$seed.log.txt -e $mode.$solver.$seed.err.txt -R 'select[mem>4000] rusage[mem=4000]' -M 4000  "bash ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh $seed $solver $solver 30,60,120 5 $mode 5; exit 0"; done;
+for seed in $(seq 3 10); do let prev_seed="$seed-2"; echo "ended(gfa$solver$prev_seed)"; done;
+
+
+bsub -w "ended(gfa$solver$prev_seed)" -q normal -G qpg -J gfa$solver$seed -o $mode.$solver.$seed.log.txt -e $mode.$solver.$seed.err.txt -R 'select[mem>4000] rusage[mem=4000]' -M 4000  "bash ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh $seed $solver $solver 30,60,120 5 $mode 5; exit 0"; 
+
+
+
+for i in $(seq 1 10); do cat 1.mqlib.$i.log.txt | grep -A 6 "Summary 60" > 1.mqlib.summary60.txt; done;
+
+
+for i in $(seq 1 10); do echo $i; cat 1.mqlib.$i.log.txt | grep "Summary 120 0"; done;

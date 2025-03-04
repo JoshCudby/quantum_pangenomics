@@ -61,7 +61,7 @@ for run in {1..5}; do
      bsub -J "$out_suffix.$run.build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q normal \
           -M "$memory" -o "$outdir/build.txt" -e "$outdir/error.build.txt" -G "qpg" \
           -w "$depend_cond" \
-          "python3 $QUBO_DIR/qubo_solvers/oriented_tangle/build_oriented_qubo_matrix.py $gfa_filepath $outdir"
+          python3 "$QUBO_DIR"/qubo_solvers/oriented_tangle/build_oriented_qubo_matrix.py -f "$gfa_filepath" -d "$outdir"
 
      bsub -J "$out_suffix.$run.mqlib" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -q normal \
           -M "$memory" -o "$outdir/mqlib.txt" -e "$outdir/error.mqlib.txt" -G "qpg"  \
