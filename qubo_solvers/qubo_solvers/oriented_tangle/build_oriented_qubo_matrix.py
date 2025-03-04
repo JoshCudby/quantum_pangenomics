@@ -71,6 +71,7 @@ def main():
                 to_write = ''
 
         f.write(to_write)
+    logger.info('Finished building oriented qubo matrix')
 
 
 if __name__ == "__main__":

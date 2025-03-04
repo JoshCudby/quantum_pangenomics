@@ -61,11 +61,11 @@ def gurobi_sample_qubo(qubo_description: QuboDescription):
             model.Params.TimeLimit = time_limit
             for _ in range(qubo_description.jobs):
                 model.Params.Seed = rng.integers(0, 100000)
-                model.reset()
                 model.optimize()
                 energy = model.ObjVal + qubo_description.offset
                 path = qubo_vars_to_path(model_vars.X, qubo_description.graph)
                 paths[time_limit].append((model_vars.X, energy, path))
+                model.reset()
     
     return paths    
 

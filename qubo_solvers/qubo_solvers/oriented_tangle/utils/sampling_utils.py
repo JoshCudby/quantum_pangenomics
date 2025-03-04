@@ -29,14 +29,16 @@ def mqlib_sample_qubo(qubo_description: QuboDescription):
                 out_data = [x for x in out.split('\n') if len(x) > 0]
                 solution = out_data[2].split()
                 solution = [int(x) for x in solution]
-                solution_energy = int(out_data[0].split(',')[3])
-                energy = qubo_description.offset - solution_energy
-                path = sample_list_to_path(solution, qubo_description.graph, qubo_description.T, qubo_description.V)
-                paths[time_limit].append((solution, energy, path))
+                logger.info(out_data[0].split(',')[-1])
+                solution_energy = float(out_data[0].split(',')[3])
             except ValueError:
                 logger.error('Could not parse mqlib data')
                 logger.error(out)
                 paths[time_limit].append(([], np.inf, []))
+                continue
+            energy = qubo_description.offset - solution_energy
+            path = sample_list_to_path(solution, qubo_description.graph, qubo_description.T, qubo_description.V)
+            paths[time_limit].append((solution, energy, path))
             
     return paths
 
@@ -64,7 +66,7 @@ def dwave_sample_qubo(qubo_description: QuboDescription) -> dict[int, tuple]:
             sampleset = sampler.sample(bqm, time_limit, label=f'oriented_{qubo_description.filename}')
             try:
                 logger.info(f"D-Wave access time: {round(sampleset.info['run_time'] / 10 ** 6)}")
-            except:
+            except KeyError:
                 pass
             best_sample = sampleset.first.sample
             best_energy = sampleset.first.energy
@@ -82,9 +84,10 @@ def gurobi_sample_qubo(qubo_description: QuboDescription):
     logger.info(f'T_max: {qubo_description.T}')
     
     paths = {}
+    Q = np.array(qubo_description.Q)
     with gp.Env() as env, gp.Model(env=env) as model:
-        model_vars = model.addMVar(shape=qubo_description.Q.shape[0], vtype=GRB.BINARY, name="x")
-        model.setObjective(model_vars @ qubo_description.Q @ model_vars, GRB.MINIMIZE)
+        model_vars = model.addMVar(shape=Q.shape[0], vtype=GRB.BINARY, name="x")
+        model.setObjective(model_vars @ Q @ model_vars, GRB.MINIMIZE)
         model.Params.BestObjStop = - qubo_description.offset
         
         for time_limit in qubo_description.time_limits:
@@ -96,6 +99,7 @@ def gurobi_sample_qubo(qubo_description: QuboDescription):
                 energy = model.ObjVal + qubo_description.offset
                 path = sample_list_to_path(model_vars.X, qubo_description.graph, qubo_description.T, qubo_description.V)
                 paths[time_limit].append((model_vars.X, energy, path))
+                model.reset()
     
     return paths
 
@@ -121,13 +125,13 @@ def print_path(path: list):
     """Pretty print a path"""
     num_per_line = 6
     if len(path) < num_per_line:
-        logger.info(path)
+        print(path)
         return
     
     for i in range(floor(len(path) / num_per_line)):
-        logger.info(path[i * num_per_line: (i + 1) * num_per_line])
+        print(path[i * num_per_line: (i + 1) * num_per_line])
     if not (i + 1) * num_per_line == len(path):
-        logger.info(path[(i + 1)*num_per_line:])
+        print(path[(i + 1)*num_per_line:])
         
         
 def get_original_vertex_name(vertex_name):

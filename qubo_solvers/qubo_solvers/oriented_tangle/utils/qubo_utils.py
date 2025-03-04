@@ -23,17 +23,17 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     
     # T_max = total weight + "a bit"
     if alpha is None:
-        alpha = 1.2
+        alpha = 1.1
     T_max = floor(total_weight * alpha)
     logger.info(f'V: {V}, T: {T_max}')
     # Penalty Values
-    lambda_t = 10
-    lambda_g = 5
+    lambda_t = 100
+    lambda_g = 50
     lambda_w = 1
     logger.info(f'Penalties. t: {lambda_t}, g: {lambda_g}, w: {lambda_w}')
 
     # Note: we add an end node with parity 0 and 1, we only want 1 of them. We will delete the other at the end.
-    qubo_matrix = np.zeros((T_max, V + 1, 2, T_max, V + 1, 2), dtype=np.int8)
+    qubo_matrix = np.zeros((T_max, V + 1, 2, T_max, V + 1, 2), dtype=np.int16)
     
     # Path constraint
     for t in range(T_max):
@@ -69,10 +69,10 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     # Graph step constraints
     for t in range(T_max - 1):
         for i, j, bi, bj in product(range(V), range(V), range(2), range(2)):
-            if not (nodes[2 * i + bi], nodes[2 * j + bj]) in graph.edges:
+            if (nodes[2 * i + bi], nodes[2 * j + bj]) not in graph.edges:
                 qubo_matrix[t, i, bi, t+1, j, bj] += lambda_g
         for i, bi in product(range(V), range(2)):
-            qubo_matrix[t, V, 0, t+1, i, bi] += lambda_g
+            qubo_matrix[t, V, 0, t+1, i, bi] += 5 * lambda_g
             if exist_end_nodes:
                 if i not in end_nodes:
                     qubo_matrix[t, i, bi, t+1, V, 0] += lambda_g
@@ -103,8 +103,8 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     
     offset = lambda_t * T_max  + lambda_w * int(sum(graph.nodes[nodes[2 * i]]["weight"] ** 2 for i in range(V))) + (1 if exist_start_nodes else 0)  * lambda_g
     
-    normalisation = np.max(np.abs(qubo_matrix))
-    qubo_matrix = qubo_matrix / normalisation
-    offset = offset / normalisation
+    # normalisation = np.max(np.abs(qubo_matrix))
+    # qubo_matrix = qubo_matrix / normalisation
+    # offset = offset / normalisation
     
     return qubo_matrix, offset, T_max, V
