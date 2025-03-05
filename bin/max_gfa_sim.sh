@@ -13,7 +13,7 @@ awk '!/^=/ && !/^-/ && !/^#/ && !/^Per/ && NF {print}' "$input_file" >> "$temp_f
 
 awk -v batch_size=$batch_size -v table_size=$table_size '
 {
-    if (NF < 4) next;  # Skip lines with insufficient columns
+    if (NF < 4 || $3 == 0) next;  # Skip lines with insufficient columns
 
     row_idx = (NR - 1) % table_size  # Row index within a batch (0-4)
     batch_idx = int((NR - 1) / (batch_size * table_size))  # Batch index
