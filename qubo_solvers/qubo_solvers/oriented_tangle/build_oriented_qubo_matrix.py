@@ -16,7 +16,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--filepath', default=f'{DATA_DIR}/test.gfa')
     parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
-        type=lambda s: [int(item) for item in s.split(',')])
+        type=lambda s: [int(item) for item in s.split(',') if len(item)])
     parser.add_argument('-d', '--data-dir', default=f"{OUT_DIR}/tangle")
 
     args = parser.parse_args()
