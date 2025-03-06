@@ -39,7 +39,7 @@ def main():
     logger.info(f'Getting graph from {args.filepath}')
     graph = oriented_graph_with_copy_numbers(args.filepath, copy_numbers, nodes)
     Q, offset, T_max, V = qubo_matrix_from_graph(graph)
-
+    
     logger.info('Saving data')
     savepath = f'{args.data_dir}/qubo_data_{filename}.pkl'
     to_save = {

@@ -26,6 +26,8 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
         alpha = 1.1
     T_max = floor(total_weight * alpha)
     logger.info(f'V: {V}, T: {T_max}')
+    if V > 200:
+        raise Exception('Too big!')
     # Penalty Values
     lambda_t = 100
     lambda_g = 50
