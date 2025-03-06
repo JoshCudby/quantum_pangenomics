@@ -1,6 +1,6 @@
 seed=1; mode=1; for solver in mqlib dwave gurobi pathfinder; do bsub -q normal -G qpg -J gfa$solver -o $mode.$solver.$seed.log.txt -e $mode.$solver.$seed.err.txt -R 'select[mem>4000] rusage[mem=4000]' -M 4000  "bash ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh $seed $solver $solver 30,60 5 $mode; exit 0"; done;
 
-solver=pathfinder; mode=1; for seed in $(seq 1 20); do bsub -q normal -G qpg -J gfa$solver$seed -o $mode.$solver.$seed.log.txt -e $mode.$solver.$seed.err.txt -R 'select[mem>4000] rusage[mem=4000]' -M 4000  "bash ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh $seed $solver $solver 30,60,120 5 $mode 5; exit 0"; done;
+solver=dwave; mode=2; for seed in $(seq 1 2); do bsub -q normal -G qpg -J gfa$solver$seed -o $mode.$solver.$seed.log.txt -e $mode.$solver.$seed.err.txt -R 'select[mem>4000] rusage[mem=4000]' -M 4000  "bash ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh $seed $solver mod_pen_$solver 30,120 5 $mode 5; exit 0"; done;
 
 
 solver=gurobi; mode=1; 
@@ -36,3 +36,13 @@ seq -w 21 50 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $s
 export CONFIG=/nfs/users/nfs_j/jc59/quantumwork/pangenome/modules/qpg/sim_path_config_hifi_mg.sh
 solver=gurobi; mode=2;
 seq -w 3 10 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver $solver 3,5 5 $mode 5
+
+
+export CONFIG=/nfs/users/nfs_j/jc59/quantumwork/pangenome/modules/qpg/sim_path_config_hifi_mg.sh
+solver=dwave; mode=2;
+seq -w 1 2 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver mod_penalty_$solver 30,120 5 $mode 5
+
+
+export CONFIG=/nfs/users/nfs_j/jc59/quantumwork/pangenome/modules/qpg/sim_path_config_hifi_mg.sh
+solver=mqlib; mode=3;
+seq -w 1 2 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver $solver 3,5 10 $mode 5
