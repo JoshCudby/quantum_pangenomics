@@ -7,7 +7,7 @@ from qubo_solvers.logging import get_logger
 logger = get_logger(__name__)
 
 
-def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple[np.ndarray, float, int, int]:
+def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None, penalties: list | None=None) -> tuple[np.ndarray, float, int, int]:
     """Constructs the QUBO matrix corresponding to a graph. Also returns the offset of the model, the max time and the number of nodes.
 
     Args:
@@ -26,14 +26,21 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
         alpha = 1.1
     T_max = floor(total_weight * alpha)
     logger.info(f'V: {V}, T: {T_max}')
+    
     if V > 200:
         raise Exception('Too big!')
-    # Penalty Values
-    lambda_t = 100
-    lambda_g = 50
-    lambda_w = 1
+    
+    if penalties is None:
+        # Penalty Values
+        lambda_t = 100
+        lambda_g = 50
+        lambda_w = 1    
+    else:
+        lambda_t = penalties[0]
+        lambda_g = penalties[1]
+        lambda_w = penalties[2]
     logger.info(f'Penalties. t: {lambda_t}, g: {lambda_g}, w: {lambda_w}')
-
+    
     # Note: we add an end node with parity 0 and 1, we only want 1 of them. We will delete the other at the end.
     qubo_matrix = np.zeros((T_max, V + 1, 2, T_max, V + 1, 2), dtype=np.int16)
     

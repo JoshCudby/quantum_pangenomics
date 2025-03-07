@@ -17,6 +17,8 @@ def main():
     parser.add_argument('-f', '--filepath', default=f'{DATA_DIR}/test.gfa')
     parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
         type=lambda s: [int(item) for item in s.split(',') if len(item)])
+    parser.add_argument('-p', '--penalties', help='delimited list input', 
+        type=lambda s: [int(item) for item in s.split(',') if len(item)])
     parser.add_argument('-d', '--data-dir', default=f"{OUT_DIR}/tangle")
 
     args = parser.parse_args()
@@ -38,7 +40,7 @@ def main():
 
     logger.info(f'Getting graph from {args.filepath}')
     graph = oriented_graph_with_copy_numbers(args.filepath, copy_numbers, nodes)
-    Q, offset, T_max, V = qubo_matrix_from_graph(graph)
+    Q, offset, T_max, V = qubo_matrix_from_graph(graph, penalties=args.penalties)
     
     logger.info('Saving data')
     savepath = f'{args.data_dir}/qubo_data_{filename}.pkl'
