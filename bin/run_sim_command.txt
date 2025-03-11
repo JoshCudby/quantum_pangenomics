@@ -27,22 +27,31 @@ for seed in $(seq 1 20); do ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh $
 
 export CONFIG=/nfs/users/nfs_j/jc59/quantumwork/pangenome/modules/qpg/sim_path_config_hifi_mg.sh
 solver=mqlib; mode=2;
-seq -w 21 50 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver $solver 3,5,15,30,60,120 5 $mode 5
+seq 21 50 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver $solver 3,5,15,30,60,120 5 $mode 5
 
 export CONFIG=/nfs/users/nfs_j/jc59/quantumwork/pangenome/modules/qpg/sim_path_config_hifi_mg.sh
 solver=pathfinder; mode=2;
-seq -w 21 50 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver $solver 0 1 $mode 5
+seq 21 50 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver $solver 0 1 $mode 5
 
 export CONFIG=/nfs/users/nfs_j/jc59/quantumwork/pangenome/modules/qpg/sim_path_config_hifi_mg.sh
 solver=gurobi; mode=2;
-seq -w 3 10 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver $solver 3,5 5 $mode 5
+seq 3 10 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver $solver 3,5 5 $mode 5
 
 
 export CONFIG=/nfs/users/nfs_j/jc59/quantumwork/pangenome/modules/qpg/sim_path_config_hifi_mg.sh
 solver=dwave; mode=2;
-seq -w 1 2 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver mod_penalty_$solver 30,120 5 $mode 5
+seq 8 10 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver mod_penalty_$solver 30,120 5 $mode 5
 
 
 export CONFIG=/nfs/users/nfs_j/jc59/quantumwork/pangenome/modules/qpg/sim_path_config_hifi_mg.sh
-solver=mqlib; mode=3;
-seq -w 1 2 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver $solver 3,5 10 $mode 5
+solver=mqlib; mode=2;
+seq 1 10 | parallel ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh {} $solver $solver 3,5,15,30,60,120 5 $mode 1
+
+export CONFIG=/nfs/users/nfs_j/jc59/quantumwork/pangenome/modules/qpg/sim_path_config_hifi_mg.sh
+seed=1; mode=2;
+parallel ::: "~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh $seed mqlib test_var_mqlib 10 50 $mode 1" "~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh $seed gurobi test_var_gurobi 30 50 $mode 5"
+
+
+export CONFIG=/nfs/users/nfs_j/jc59/quantumwork/pangenome/modules/qpg/sim_path_config_hifi_mg.sh
+solver=mqlib; mode=2;
+seq 11 1000 | parallel -j 50 ~/quantumwork/pangenome/modules/qpg/run_gfa_sim.sh 2 $solver eval.$solver.{}. 3,30 1 $mode 1

@@ -1,0 +1,51 @@
+#!/bin/bash
+
+usage()
+{
+    echo "usage: plot_cvar.sh [[-f file -m memory -p reps --hardware] | [-h]]"
+}
+
+memory=4000
+reps=4
+init="random"
+
+while [ "$1" != "" ]; do
+    case $1 in
+        -m | --memory )         shift
+                                memory="$1"
+                                ;;
+        -p | --reps )           shift
+                                reps="$1"
+                                ;;
+        -n | --shots )          shift
+                                shots="$1"
+                                ;;
+        -i | --init )           shift
+                                init="$1"
+                                ;;
+        --hardware )            hardware="--hardware"
+                                ;;
+        -h | --help )           usage
+                                exit
+                                ;;
+        * )                     usage
+                                exit 1
+    esac
+    shift
+done
+
+## MAIN
+
+# module load cuda-12.1.1
+# LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CUDA_HOME/lib64
+# module load ISG/experimental/fg12/openmpi/5.0.4-cuda12.1-lsf
+WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_qaoa/cvar
+outdir="$SCRATCH/out/orson"
+
+# Qiskit Testing
+echo "Qiskit Testing"
+bsub -J "plot_cvar" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu - -M "$memory"\
+ -o "$outdir/phylo.plot.%J" -e "$outdir/error.phylo.plot.%J" -G "qpg" -q "qpg" \
+ "python3 $WORKING_DIR/plot_cvar2.py -f "NULL_FILE" -p $reps -n $shots --init $init $hardware"
+
+exit 0

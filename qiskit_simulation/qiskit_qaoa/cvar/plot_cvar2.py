@@ -24,11 +24,10 @@ shots = args.shots
 noisy = args.noisy
 init_type = args.init
 
-data_file = f'/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_{filename}.gfa.npy'
+filename='phylo'
+filename_suffix = f'p{p}.shots{shots}.hardware{hardware}.init{init_type}'
 
-filename_suffix = f'p{p}.shots{shots}.hardware{hardware}.noisy{noisy}.init{init_type}'
-
-with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/cvar/{filename}_cvar.{filename_suffix}.pkl', 'rb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/out/orson/{filename}.cvar.{filename_suffix}.pkl', 'rb') as f:
     data = pickle.load(f)
     
 history = data["history"]
@@ -36,9 +35,8 @@ singles = data["singles"]
 doubles = data["doubles"]
 sat_map = data["sat_map"]
 
-offset = get_ising_offset(data_file)
 fig, axs = plt.subplots(1, 2, figsize=(12,4))
-axs[0].plot([hist[1] + offset for hist in history])
+axs[0].plot([hist[1]  for hist in history])
 xsamples = np.cumsum([sum(hist[3].values()) for hist in history])
 axs[1].plot(xsamples, np.cumsum([hist[0] for hist in history]), label="QSim Time to generate samples")
 axs[1].plot(xsamples, np.cumsum([hist[4] for hist in history]), label="Classical Time to process samples")
@@ -76,17 +74,17 @@ axs[1].set_ylabel('Runtime')
 
 
 fig.tight_layout()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/{filename}.convergence.{filename_suffix}.png')
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/phylo.convergence.{filename_suffix}.png')
 
 
 qp = QuadraticProgram()
-qp.from_ising(singles + doubles, offset = offset)
+qp.from_ising(singles + doubles, offset = 0)
 cplex_res = CplexOptimizer().solve(qp)
 reordered = [sat_map[x] for x in range(len(cplex_res.x))]
 logger.info(f'Optimal: {cplex_res.x[reordered]}, Fval: {cplex_res.fval}')
 
 qp_max = QuadraticProgram()
-qp_max.from_ising(singles + doubles, offset = offset)
+qp_max.from_ising(singles + doubles, offset = 0)
 qp_max.objective._sense = ObjSense.MAXIMIZE
 cplex_res_max = CplexOptimizer().solve(qp_max)
 
@@ -123,4 +121,4 @@ axs.legend()
 axs.set_xlabel("Quadratic program objective value")
 axs.set_ylabel("Sample density")
 
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/{filename}.histogram.{filename_suffix}.png')
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/phylo.histogram.{filename_suffix}.png')
