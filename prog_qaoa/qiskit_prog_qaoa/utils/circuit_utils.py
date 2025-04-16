@@ -8,85 +8,83 @@ from qiskit_prog_qaoa.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def is_equal_to(num_qubits: int, value):
+def is_equal_to(num_qubits: int, value: int) -> QuantumCircuit:
+    """
+    Creates a circuit that checks if a register encodes a value in binary and flips a flag.
+    num_qubits: size of register to check
+    value: value to check
+    """
     circ = QuantumCircuit(num_qubits + 1)
-    bin_value = [int(x) for x in np.binary_repr(value, num_qubits)]
-    for idx, b in enumerate(bin_value):
-        if b == 0:
-            circ.x(idx)
+    circ.mcx(list(range(num_qubits-1,-1,-1)), num_qubits, ctrl_state=value)
+    return circ
+
+
+def controlled_copy_with_swap(num_qubits: int, K: int) -> QuantumCircuit:
+    """
+    Creates a controlled copy circuit that also shuffles all the registers in the copy list forward one place.
+    num_qubits: size of register to be copied
+    K: number of registers to track copies in
+    """
+    # Qubits: c_copy_flag, to_be_copied, K * (reg_to_be_copied_into)
+    circ = QuantumCircuit(1 + (K+1) * num_qubits)
     
-    circ.mcx(list(range(num_qubits)), num_qubits)
-    for idx, b in enumerate(bin_value):
-        if b == 0:
-            circ.x(idx)
-    return circ
-
-
-def controlled_copy_with_swap(num_qubits, K):
-    circ = QuantumCircuit((K+1) * num_qubits + 1 + 1)
-    # C_copy_Flag, To be copied, list(reg_to_be_copied_into, spare_registers), swap_spare_registers_flag
-    circ.x((K+1) * num_qubits + 1)
-
-    for i in range(num_qubits+1, 2*num_qubits+1):
-        circ.x(i)
-    circ.mcx(list(range(num_qubits+1, 2*num_qubits+1)), (K+1) * num_qubits + 1)
-
-    for i in range(num_qubits+1, 2*num_qubits+1):
-        circ.x(i)
+    # For each qubit i in final copy register:
     for i in range(num_qubits):
-        top = K * num_qubits + i + 1
-        for idx in range(top, 1+num_qubits+i, -1):
-            circ.cswap((K+1) * num_qubits + 1, idx, idx-1)
+        # Swap down to ith position in the first copy register, conditioned on the c_copy_flag
+        for idx in range(K * num_qubits + i + 1, 1+num_qubits+i, -1):
+            circ.cswap(0, idx, idx-1)
             
-    circ.x((K+1) * num_qubits + 1)
-    for i in range(num_qubits+1, 2*num_qubits+1):
-        circ.x(i)
-    circ.mcx(list(range(num_qubits+1, 2*num_qubits+1)), (K+1) * num_qubits + 1)
-    for i in range(num_qubits+1, 2*num_qubits+1):
-        circ.x(i)
-
+    # Copy the to_be_copied register into the first copy register, conditioned on the c_copy_flag
     for i in range(num_qubits):
-        circ.mcx([0, i + 1], num_qubits + i + 1)
+        circ.ccx(0, i + 1, num_qubits + i + 1)
     return circ
 
 
-def compute_next_nodes(circuit: QuantumCircuit, registers, j, n, K, T):
+def compute_next_nodes(
+        circuit: QuantumCircuit, registers: dict, j: int, n: int, K: int, T: int
+) -> QuantumCircuit:
+    """
+    Appends a compute_next_nodes subroutine to a circuit, which initialises registers .
+    For t in 0..T-2:
+        Checks if the t th solution register encodes j and flips a flag if so.
+        If the flag is set, shuffles the next_node registers forward one place and copies the (t+1)th solution register to the next_node registers.
+        Resets the flag.
+    """
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
     cc_circ = controlled_copy_with_swap(ceil_log_n2, K)
     is_equal_circ = is_equal_to(ceil_log_n2, j)
     for t in range(T-1):
-        circuit.barrier(label=f'is_equal c_{t}, {j}')
+        # circuit.barrier(label=f'is_equal c_{t}, {j}')
         circuit.compose(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][0]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
-                + [circuit.find_bit(registers[f'is_equal_flag_{t}'][0]).index],
+                + [circuit.find_bit(registers['flag'][0]).index],
             inplace=True
         )
 
-        circuit.barrier(label=f'c_copy c_{t+1} -> next node list')
-        is_equal_flag = circuit.find_bit(registers[f'is_equal_flag_{t}'][0]).index
+        # circuit.barrier(label=f'c_copy c_{t+1} -> next node list')
+        flag = circuit.find_bit(registers['flag'][0]).index
         to_copy = list(range(
             circuit.find_bit(registers[f'solution_{t+1}'][0]).index, circuit.find_bit(registers[f'solution_{t+1}'][-1]).index + 1
         ))
         copy_registers = list(range(
             circuit.find_bit(registers['next_node_0'][0]).index, circuit.find_bit(registers[f'next_node_{K-1}'][-1]).index + 1
         ))
-        next_node_flag = circuit.find_bit(registers['next_node_flag'][0]).index
 
         circuit.compose(
             cc_circ, 
-            [is_equal_flag] + to_copy + copy_registers + [next_node_flag],
+            [flag] + to_copy + copy_registers,
             inplace=True
         )
 
-        circuit.barrier(label=f'uncompute is_equal c_{t}, {j}')
+        # circuit.barrier(label=f'uncompute is_equal c_{t}, {j}')
         circuit.compose(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][0]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
-                + [circuit.find_bit(registers[f'is_equal_flag_{t}'][0]).index],
+                + [circuit.find_bit(registers['flag'][0]).index],
             inplace=True
         )
-        circuit.barrier()
+        # circuit.barrier()
     return circuit
 
 
@@ -95,121 +93,139 @@ def uncompute_next_nodes(circuit: QuantumCircuit, registers, j, n, K, T):
     cc_circ = controlled_copy_with_swap(ceil_log_n2, K)
     is_equal_circ = is_equal_to(ceil_log_n2, j)
     for t in range(T-2, -1, -1):
-        circuit.barrier(label=f'is_equal c_{t}, {j}')
+        # circuit.barrier(label=f'is_equal c_{t}, {j}')
         circuit.compose(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][0]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
-                + [circuit.find_bit(registers[f'is_equal_flag_{t}'][0]).index],
+                + [circuit.find_bit(registers['flag'][0]).index],
             inplace=True
         )
 
-        circuit.barrier(label=f'c_copy c_{t+1} -> next node list')
-        is_equal_flag = circuit.find_bit(registers[f'is_equal_flag_{t}'][0]).index
+        # circuit.barrier(label=f'c_copy c_{t+1} -> next node list')
+        flag = circuit.find_bit(registers['flag'][0]).index
         to_copy = list(range(
             circuit.find_bit(registers[f'solution_{t+1}'][0]).index, circuit.find_bit(registers[f'solution_{t+1}'][-1]).index + 1
         ))
         copy_registers = list(range(
             circuit.find_bit(registers['next_node_0'][0]).index, circuit.find_bit(registers[f'next_node_{K-1}'][-1]).index + 1
         ))
-        next_node_flag = circuit.find_bit(registers['next_node_flag'][0]).index
 
         circuit.compose(
             cc_circ.reverse_ops(), 
-            [is_equal_flag] + to_copy + copy_registers + [next_node_flag],
+            [flag] + to_copy + copy_registers,
             inplace=True
         )
 
-        circuit.barrier(label=f'uncompute is_equal c_{t}, {j}')
+        # circuit.barrier(label=f'uncompute is_equal c_{t}, {j}')
         circuit.compose(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][0]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
-                + [circuit.find_bit(registers[f'is_equal_flag_{t}'][0]).index],
+                + [circuit.find_bit(registers['flag'][0]).index],
             inplace=True
         )
-        circuit.barrier()
+        # circuit.barrier()
     return circuit
 
 
-def penalise_graph_steps(circuit, registers, i, parameter, graph, n, K):
+def penalise_graph_steps(
+        circuit: QuantumCircuit, registers: dict, i: int, parameter: Parameter, graph: nx.Graph, n: int, K:int
+) -> QuantumCircuit:
+    """
+    Appends a penalise_graph_steps subroutine to a circuit, which penalises any step from node i to a node not adjacent to i.
+    For each node j in 1..n not adjacent to i:
+        For each possible number of visits k:
+            Checks if the kth next node register is equal to j, and flips a flag if so.
+            Applies a phase to the flag qubit proportional to the parameter.
+            Resets the flag.
+    """
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
     nodes = list(graph.nodes)
     for j in range(1, n+1):
         if (nodes[i-1], nodes[j-1]) not in graph.edges:
             is_equal_circ = is_equal_to(ceil_log_n2, j)
-            circuit.barrier(label=f'penalty for {nodes[i-1], nodes[j-1]}')
+            # circuit.barrier(label=f'penalty for {nodes[i-1], nodes[j-1]}')
             for k in range(K):
                 circuit.compose(
                     is_equal_circ,
                     list(range(
                         circuit.find_bit(registers[f'next_node_{k}'][0]).index, circuit.find_bit(registers[f'next_node_{k}'][-1]).index + 1
-                    )) + [circuit.find_bit(registers[f'constraint_rotate_flag_{k}'][0]).index],
+                    )) + [circuit.find_bit(registers['flag'][0]).index],
                     inplace=True
                 )
                 circuit.p(
                     parameter, 
-                    circuit.find_bit(registers[f'constraint_rotate_flag_{k}'][0]).index
+                    circuit.find_bit(registers['flag'][0]).index
                 )
                 circuit.compose(
                     is_equal_circ,
                     list(range(
                         circuit.find_bit(registers[f'next_node_{k}'][0]).index, circuit.find_bit(registers[f'next_node_{k}'][-1]).index + 1
-                    )) + [circuit.find_bit(registers[f'constraint_rotate_flag_{k}'][0]).index],
+                    )) + [circuit.find_bit(registers['flag'][0]).index],
                     inplace=True
                 )
-        circuit.barrier()
-
+        # circuit.barrier()
     return circuit
 
 
-def penalise_graph_end_steps(circuit, registers, parameter, graph, n, K):
+def penalise_graph_end_steps(
+    circuit: QuantumCircuit, registers: dict, parameter: Parameter, graph: nx.Graph, n: int, K: int
+) -> QuantumCircuit:
+    """
+    Appends a penalise_graph_end_steps subroutine to a circuit, which penalises any step from the end node to a non-end node.
+    For each node j in 1..n:
+        For each possible number of visits k:
+            Checks if the kth next node register is equal to j, and flips a flag if so.
+            Applies a phase to the flag qubit proportional to the parameter.
+            Resets the flag.
+    """
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
-    nodes = list(graph.nodes)
+    # nodes = list(graph.nodes)
     for j in range(1, n+1):
         is_equal_circ = is_equal_to(ceil_log_n2, j)
-        circuit.barrier(label=f'penalty for {nodes[-1], nodes[j-1]}')
+        # circuit.barrier(label=f'penalty for {nodes[-1], nodes[j-1]}')
         for k in range(K):
             circuit.compose(
                 is_equal_circ,
                 list(range(
                     circuit.find_bit(registers[f'next_node_{k}'][0]).index, circuit.find_bit(registers[f'next_node_{k}'][-1]).index + 1
-                )) + [circuit.find_bit(registers[f'constraint_rotate_flag_{k}'][0]).index],
+                )) + [circuit.find_bit(registers['flag'][0]).index],
                 inplace=True
             )
             circuit.p(
                 parameter, 
-                circuit.find_bit(registers[f'constraint_rotate_flag_{k}'][0]).index
+                circuit.find_bit(registers['flag'][0]).index
             )
             circuit.compose(
                 is_equal_circ,
                 list(range(
                     circuit.find_bit(registers[f'next_node_{k}'][0]).index, circuit.find_bit(registers[f'next_node_{k}'][-1]).index + 1
-                )) + [circuit.find_bit(registers[f'constraint_rotate_flag_{k}'][0]).index],
+                )) + [circuit.find_bit(registers['flag'][0]).index],
                 inplace=True
             )
     return circuit
 
 
 def get_constraint_circuit(
-        n,
-        K,
-        T,
-        graph,
+        n: int,
+        K: int,
+        T: int,
+        graph: nx.Graph,
         parameter=Parameter('theta_cons'),
         state_prep_circuit: QuantumCircuit | None = None,
-):
+) -> QuantumCircuit:
+    """
+    Prepares a quantum circuit for the constraint function for Tangle Prog-QAOA.
+    """
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
     circuit = QuantumCircuit()
 
     registers = {f'solution_{t}' : QuantumRegister(ceil_log_n2, name=f'solution_{t}') for t in range(T)}
-    registers.update({f'is_equal_flag_{t}': QuantumRegister(1, name=f'is_equal_flag_{t}') for t in range(T-1)})
     registers.update({f'next_node_{k}': QuantumRegister(ceil_log_n2, name=f'next_node_{k}') for k in range(K)})
-    registers.update({'next_node_flag': QuantumRegister(1, name='next_node_flag')})
-    registers.update({f'constraint_rotate_flag_{k}': QuantumRegister(1, name=f'constraint_rotate_flag_{k}') for k in range(K)})
+    registers.update({'flag': QuantumRegister(1, name='flag')})
 
 
     for register in registers.values():
         circuit.add_register(register)
-
 
     if state_prep_circuit is not None:
         circuit.compose(state_prep_circuit, list(range(T * ceil_log_n2)), inplace=True)
@@ -292,17 +308,17 @@ def penalise_count(
             circuit.compose(
                 is_equal_circ,
                 list(range(circuit.find_bit(registers['count'][0]).index, circuit.find_bit(registers['count'][-1]).index + 1)) \
-                    + [circuit.find_bit(registers['count_rotate_flag'][0]).index],
+                    + [circuit.find_bit(registers['flag'][0]).index],
                 inplace=True
             )
             # circuit.save_statevector(label=f'before_p_{j}_{i}')
-            circuit.p(parameter * (graph.nodes[nodes[j-1]]["weight"] - i) ** 2, circuit.find_bit(registers['count_rotate_flag'][0]).index)
+            circuit.p(parameter * (graph.nodes[nodes[j-1]]["weight"] - i) ** 2, circuit.find_bit(registers['flag'][0]).index)
             # circuit.save_statevector(label=f'after_p_{j}_{i}')
 
             circuit.compose(
                 is_equal_circ,
                 list(range(circuit.find_bit(registers['count'][0]).index, circuit.find_bit(registers['count'][-1]).index + 1)) \
-                    + [circuit.find_bit(registers['count_rotate_flag'][0]).index],
+                    + [circuit.find_bit(registers['flag'][0]).index],
                 inplace=True
             )
     return circuit
@@ -364,7 +380,6 @@ def get_objective_circuit(
     registers = {f'solution_{t}' : QuantumRegister(ceil_log_n2, name=f'solution_{t}') for t in range(T)}
     registers.update({'flag': QuantumRegister(1, name='flag')})
     registers.update({'count': QuantumRegister(ceil_log_K1, name='count')})
-    registers.update({'count_rotate_flag': QuantumRegister(1, name='count_rotate_flag')})
 
     for register in registers.values():
         circuit.add_register(register)
@@ -376,13 +391,13 @@ def get_objective_circuit(
         # circuit.save_statevector(label=f'before_count_{j}')
         circuit = compute_count(circuit, registers, j, n, K, T)
         # circuit.save_statevector(label=f'after_count_{j}')
-        circuit.barrier()
+        # circuit.barrier()
         circuit = penalise_count(circuit, registers, j, parameter, graph, K)
         # circuit.save_statevector(label=f'after_penalise_{j}')|
-        circuit.barrier()
+        # circuit.barrier()
         circuit = uncompute_count(circuit, registers, j, n, K, T)
         # circuit.save_statevector(label=f'after_uncount_{j}')
-        circuit.barrier()
+        # circuit.barrier()
 
     return circuit
 
@@ -503,7 +518,7 @@ def get_prog_qaoa_circuit(
     graph: nx.Graph
 ) -> QuantumCircuit:
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
-    num_qubits = (K + T) * (ceil_log_n2 + 1)
+    num_qubits = (K + T) * ceil_log_n2 + 1
     logger.info(f'Num qubits: {num_qubits}')
     state_prep_instruction = state_prep(n, T).to_instruction(label='state_prep')
 
@@ -513,7 +528,6 @@ def get_prog_qaoa_circuit(
         list(range(state_prep_instruction.num_qubits)),
         inplace=True
     )
-
 
     for i in range(p):
         phase_operator_instruction = get_phase_operator_instruction(n,K,T,graph,i)
