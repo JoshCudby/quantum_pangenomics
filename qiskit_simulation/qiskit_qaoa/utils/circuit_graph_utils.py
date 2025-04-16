@@ -15,6 +15,7 @@ logger = get_logger(__name__)
 
 def circuit_to_graph(qc: QuantumCircuit, parameter) -> nx.Graph:
     """"QAOA Cost operator as a circuit to a graph"""
+    logger.info(parameter)
     qreg = qc.qregs[0]
     graph, edges = nx.Graph(), []
     graph.add_nodes_from(range(len(qreg)))
@@ -34,6 +35,7 @@ def circuit_to_graph(qc: QuantumCircuit, parameter) -> nx.Graph:
             raise ValueError('Too many qubits in instruction')
         
         if edge in seen_edges:
+            logger.info(inst)
             raise ValueError(f'Circuit contains edge {edge} multiple times')
 
         seen_edges.add(edge)

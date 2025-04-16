@@ -133,7 +133,7 @@ history = []
 
 def cvar(energies, alpha=1.0):
     sorted_energies = sorted(energies)
-    end_idx = max(int(alpha * len(energies)), 1)
+    end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx
 
 
