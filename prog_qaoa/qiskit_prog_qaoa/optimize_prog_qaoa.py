@@ -76,11 +76,11 @@ for edge_line in gfa.edges:
     ])
 
 n = len(gfa.segments)
-K = 2 # TODO: increase to 5/10
+K = max(dict(graph.nodes(data="weight", default=0)).values())
+K = int(min(K, 5))
 nodes_weights = list(graph.nodes(data="weight"))
 total_weight = sum(x[1] if x[1] is not None else 0 for x in nodes_weights)
 T = int(np.floor(total_weight * 1.2)) 
-ceil_log2_K1 = int(np.ceil(np.log2(K+1)))
 ceil_log_n2 = int(np.ceil(np.log2(n+2)))
 logger.info(f'n={n}, K={K}, T={T}, ceil_log_n2={ceil_log_n2}')
 

@@ -168,7 +168,7 @@ def penalise_graph_steps(
 
 
 def penalise_graph_end_steps(
-    circuit: QuantumCircuit, registers: dict, parameter: Parameter, graph: nx.Graph, n: int, K: int
+    circuit: QuantumCircuit, registers: dict, parameter: Parameter, n: int, K: int
 ) -> QuantumCircuit:
     """
     Appends a penalise_graph_end_steps subroutine to a circuit, which penalises any step from the end node to a non-end node.
@@ -240,7 +240,7 @@ def get_constraint_circuit(
 
     circuit = compute_next_nodes(circuit, registers, n+1, n, K, T)
     # circuit.save_statevector(label='after_compute_next_nodes_end')
-    circuit = penalise_graph_end_steps(circuit, registers, parameter, graph, n, K)
+    circuit = penalise_graph_end_steps(circuit, registers, parameter, n, K)
     # circuit.save_statevector(label='after_penalise_end')
     circuit = uncompute_next_nodes(circuit, registers, n+1, n, K, T)
     # circuit.save_statevector(label='after_uncompute_next_nodes_end')
@@ -367,8 +367,8 @@ def get_objective_circuit(
         K: int,
         T: int,
         graph: nx.Graph,
-        state_prep_circuit: QuantumCircuit | None = None, 
         parameter=Parameter('theta_obj'),
+        state_prep_circuit: QuantumCircuit | None = None, 
 ) -> QuantumCircuit:
     """
     Prepares a quantum circuit for the objective function for Tangle Prog-QAOA.
