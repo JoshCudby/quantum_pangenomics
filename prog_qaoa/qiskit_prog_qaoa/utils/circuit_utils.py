@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 
 def is_equal_to(num_qubits: int, value: int) -> QuantumCircuit:
     """
-    Creates a circuit that checks if a register encodes a value in binary and flips a flag.
+    Creates a circuit that checks if a register encodes a value in binary and flips a flag if so.
     num_qubits: size of register to check
     value: value to check
     """
@@ -22,8 +22,10 @@ def is_equal_to(num_qubits: int, value: int) -> QuantumCircuit:
 def controlled_copy_with_swap(num_qubits: int, K: int) -> QuantumCircuit:
     """
     Creates a controlled copy circuit that also shuffles all the registers in the copy list forward one place.
+    |0>|to_be_copied>|copy_1>|copy_2>...|copy_K> -> |0>|to_be_copied>|copy_1>|copy_2>...|copy_K>
+    |1>|to_be_copied>|copy_1>|copy_2>...|copy_K> -> |1>|to_be_copied>|copy_2 + to_be_copied>...|copy_K>|copy_1> , where the addition is bitwise.
     num_qubits: size of register to be copied
-    K: number of registers to track copies in
+    K: number of copy registers
     """
     # Qubits: c_copy_flag, to_be_copied, K * (reg_to_be_copied_into)
     circ = QuantumCircuit(1 + (K+1) * num_qubits)
@@ -472,12 +474,12 @@ def state_prep(n: int, T: int) -> QuantumCircuit:
 
 def get_mixer_operator(n: int, T: int, parameter=Parameter('beta')) -> QuantumCircuit:
     # TODO: use ancillas to reduce depth of mcp?
-    num_qubits = int(np.ceil(np.log(n+2))) * T
+    num_qubits = int(np.ceil(np.log2(n+2))) * T
     state_prep_circuit = state_prep(n, T)
-    mixer = QuantumCircuit(state_prep_circuit.num_qubits)
+    mixer = QuantumCircuit(num_qubits)
     mixer.compose(
         state_prep_circuit.inverse(),
-        range(state_prep_circuit.num_qubits),
+        range(num_qubits),
         inplace=True
     )
     # mixer.save_statevector('after_prep')
@@ -487,7 +489,7 @@ def get_mixer_operator(n: int, T: int, parameter=Parameter('beta')) -> QuantumCi
     # mixer.save_statevector('after_phase')
     mixer.compose(
         state_prep_circuit,
-        range(state_prep_circuit.num_qubits),
+        range(num_qubits),
         inplace=True
     )
     # mixer.save_statevector('after_unprep')
@@ -528,6 +530,7 @@ def get_prog_qaoa_circuit(
         list(range(state_prep_instruction.num_qubits)),
         inplace=True
     )
+    total_circuit.save_statevector('after_prep')
 
     for i in range(p):
         phase_operator_instruction = get_phase_operator_instruction(n,K,T,graph,i)
@@ -537,10 +540,12 @@ def get_prog_qaoa_circuit(
             list(range(phase_operator_instruction.num_qubits)),
             inplace=True
         )
+        total_circuit.save_statevector(f'after_phase_{i}')
         total_circuit.compose(
             mixer_operator_instruction,
             list(range(mixer_operator_instruction.num_qubits)),
             inplace=True
         )
+        total_circuit.save_statevector(f'after_mixer_{i}')
     logger.info(f'Total circuit has {total_circuit.num_qubits} qubits')
     return total_circuit

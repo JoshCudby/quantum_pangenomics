@@ -10,6 +10,7 @@ reps="4"
 num_gpu="1"
 init="ramp"
 shots=1000
+maxiter=100
 filename="test_filename"
 
 while [ "$1" != "" ]; do
@@ -29,7 +30,10 @@ while [ "$1" != "" ]; do
         -g | --num-gpu )        shift
                                 num_gpu="$1"
                                 ;;
-        -i | --init )           shift
+        -i )                    shift
+                                maxiter="$1"
+                                ;;
+        --init )                shift
                                 init="$1"
                                 ;;
         -h | --help )           usage
@@ -53,6 +57,6 @@ outdir="$SCRATCH/out/prog_qaoa"
 echo "Qiskit Testing"
 bsub -J "optimize_$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no" -M "$memory"\
  -o "$outdir/$filename.%J" -e "$outdir/error.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/optimize_prog_qaoa.py -f $filename -p $reps -m $memory -n $shots --init $init"
+ "python3 $WORKING_DIR/optimize_prog_qaoa.py -f $filename -p $reps -m $memory -n $shots -i $maxiter --init $init"
 
 exit 0
