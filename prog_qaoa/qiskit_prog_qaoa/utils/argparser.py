@@ -11,4 +11,5 @@ def get_parser():
     parser.add_argument('--hardware', action='store_true', default=True)
     parser.add_argument('--noisy', action='store_true', default=False)
     parser.add_argument('--init', choices=['ramp', 'random'], default='random')
+    parser.add_argument('-M', '--method', choices=['Nelder-Mead', 'Powell', 'COBYLA', 'spsa'], default='Powell')
     return parser

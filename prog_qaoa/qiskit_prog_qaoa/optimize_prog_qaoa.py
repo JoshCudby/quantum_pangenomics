@@ -1,9 +1,9 @@
 import numpy as np
-from time import time
 import pickle
 import networkx as nx
-from scipy.optimize import minimize, OptimizeResult
+from scipy.optimize import minimize
 from collections import Counter
+from fnmatch import fnmatch
 
 from gfapy import Gfa
 
@@ -13,19 +13,25 @@ from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 from qiskit_aer.primitives import SamplerV2 as Sampler #, EstimatorV2 as Estimator
 
+# from qiskit_algorithms.optimizers import SPSA # Breaks because QNSPSA wants base sampler V1, deprecated
+
 from qiskit_ibm_runtime.fake_provider import FakeFez, FakeHanoiV2
 
 # from qopt_best_practices.sat_mapping import SATMapper
 
+from qiskit_prog_qaoa.utils.opt_utils import objective, callback, soln_to_path, cost_function
 from qiskit_prog_qaoa.utils.circuit_utils import get_prog_qaoa_circuit
-# from qiskit_prog_qaoa.utils.circuit_graph_utils import circuit_to_graph, graph_to_operator, circuit_construction
 from qiskit_prog_qaoa.utils.argparser import get_parser
 from qiskit_prog_qaoa.utils.logging import get_logger
+
+# import tracemalloc
+# tracemalloc.start(25)
 
 
 def print_circuit_info(qc: QuantumCircuit, circuit_name):
     logger.info(f'{circuit_name} has {qc.num_qubits} qubits')
     logger.info(f'{circuit_name} has {qc.num_nonlocal_gates()} non-local gates and {qc.depth(lambda instr: len(instr.qubits) > 1)} non-local depth')
+    logger.info(f'{circuit_name} contains {list(qc.count_ops().keys())} gates.')
 
 
 logger = get_logger(__name__)
@@ -37,6 +43,7 @@ p: int = args.reps
 shots = args.shots
 init_type = args.init
 max_iter = args.maxiter
+method = args.method
 
 seed = 1
 rng = np.random.default_rng(seed=seed)
@@ -47,7 +54,7 @@ backend_options = dict(
     max_memory_mb=args.memory*0.9,
     cuStateVec_enable=True,
     blocking_enable=True,
-    blocking_qubits=24,
+    blocking_qubits=30,
     # batched_shots_gpu_max_qubits=24,
     # batched_shots_gpu=noisy,
     precision='single'
@@ -94,18 +101,35 @@ ceil_log_n2 = int(np.ceil(np.log2(n+2)))
 logger.info(f'p={p}, n={n}, K={K}, T={T}, ceil_log_n2={ceil_log_n2}')
 logger.info(f'shots={shots}, iter={max_iter}')
 
+# snapshot1 = tracemalloc.take_snapshot()
+
 circuit = get_prog_qaoa_circuit(p=p, n=n, K=K, T=T, graph=graph)
 circuit.measure(list(range(T * ceil_log_n2)), list(range(T * ceil_log_n2)))
 
-d_circuit = circuit.decompose()
+# snapshot2 = tracemalloc.take_snapshot()
+# top_stats = snapshot2.compare_to(snapshot1, 'lineno')
+
+# logger.info("[ Top 10 differences after get circuit]")
+# for stat in top_stats[:10]:
+#     logger.info(stat)
+
+d_circuit = circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'] ,reps=1)
+gtd = ['circuit*', 'unitary', '*add-1', '*minus-1']
+while any(fnmatch(key, p) for p in gtd for key in d_circuit.count_ops().keys()):
+    d_circuit = d_circuit.decompose(gates_to_decompose=gtd)
+
 print_circuit_info(d_circuit, 'Circuit')
 
 
-t_circuit = transpile(circuit, optimization_level=2, seed_transpiler=seed)
-
-
-
+t_circuit = transpile(d_circuit, backend=backend, optimization_level=3, seed_transpiler=seed)
 print_circuit_info(t_circuit, 'Transpiled Circuit')
+
+# snapshot3 = tracemalloc.take_snapshot()
+# top_stats = snapshot3.compare_to(snapshot2, 'lineno')
+
+# logger.info("[ Top 10 differences after transpile circuit]")
+# for stat in top_stats[:10]:
+#     logger.info(stat)
 
 
 # TODO: can we do a swap strategy mapping? It relies on commuting gates I think...
@@ -132,89 +156,11 @@ if init_type == 'ramp':
     gammas = betas[::-1]
     init_params = betas.tolist() + gammas.tolist()
 else:
-    init_params = rng.uniform(0, 0.9 * np.pi, p).tolist() + rng.uniform(0, 0.5 * np.pi, p).tolist()
+    init_params = rng.uniform(0.05, 0.95, p).tolist() + rng.uniform(0.05, 0.95, p).tolist()
 logger.info(f'Init: {init_params}')
 
 history = []
 
-
-def soln_to_path(soln):
-    path = []
-    nodes = list(graph.nodes)
-    for t in range(T):
-        x_bin = soln[t * ceil_log_n2: (t+1) * ceil_log_n2]
-        x_int = sum(2 ** (ceil_log_n2-i-1) * int(x_bin[i]) for i in range(ceil_log_n2))
-        if x_int < n+1:
-            path.append(nodes[x_int -1])
-        elif x_int == n+1:
-            path.append('end')
-        else:
-            path.append('invalid node')
-    return path
-
-
-def cost_function(sample: str):
-    nodes = list(graph.nodes)
-    cost = 0
-    x = []
-    counts = {}
-    for t in range(T):
-        x_bin = sample[t * ceil_log_n2: (t+1) * ceil_log_n2]
-        x_int = sum(2 ** (ceil_log_n2-i-1) * int(x_bin[i]) for i in range(ceil_log_n2))
-        x.append(x_int)
-        counts[x_int] = counts.get(x_int, 0) + 1
-    for t in range(T-1):
-        if x[t] > n+1:
-            logger.error(f'Sampled an invalid node! Sample ints: {x}. Sample: {sample}.')
-            cost += 10000 # Should never happen
-        elif x[t] == n+1:
-            if not x[t+1] == n+1:
-                cost += 5
-        else:
-            if x[t+1] > n+1:
-                pass
-            elif not x[t+1] == n+1 and (nodes[x[t]-1], nodes[x[t+1]-1]) not in graph.edges:
-                cost += 5
-    for i in range(1, n+1):
-        cost += (counts.get(i, 0) - graph.nodes[nodes[i-1]]["weight"]) ** 2
-    
-    if cost == 0.0:
-        logger.info(f'Sampled optimum: {sample}. Path: {soln_to_path(sample)}')
-    return cost
-    
-
-def cvar(counts, alpha=1.0):
-    energies = []
-    evals = [cost_function(key) for key in counts.keys()]
-    energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
-    flat_energies = [x for xs in energies for x in xs]
-    sorted_energies = sorted(flat_energies)
-    if sorted_energies[0] == 0:
-        return -1
-    end_idx = int(min(alpha,1) * len(sorted_energies))
-    return np.sum(sorted_energies[0:end_idx]) / end_idx
-
-
-def objective(x: np.ndarray):
-    start = time()
-    assigned_circuit = t_circuit.assign_parameters(x, inplace=False)
-    sampler_job = sampler.run([assigned_circuit], shots=shots)
-    sampler_result = sampler_job.result()
-    counts = sampler_result[0].data.c.get_counts()
-    sampling_time = time() - start
-    start = time()
-    total_energy = cvar(counts, 0.05)
-
-    classical_post_process_time = time() - start
-    history.append((sampling_time, total_energy, x.tolist(), counts, classical_post_process_time))
-    return total_energy
-
-
-def callback(intermediate_result: OptimizeResult):
-    logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
-    if intermediate_result.fun == -1:
-        raise StopIteration
-    
 
 ################################################
 ###### CHECK FOR INVALID NODES
@@ -237,29 +183,53 @@ def callback(intermediate_result: OptimizeResult):
 ################################################
 
 
-method="Nelder-Mead"
-result = minimize(
-    objective, 
-    x0=init_params, 
-    method=method, 
-    bounds=tuple((0,1) for _ in range(2 * p)), 
-    options={"maxiter": max_iter, },  # "rhobeg": 0.01
-    callback=callback
-)
+
+logger.info(f'Opt method: {method}')
+
+if method == 'spsa':
+    raise Exception('SPSA algorithm from qiskit_algorithms does not support Qiskit 2.0')
+    # spsa = SPSA(maxiter=max_iter, termination_checker=TerminationChecker())
+    # result = spsa.minimize(objective, x0=init_params)
+    # print(f'SPSA completed after {result.nit} iterations')
+else:
+    result = minimize(
+        objective, 
+        x0=init_params,
+        args=(n, T, graph, shots, history, t_circuit, sampler), 
+        method=method, 
+        bounds=tuple((0,1) for _ in range(2 * p)), 
+        options={"maxiter": max_iter, },  # "rhobeg": 0.01
+        callback=callback
+    )
+
 logger.info(result)
+
+# first_size, first_peak = tracemalloc.get_traced_memory()
+# logger.info(f'Mem size after minimize: {first_size}')
+# logger.info(f'Peak size during minimize: {first_peak}')
+
+# snapshot = tracemalloc.take_snapshot()
+# top_stats = snapshot.statistics('traceback')
+
+# # pick the biggest memory block
+# stat = top_stats[0]
+# logger.info("%s memory blocks: %.1f MiB" % (stat.count, stat.size / (1024 ** 2)))
+# for line in stat.traceback.format():
+#     logger.info(line)
+
 
 
 obj_to_dump = dict(
-    result=result, history=history, init_params=init_params, circuit=circuit, graph=graph
+    result=result, history=history, init_params=init_params, circuit=circuit, graph=graph, n=n, T=T, K=K
 )
 with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
     pickle.dump(obj_to_dump, f)
 
+if len(history):
+    last_run_data = history[-1]
+    counts = Counter(last_run_data[3])
+    most_common = counts.most_common(100)
+    for e in most_common:
+        logger.info(f'soln: {e[0]}. path: {soln_to_path(e[0], n, T, graph)}. cost: {cost_function(e[0], n, T, graph)}. count: {e[1]}')
 
-last_run_data = history[-1]
-counts = Counter(last_run_data[3])
-most_common = counts.most_common(100)
-for e in most_common:
-    logger.info(f'soln: {e[0]}. path: {soln_to_path(e[0])}. cost: {cost_function(e[0])}. count: {e[1]}')
-
-        
+            

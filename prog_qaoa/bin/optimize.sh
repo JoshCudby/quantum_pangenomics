@@ -12,6 +12,7 @@ init="ramp"
 shots=1000
 maxiter=100
 filename="test_filename"
+method="Powell"
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -20,6 +21,9 @@ while [ "$1" != "" ]; do
                                 ;;
         -m | --memory )         shift
                                 memory="$1"
+                                ;;
+        -M | --method )         shift
+                                method="$1"
                                 ;;
         -p | --reps )           shift
                                 reps="$1"
@@ -57,6 +61,6 @@ outdir="$SCRATCH/out/prog_qaoa"
 echo "Qiskit Testing"
 bsub -J "optimize_$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no" -M "$memory"\
  -o "$outdir/$filename.%J" -e "$outdir/error.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/optimize_prog_qaoa.py -f $filename -p $reps -m $memory -n $shots -i $maxiter --init $init"
+ "python3 $WORKING_DIR/optimize_prog_qaoa.py -f $filename -p $reps -m $memory -n $shots -i $maxiter --init $init -M $method"
 
 exit 0
