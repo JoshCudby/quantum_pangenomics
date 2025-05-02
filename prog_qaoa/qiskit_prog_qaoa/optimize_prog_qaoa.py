@@ -44,6 +44,7 @@ shots = args.shots
 init_type = args.init
 max_iter = args.maxiter
 method = args.method
+lamda = args.lamda
 
 seed = 1
 rng = np.random.default_rng(seed=seed)
@@ -70,12 +71,6 @@ backend = AerSimulator(**backend_options)
 sampler = Sampler(options=dict(backend_options=backend_options))
 
 
-# gfa = Gfa("H	VN:Z:1.0\n\
-# S	u0	TAAC	LN:i:4	SC:f:1.0\n\
-# S	u1	CCCG	LN:i:4	SC:f:1.0\n\
-# L	u0	+	u1	+	0M	EC:i:1\n\
-# L	u1	-	u0	-	0M	EC:i:1")
-
 data_file = f'/lustre/scratch127/qpg/jc59/data/{filename}.gfa'
 gfa = Gfa.from_file(data_file)
 
@@ -101,17 +96,8 @@ ceil_log_n2 = int(np.ceil(np.log2(n+2)))
 logger.info(f'p={p}, n={n}, K={K}, T={T}, ceil_log_n2={ceil_log_n2}')
 logger.info(f'shots={shots}, iter={max_iter}')
 
-# snapshot1 = tracemalloc.take_snapshot()
-
-circuit = get_prog_qaoa_circuit(p=p, n=n, K=K, T=T, graph=graph)
+circuit = get_prog_qaoa_circuit(p=p, n=n, K=K, T=T, graph=graph, lamda=lamda)
 circuit.measure(list(range(T * ceil_log_n2)), list(range(T * ceil_log_n2)))
-
-# snapshot2 = tracemalloc.take_snapshot()
-# top_stats = snapshot2.compare_to(snapshot1, 'lineno')
-
-# logger.info("[ Top 10 differences after get circuit]")
-# for stat in top_stats[:10]:
-#     logger.info(stat)
 
 d_circuit = circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'] ,reps=1)
 gtd = ['circuit*', 'unitary', '*add-1', '*minus-1']
@@ -195,7 +181,7 @@ else:
     result = minimize(
         objective, 
         x0=init_params,
-        args=(n, T, graph, shots, history, t_circuit, sampler), 
+        args=(n, T, graph, lamda, shots, history, t_circuit, sampler), 
         method=method, 
         bounds=tuple((0,1) for _ in range(2 * p)), 
         options={"maxiter": max_iter, },  # "rhobeg": 0.01
@@ -203,21 +189,6 @@ else:
     )
 
 logger.info(result)
-
-# first_size, first_peak = tracemalloc.get_traced_memory()
-# logger.info(f'Mem size after minimize: {first_size}')
-# logger.info(f'Peak size during minimize: {first_peak}')
-
-# snapshot = tracemalloc.take_snapshot()
-# top_stats = snapshot.statistics('traceback')
-
-# # pick the biggest memory block
-# stat = top_stats[0]
-# logger.info("%s memory blocks: %.1f MiB" % (stat.count, stat.size / (1024 ** 2)))
-# for line in stat.traceback.format():
-#     logger.info(line)
-
-
 
 obj_to_dump = dict(
     result=result, history=history, init_params=init_params, circuit=circuit, graph=graph, n=n, T=T, K=K

@@ -481,9 +481,9 @@ def get_mixer_operator(n: int, T: int, parameter=Parameter('beta')) -> QuantumCi
     return mixer
 
 
-def get_phase_operator_gate(n: int, K: int, T: int, graph: nx.Graph, round: int) -> Instruction:
+def get_phase_operator_gate(n: int, K: int, T: int, graph: nx.Graph, lamda: float, round: int) -> Instruction:
     parameter = Parameter(f'theta_{round}')
-    constraint_circuit = get_constraint_circuit(n, K, T, graph, state_prep_circuit=None, parameter=5*parameter)
+    constraint_circuit = get_constraint_circuit(n, K, T, graph, state_prep_circuit=None, parameter=lamda*parameter)
     objective_circuit = get_objective_circuit(n, K, T, graph, state_prep_circuit=None, parameter=parameter)
     constraint_circuit.append(
         objective_circuit, 
@@ -502,7 +502,8 @@ def get_prog_qaoa_circuit(
     n: int,
     K: int,
     T: int,
-    graph: nx.Graph
+    graph: nx.Graph,
+    lamda: float
 ) -> QuantumCircuit:
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
     num_qubits = (K + T) * ceil_log_n2 + 1
@@ -517,8 +518,8 @@ def get_prog_qaoa_circuit(
     # total_circuit.save_statevector('after_prep')
 
     for i in range(p):
-        phase_operator_instruction = get_phase_operator_gate(n,K,T,graph,i)
-        mixer_operator_instruction = get_mixer_gate(n,T,i)
+        phase_operator_instruction = get_phase_operator_gate(n, K, T, graph, lamda, i)
+        mixer_operator_instruction = get_mixer_gate(n, T, i)
         total_circuit.append(
             phase_operator_instruction,
             list(range(phase_operator_instruction.num_qubits))

@@ -1,8 +1,10 @@
 import numpy as np
 from time import time
+import networkx as nx
 
 from scipy.optimize import OptimizeResult
 
+from qiskit import QuantumCircuit
 from qiskit_aer.primitives import SamplerV2 as Sampler
 
 from qiskit_prog_qaoa.utils.logging import get_logger
@@ -28,7 +30,7 @@ def soln_to_path(soln, n, T, graph):
 
 
 
-def cost_function(sample: str, n, T, graph):
+def cost_function(sample: str, n, T, graph: nx.Graph, lamda) -> float:
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
 
     nodes = list(graph.nodes)
@@ -46,12 +48,12 @@ def cost_function(sample: str, n, T, graph):
             cost += 10000 # Should never happen
         elif x[t] == n+1:
             if not x[t+1] == n+1:
-                cost += 5
+                cost += lamda
         else:
             if x[t+1] > n+1:
                 pass
             elif not x[t+1] == n+1 and (nodes[x[t]-1], nodes[x[t+1]-1]) not in graph.edges:
-                cost += 5
+                cost += lamda
 
     for i in range(1, n+1):
         cost += (counts.get(i, 0) - graph.nodes[nodes[i-1]]["weight"]) ** 2
@@ -61,8 +63,8 @@ def cost_function(sample: str, n, T, graph):
     return cost
     
 
-def cvar(counts, n, T, graph, alpha=1.0):
-    evals = [cost_function(key, n, T, graph) for key in counts.keys()]
+def cvar(counts, n, T, graph, lamda, alpha=1.0):
+    evals = [cost_function(key, n, T, graph, lamda) for key in counts.keys()]
     energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
     energies = sorted([x for xs in energies for x in xs])
     if energies[0] == 0:
@@ -71,21 +73,25 @@ def cvar(counts, n, T, graph, alpha=1.0):
     return np.sum(energies[0:end_idx]) / end_idx
 
 
-def objective(x: np.ndarray, n, T, graph, shots, history, circuit, sampler: Sampler):
+def objective(x: np.ndarray, n, T, graph, lamda, shots, history: list, circuit: QuantumCircuit, sampler: Sampler):
     start = time()
     assigned_circuit = circuit.assign_parameters(x, inplace=False)
     sampler_job = sampler.run([assigned_circuit], shots=shots)
-    sampler_result = sampler_job.result()
-    
-    counts = sampler_result[0].data.c.get_counts()
-    sampling_time = time() - start
-    start = time()
-    total_energy = cvar(counts, n, T, graph, alpha=0.05)
-    
-    classical_post_process_time = time() - start
-    
-    history.append((sampling_time, total_energy, x.tolist(), counts, classical_post_process_time))
-    return total_energy
+    try:
+        sampler_result = sampler_job.result()
+        
+        counts = sampler_result[0].data.c.get_counts()
+        sampling_time = time() - start
+        start = time()
+        total_energy = cvar(counts, n, T, graph, lamda, alpha=0.05)
+        
+        classical_post_process_time = time() - start
+        
+        history.append((sampling_time, total_energy, x.tolist(), counts, classical_post_process_time))
+        return total_energy
+    except:
+        logger.error(sampler_job)
+        logger.error(sampler_job.result())
 
 
 def callback(intermediate_result: OptimizeResult):
