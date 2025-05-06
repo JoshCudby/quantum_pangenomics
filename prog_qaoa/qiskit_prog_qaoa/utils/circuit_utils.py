@@ -211,6 +211,7 @@ def get_constraint_circuit(
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
     circuit = QuantumCircuit()
 
+    # T * ceil_log_n2 + K * ceil_log_n2 + 1
     registers = {f'solution_{t}' : QuantumRegister(ceil_log_n2, name=f'solution_{t}') for t in range(T)}
     registers.update({f'next_node_{k}': QuantumRegister(ceil_log_n2, name=f'next_node_{k}') for k in range(K)})
     registers.update({'flag': QuantumRegister(1, name='flag')})
@@ -367,6 +368,7 @@ def get_objective_circuit(
 
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
     ceil_log_K1 = int(np.ceil(np.log2(K+1)))
+    # T * ceil_log_n2 + ceil_log_K1 + 1
     registers = {f'solution_{t}' : QuantumRegister(ceil_log_n2, name=f'solution_{t}') for t in range(T)}
     registers.update({'flag': QuantumRegister(1, name='flag')})
     registers.update({'count': QuantumRegister(ceil_log_K1, name='count')})
@@ -515,7 +517,7 @@ def get_prog_qaoa_circuit(
         state_prep_gate,
         list(range(state_prep_gate.num_qubits))
     )
-    # total_circuit.save_statevector('after_prep')
+    total_circuit.save_statevector('after_prep')
 
     for i in range(p):
         phase_operator_instruction = get_phase_operator_gate(n, K, T, graph, lamda, i)
@@ -524,10 +526,10 @@ def get_prog_qaoa_circuit(
             phase_operator_instruction,
             list(range(phase_operator_instruction.num_qubits))
         )
-        # total_circuit.save_statevector(f'after_phase_{i}')
+        total_circuit.save_statevector(f'after_phase_{i}')
         total_circuit.append(
             mixer_operator_instruction,
             list(range(mixer_operator_instruction.num_qubits))
         )
-        # total_circuit.save_statevector(f'after_mixer_{i}')
+        total_circuit.save_statevector(f'after_mixer_{i}')
     return total_circuit

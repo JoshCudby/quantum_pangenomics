@@ -31,6 +31,8 @@ history = data["history"]
 graph = data["graph"]
 n = data["n"]
 T = data["T"]
+lamda = data["lamda"]
+
 
 fig, axs = plt.subplots(1, 2, figsize=(12,4))
 axs[0].plot([hist[1] for hist in history])
@@ -50,12 +52,12 @@ fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/prog_qaoa/out/{filenam
 
 
 min_val = 0
-max_val = (T-1) * 5 + T ** 2 # TODO: unify penalties across code
+max_val = (T-1) * lamda + T ** 2 
 
 
 start = time()
 counts: dict = history[-1][3]
-evals = [cost_function(sample, n, T, graph) for sample in counts.keys()]
+evals = [cost_function(sample, n, T, graph, lamda) for sample in counts.keys()]
 print(evals)
 sample_vals = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
 sample_vals = [x for xs in sample_vals for x in xs]
@@ -72,7 +74,7 @@ random_samples = [
 random_samples = [
     ''.join(sample) for sample in random_samples
 ]
-rand_vals = [cost_function(sample, n, T, graph) for sample in random_samples]
+rand_vals = [cost_function(sample, n, T, graph, lamda) for sample in random_samples]
 
 alpha_qaoa = (min(sample_vals) - max_val) / (min_val - max_val)
 alpha_rand = (min(rand_vals) - max_val) / (min_val - max_val)

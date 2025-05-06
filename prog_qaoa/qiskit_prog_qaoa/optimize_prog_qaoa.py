@@ -4,7 +4,6 @@ import networkx as nx
 from scipy.optimize import minimize
 from collections import Counter
 from fnmatch import fnmatch
-
 from gfapy import Gfa
 
 from qiskit import QuantumCircuit, transpile
@@ -50,10 +49,12 @@ seed = 1
 rng = np.random.default_rng(seed=seed)
 
 backend_options = dict(
-    method='statevector',
+    method='matrix_product_state',
     device='GPU',
     max_memory_mb=args.memory*0.9,
     cuStateVec_enable=True,
+    # fusion_enable=False,
+    matrix_product_state_max_bond_dimension=5,
     blocking_enable=True,
     blocking_qubits=30,
     # batched_shots_gpu_max_qubits=24,
@@ -140,7 +141,7 @@ if init_type == 'ramp':
         (1 / p) * (t * (1 - 0.5 / p)), (1 / p) * (t * 0.5 / p), p
     )
     gammas = betas[::-1]
-    init_params = betas.tolist() + gammas.tolist()
+    init_params = np.array(betas.tolist() + gammas.tolist())
 else:
     init_params = rng.uniform(0.05, 0.95, p).tolist() + rng.uniform(0.05, 0.95, p).tolist()
 logger.info(f'Init: {init_params}')
@@ -151,21 +152,26 @@ history = []
 ################################################
 ###### CHECK FOR INVALID NODES
 ################################################
-# to_run = t_circuit.assign_parameters(init_params, inplace=False)
-# result = backend.run(to_run).result()
+to_run = t_circuit.assign_parameters(init_params, inplace=False)
+result = backend.run(to_run).result()
 
-# savepoints = ['after_prep'] + [f'after_phase_{i}' for i in range(p)] + [f'after_mixer_{i}' for i in range(p)]
-# for savepoint in savepoints:
-#     data = result.data()[savepoint].data
-#     data[np.abs(data) < 1e-8] = 0
-#     data_nz = np.transpose(np.nonzero(data))
-#     logger.error(f'Checking: {savepoint}')
-#     for nz in data_nz:
-#         binary_rep = np.binary_repr(nz[0], T * ceil_log_n2)
-#         for t in range(T):
-#             slice = binary_rep[ceil_log_n2*t:ceil_log_n2*(t+1)]
-#             if slice in ['000', '110', '111']:
-#                 logger.error(f'Nonzero amplitude of: {binary_rep}. Amplitude: {data[nz[0]]}')
+savepoints = ['after_prep'] + [f'after_phase_{i}' for i in range(p)] + [f'after_mixer_{i}' for i in range(p)]
+for savepoint in savepoints:
+    data = result.data()[savepoint].data
+    data[np.abs(data) < 1e-8] = 0
+    data_nz = np.transpose(np.nonzero(data))
+    logger.error(f'Checking: {savepoint}')
+    for nz in data_nz:
+        binary_rep = np.binary_repr(nz[0])
+        if len(binary_rep) > T * ceil_log_n2:
+            logger.error('Unexpectedly large non-zero amplitude.')
+            logger.error(f'Rep: {binary_rep}. Len: {len(binary_rep)}')
+        if len(binary_rep) < T * ceil_log_n2:
+            binary_rep = binary_rep.ljust(T * ceil_log_n2, '0')
+        for t in range(T):
+            slice = binary_rep[ceil_log_n2*t:ceil_log_n2*(t+1)]
+            if slice in ['000', '111']:
+                logger.error(f'Nonzero amplitude of: {binary_rep}. Amplitude: {data[nz[0]]}')
 ################################################
 
 
@@ -184,14 +190,14 @@ else:
         args=(n, T, graph, lamda, shots, history, t_circuit, sampler), 
         method=method, 
         bounds=tuple((0,1) for _ in range(2 * p)), 
-        options={"maxiter": max_iter, },  # "rhobeg": 0.01
+        options={"maxiter": max_iter, "maxfev": max_iter},  # "rhobeg": 0.01
         callback=callback
     )
 
 logger.info(result)
 
 obj_to_dump = dict(
-    result=result, history=history, init_params=init_params, circuit=circuit, graph=graph, n=n, T=T, K=K
+    result=result, history=history, init_params=init_params, circuit=circuit, graph=graph, n=n, T=T, K=K, lamda=lamda
 )
 with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
     pickle.dump(obj_to_dump, f)
@@ -201,6 +207,6 @@ if len(history):
     counts = Counter(last_run_data[3])
     most_common = counts.most_common(100)
     for e in most_common:
-        logger.info(f'soln: {e[0]}. path: {soln_to_path(e[0], n, T, graph)}. cost: {cost_function(e[0], n, T, graph)}. count: {e[1]}')
+        logger.info(f'soln: {e[0]}. path: {soln_to_path(e[0], n, T, graph)}. cost: {cost_function(e[0], n, T, graph, lamda)}. count: {e[1]}')
 
-            
+# Errors in 117256?? Mixed into wrong subspace...?

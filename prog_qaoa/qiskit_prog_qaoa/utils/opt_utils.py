@@ -67,8 +67,8 @@ def cvar(counts, n, T, graph, lamda, alpha=1.0):
     evals = [cost_function(key, n, T, graph, lamda) for key in counts.keys()]
     energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
     energies = sorted([x for xs in energies for x in xs])
-    if energies[0] == 0:
-        return -1
+    # if energies[0] == 0:
+    #     return -1
     end_idx = int(min(alpha,1) * len(energies))
     return np.sum(energies[0:end_idx]) / end_idx
 
@@ -89,9 +89,11 @@ def objective(x: np.ndarray, n, T, graph, lamda, shots, history: list, circuit: 
         
         history.append((sampling_time, total_energy, x.tolist(), counts, classical_post_process_time))
         return total_energy
-    except:
-        logger.error(sampler_job)
+    except Exception as e:
+        logger.error(e)
         logger.error(sampler_job.result())
+        logger.error(sampler_job.result()[0].data)
+        logger.error(sampler_job.result()[0].data.c)
 
 
 def callback(intermediate_result: OptimizeResult):
