@@ -88,7 +88,7 @@ for edge_line in gfa.edges:
     ])
 
 n = len(gfa.segments)
-K = max(dict(graph.nodes(data="weight", default=0)).values())
+K = max(dict(graph.nodes(data="weight", default=0)).values()) # K should be more than max weight to allow for over-visiting a high weight node.
 K = int(min(K, 5))
 nodes_weights = list(graph.nodes(data="weight"))
 total_weight = sum(x[1] if x[1] is not None else 0 for x in nodes_weights)
@@ -167,9 +167,12 @@ for savepoint in savepoints:
             logger.error('Unexpectedly large non-zero amplitude.')
             logger.error(f'Rep: {binary_rep}. Len: {len(binary_rep)}')
         if len(binary_rep) < T * ceil_log_n2:
-            binary_rep = binary_rep.ljust(T * ceil_log_n2, '0')
-        for t in range(T):
-            slice = binary_rep[ceil_log_n2*t:ceil_log_n2*(t+1)]
+            binary_rep = binary_rep.rjust(T * ceil_log_n2, '0')
+        slice = binary_rep[-ceil_log_n2:]
+        if slice in ['000', '111']:
+            logger.error(f'Nonzero amplitude of: {binary_rep}. Amplitude: {data[nz[0]]}')
+        for t in range(1, T):
+            slice = binary_rep[-ceil_log_n2*(t+1):-ceil_log_n2*t]
             if slice in ['000', '111']:
                 logger.error(f'Nonzero amplitude of: {binary_rep}. Amplitude: {data[nz[0]]}')
 ################################################

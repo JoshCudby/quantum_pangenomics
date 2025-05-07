@@ -52,6 +52,9 @@ def get_single_bitstring_mapping(
     circ.save_statevector('end')
     t_circ = transpile(circ, simulator, optimization_level=3)
     result = simulator.run(t_circ).result()
+    if len(np.nonzero(result.data()['end'].data)) > 1:
+        raise Exception('Mapped to several non-zero amplitudes')
+    
     start_ket = np.binary_repr(np.nonzero(result.data()['start'].data)[0][0], len(input_str))[::-1]
     end_ket = np.binary_repr(np.nonzero(result.data()['end'].data)[0][0], len(input_str))[::-1]
     return start_ket, end_ket
@@ -81,6 +84,8 @@ def get_single_bitstring_mapping_with_amplitudes(
     start_amplitude = start_data[np.nonzero(start_data)[0][0]]
 
     end_data = result.data()['end'].data
+    if len(np.nonzero(end_data)) > 1:
+        raise Exception('Mapped to several non-zero amplitudes')
     end_ket = np.binary_repr(np.nonzero(end_data)[0][0], len(input_str))[::-1]
     end_amplitude = end_data[np.nonzero(end_data)[0][0]]
 
@@ -99,41 +104,68 @@ def get_final_statevector(
 
 
 class TestIsEqualTo(unittest.TestCase):
-    def test_is_equal_to_2_1(self):        
-        equal = is_equal_to(2, 1)
-        unitary = Operator.from_circuit(equal).data
+    def setUp(self):
+        self.num_qubits = 3
+        self.simulator = AerSimulator()
         
-        want = np.array([
-            [1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j]
-        ])
-        self.assertTrue(
-            np.allclose(unitary, want)
+    def test_is_equal_to_2_1(self):
+        start_ket, end_ket = get_single_bitstring_mapping(
+            '1000', # sol[0] sol[1] sol[2] flag
+            is_equal_to(self.num_qubits, 1),
+            self.simulator
         )
-
-    def test_is_equal_to_2_2(self):        
-        equal = is_equal_to(2, 2)
-        unitary = Operator.from_circuit(equal).data
+        self.assertEqual(
+            start_ket,
+            '1000'
+        )
+        self.assertEqual(
+            end_ket,
+            '1001'
+        )
         
-        want = np.array([
-            [1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j, 0.+0.j],
-            [0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 0.+0.j, 1.+0.j]
-        ])
-        self.assertTrue(
-            np.allclose(unitary, want)
+        start_ket, end_ket = get_single_bitstring_mapping(
+            '1100', # sol[0] sol[1] sol[2] flag
+            is_equal_to(self.num_qubits, 1),
+            self.simulator
         )
+        self.assertEqual(
+            start_ket,
+            '1100'
+        )
+        self.assertEqual(
+            end_ket,
+            '1100'
+        )
+        
+    def test_is_equal_to_2_2(self):
+        start_ket, end_ket = get_single_bitstring_mapping(
+            '0100', # sol[0] sol[1] sol[2] flag
+            is_equal_to(self.num_qubits, 2),
+            self.simulator
+        )
+        self.assertEqual(
+            start_ket,
+            '0100'
+        )
+        self.assertEqual(
+            end_ket,
+            '0101'
+        )
+        
+        start_ket, end_ket = get_single_bitstring_mapping(
+            '1100', # sol[0] sol[1] sol[2] flag
+            is_equal_to(self.num_qubits, 2),
+            self.simulator
+        )
+        self.assertEqual(
+            start_ket,
+            '1100'
+        )
+        self.assertEqual(
+            end_ket,
+            '1100'
+        )
+        
         
 class TestCcSwap(unittest.TestCase):
     def setUp(self):
@@ -145,7 +177,7 @@ class TestCcSwap(unittest.TestCase):
 
     def test_cc_swap_identity_if_control_off(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '0000001101000',
+            '0000001101000', # flag sol[0] sol[1] sol[2] nn0[0] nn0[1] nn0[2] nn1[0] nn1[1] nn1[2]
             self.cc,
             self.simulator
         )
@@ -252,33 +284,33 @@ class TestComputeNextNodes(unittest.TestCase):
     
     def test_compute_nn_copies_one_next_node(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '0010111000000000000',
+            '1001100010000000000', # sol0[0]sol0[1]sol0[2] sol1[0]sol1[1]sol1[2] sol2[0]sol2[1]sol2[2] nn0[0]nn0[1]nn0[2] nn1[0]nn1[1]nn1[2] nn2[0]nn2[1]nn2[2] flag
             self.nn,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0010111000000000000'
+            '1001100010000000000'
         )
         self.assertEqual(
             end_ket,
-            '0010111000110000000'
+            '1001100011100000000'
         )
 
 
     def test_compute_nn_copies_several_next_nodes(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '0010011110000000000',
+            '1001001110000000000',
             self.nn,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0010011110000000000'
+            '1001001110000000000'
         )
         self.assertEqual(
             end_ket,
-            '0010011111110010000'
+            '1001001111111000000'
         )
 
 
@@ -303,33 +335,33 @@ class TestUncomputeNextNodes(unittest.TestCase):
     
     def test_uncompute_nn_uncopies_one_next_node(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '0010111000110000000',
+            '1001100011100000000',
             self.nn,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0010111000110000000'
+            '1001100011100000000'
         )
         self.assertEqual(
             end_ket,
-            '0010111000000000000'
+            '1001100010000000000'
         )
 
 
     def test_uncompute_nn_uncopies_several_next_nodes(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '0010011111110010000',
+            '1001001111111000000',
             self.nn,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0010011111110010000'
+            '1001001111111000000'
         )
         self.assertEqual(
             end_ket,
-            '0010011110000000000'
+            '1001001110000000000'
         )
 
 
@@ -337,15 +369,13 @@ class TestPenaliseGraphSteps(unittest.TestCase):
     def setUp(self):
         self.simulator = AerSimulator()
         self.n = 3
-        self.T = 3
         self.K = 3
         ceil_log_n2 = int(np.ceil(np.log2(self.n+2)))
         self.parameter = np.pi/16
         self.graph = toy_graph()
         circuit = QuantumCircuit()
 
-        registers = {f'solution_{t}' : QuantumRegister(ceil_log_n2, name=f'solution_{t}') for t in range(self.T)}
-        registers.update({f'next_node_{k}': QuantumRegister(ceil_log_n2, name=f'next_node_{k}') for k in range(self.K)})
+        registers = {f'next_node_{k}': QuantumRegister(ceil_log_n2, name=f'next_node_{k}') for k in range(self.K)}
         registers.update({'flag': QuantumRegister(1, name='flag')})
 
 
@@ -355,13 +385,13 @@ class TestPenaliseGraphSteps(unittest.TestCase):
 
     def test_no_penalty_no_next_nodes(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '0110111000000000000',
+            '0000000000', # n0[0]nn0[1]nn0[2] nn1[0]nn1[1]nn1[2] nn2[0]nn2[1]nn2[2] flag
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0110111000000000000'
+            '0000000000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -369,7 +399,7 @@ class TestPenaliseGraphSteps(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '0110111000000000000'
+            '0000000000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -379,13 +409,13 @@ class TestPenaliseGraphSteps(unittest.TestCase):
     
     def test_no_penalty_valid_graph_steps(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '0010111000100000000',
+            '0100000000',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0010111000100000000'
+            '0100000000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -393,7 +423,29 @@ class TestPenaliseGraphSteps(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '0010111000100000000'
+            '0100000000'
+        )
+        self.assertAlmostEqual(
+            end_amplitude,
+            1. + 0.j
+        )
+        
+        start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
+            '0100100000',
+            self.gs,
+            self.simulator
+        )
+        self.assertEqual(
+            start_ket,
+            '0100100000'
+        )
+        self.assertAlmostEqual(
+            start_amplitude,
+            1. + 0.j
+        )
+        self.assertEqual(
+            end_ket,
+            '0100100000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -402,13 +454,13 @@ class TestPenaliseGraphSteps(unittest.TestCase):
 
     def test_penalty_broken_graph_step(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '0010110110110000000',
+            '1100000000',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0010110110110000000'
+            '1100000000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -416,7 +468,7 @@ class TestPenaliseGraphSteps(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '0010110110110000000'
+            '1100000000' # nn0[0]nn0[1]nn0[2] nn1[0]nn1[1]nn1[2] nn2[0]nn2[1]nn2[2] flag
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -426,13 +478,13 @@ class TestPenaliseGraphSteps(unittest.TestCase):
 
     def test_penalty_broken_graph_steps(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '0010010110110010000',
+            '1101100000',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0010010110110010000'
+            '1101100000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -440,7 +492,7 @@ class TestPenaliseGraphSteps(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '0010010110110010000'
+            '1101100000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -452,14 +504,12 @@ class TestPenaliseGraphEndSteps(unittest.TestCase):
     def setUp(self):
         self.simulator = AerSimulator()
         self.n = 3
-        self.T = 3
         self.K = 3
         ceil_log_n2 = int(np.ceil(np.log2(self.n+2)))
         self.parameter = np.pi/16
         circuit = QuantumCircuit()
 
-        registers = {f'solution_{t}' : QuantumRegister(ceil_log_n2, name=f'solution_{t}') for t in range(self.T)}
-        registers.update({f'next_node_{k}': QuantumRegister(ceil_log_n2, name=f'next_node_{k}') for k in range(self.K)})
+        registers = {f'next_node_{k}': QuantumRegister(ceil_log_n2, name=f'next_node_{k}') for k in range(self.K)}
         registers.update({'flag': QuantumRegister(1, name='flag')})
 
 
@@ -469,13 +519,13 @@ class TestPenaliseGraphEndSteps(unittest.TestCase):
 
     def test_no_penalty_no_next_nodes(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '0110111000000000000',
+            '0000000000',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0110111000000000000'
+            '0000000000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -483,7 +533,7 @@ class TestPenaliseGraphEndSteps(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '0110111000000000000'
+            '0000000000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -493,13 +543,13 @@ class TestPenaliseGraphEndSteps(unittest.TestCase):
     
     def test_no_penalty_valid_graph_steps(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '1001001001001000000',
+            '0010010000',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '1001001001001000000'
+            '0010010000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -507,7 +557,7 @@ class TestPenaliseGraphEndSteps(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '1001001001001000000'
+            '0010010000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -516,13 +566,13 @@ class TestPenaliseGraphEndSteps(unittest.TestCase):
 
     def test_penalty_broken_graph_step(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '1001000010011000000',
+            '0011000000',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '1001000010011000000'
+            '0011000000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -530,7 +580,7 @@ class TestPenaliseGraphEndSteps(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '1001000010011000000'
+            '0011000000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -540,13 +590,13 @@ class TestPenaliseGraphEndSteps(unittest.TestCase):
 
     def test_penalty_broken_graph_steps(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '0000000001000100010',
+            '1000100010',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0000000001000100010'
+            '1000100010'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -554,7 +604,7 @@ class TestPenaliseGraphEndSteps(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '0000000001000100010'
+            '1000100010'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -599,47 +649,47 @@ class TestComputeCount(unittest.TestCase):
     
     def test_compute_count_counts_one_visit(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '001010010000',
+            '100010010000', # sol0[0]sol0[1]sol0[2] sol1[0]sol1[1]sol1[2] sol2[0]sol2[1]sol2[2] flag count[0]count[1]
             self.cc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '001010010000'
+            '100010010000'
         )
         self.assertEqual(
             end_ket,
-            '001010010001'
+            '100010010010'
         )
 
     def test_compute_count_counts_two_visits(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '001001010000',
+            '100100010000',
             self.cc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '001001010000'
+            '100100010000'
         )
         self.assertEqual(
             end_ket,
-            '001001010010'
+            '100100010001'
         )
 
     def test_compute_count_counts_three_visits(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '001001001000',
+            '100100100000',
             self.cc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '001001001000'
+            '100100100000'
         )
         self.assertEqual(
             end_ket,
-            '001001001011'
+            '100100100011'
         )
 
 
@@ -680,64 +730,60 @@ class TestUncomputeCount(unittest.TestCase):
     
     def test_uncompute_count_uncounts_one_visit(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '001010010001',
+            '100010010010',
             self.cc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '001010010001'
+            '100010010010'
         )
         self.assertEqual(
             end_ket,
-            '001010010000'
+            '100010010000'
         )
 
     def test_uncompute_count_uncounts_two_visits(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '001001010010',
+            '100100010001',
             self.cc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '001001010010'
+            '100100010001'
         )
         self.assertEqual(
             end_ket,
-            '001001010000'
+            '100100010000'
         )
 
     def test_uncompute_count_uncounts_three_visits(self):
         start_ket, end_ket = get_single_bitstring_mapping(
-            '001001001011',
+            '100100100011',
             self.cc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '001001001011'
+            '100100100011'
         )
         self.assertEqual(
             end_ket,
-            '001001001000'
+            '100100100000'
         )
 
 
 class TestPenaliseCount(unittest.TestCase):
     def setUp(self):
         self.simulator = AerSimulator()
-        self.n = 3
-        self.T = 3
         self.K = 3
         ceil_log_K1 = int(np.ceil(np.log2(self.K+1)))
-        ceil_log_n2 = int(np.ceil(np.log2(self.n+2)))
         self.parameter = np.pi/16
         self.graph = toy_graph()
         circuit = QuantumCircuit()
 
-        registers = {f'solution_{t}' : QuantumRegister(ceil_log_n2, name=f'solution_{t}') for t in range(self.T)}
-        registers.update({'flag': QuantumRegister(1, name='flag')})
+        registers = {'flag': QuantumRegister(1, name='flag')}
         registers.update({'count': QuantumRegister(ceil_log_K1, name='count')})
 
 
@@ -748,13 +794,13 @@ class TestPenaliseCount(unittest.TestCase):
 
     def test_no_penalty_count_is_weight(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '001010010001',
+            '010',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '001010010001'
+            '010'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -762,7 +808,7 @@ class TestPenaliseCount(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '001010010001'
+            '010'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -771,13 +817,13 @@ class TestPenaliseCount(unittest.TestCase):
 
     def test_penalty_count_1_under_weight(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '010010010000',
+            '000',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '010010010000'
+            '000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -785,7 +831,7 @@ class TestPenaliseCount(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '010010010000'
+            '000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -795,13 +841,13 @@ class TestPenaliseCount(unittest.TestCase):
     
     def test_penalty_count_1_over_weight(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '001001010010',
+            '001',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '001001010010'
+            '001'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -809,7 +855,7 @@ class TestPenaliseCount(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '001001010010'
+            '001'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -818,13 +864,13 @@ class TestPenaliseCount(unittest.TestCase):
 
     def test_penalty_count_2_over_weight(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '001001001011',
+            '011',
             self.gs,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '001001001011'
+            '011'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -832,7 +878,7 @@ class TestPenaliseCount(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '001001001011'
+            '011'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -854,13 +900,13 @@ class TestConstraintCircuit(unittest.TestCase):
 
     def test_constraint_circuit_no_penalty(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '0010101000000000000',
+            '1000100010000000000',
             self.cc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0010101000000000000'
+            '1000100010000000000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -868,7 +914,7 @@ class TestConstraintCircuit(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '0010101000000000000'
+            '1000100010000000000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -924,13 +970,13 @@ class TestConstraintCircuit(unittest.TestCase):
 
     def test_constraint_circuit_broken_graph_end_step(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '0101000100000000000',
+            '0100010100000000000',
             self.cc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '0101000100000000000'
+            '0100010100000000000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -938,7 +984,7 @@ class TestConstraintCircuit(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '0101000100000000000'
+            '0100010100000000000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -947,13 +993,13 @@ class TestConstraintCircuit(unittest.TestCase):
 
     def test_constraint_circuit_broken_graph_and_graph_end_step(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '1000010110000000000',
+            '0011001100000000000',
             self.cc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '1000010110000000000'
+            '0011001100000000000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -961,7 +1007,7 @@ class TestConstraintCircuit(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '1000010110000000000'
+            '0011001100000000000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -983,13 +1029,13 @@ class TestObjectiveCircuit(unittest.TestCase):
 
     def test_objective_circuit_no_penalty(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '001010011000',
+            '100010110000', # sol0[0]sol0[1]sol0[2] sol1[0]sol1[1]sol1[2] sol2[0]sol2[1]sol2[2] flag count[0]count[1]
             self.oc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '001010011000'
+            '100010110000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -997,7 +1043,7 @@ class TestObjectiveCircuit(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '001010011000'
+            '100010110000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -1006,13 +1052,13 @@ class TestObjectiveCircuit(unittest.TestCase):
 
     def test_objective_circuit_2_nodes_off_by_1(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
-            '010010011000',
+            '010010110000',
             self.oc,
             self.simulator
         )
         self.assertEqual(
             start_ket,
-            '010010011000'
+            '010010110000'
         )
         self.assertAlmostEqual(
             start_amplitude,
@@ -1020,7 +1066,7 @@ class TestObjectiveCircuit(unittest.TestCase):
         )
         self.assertEqual(
             end_ket,
-            '010010011000'
+            '010010110000'
         )
         self.assertAlmostEqual(
             end_amplitude,
@@ -1028,7 +1074,7 @@ class TestObjectiveCircuit(unittest.TestCase):
         )
 
     
-    def test_objective_circuit_1_nodes_off_by_2_2_nodes_off_by_1(self):
+    def test_objective_circuit_1_node_off_by_2_2_nodes_off_by_1(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
             '010010010000',
             self.oc,

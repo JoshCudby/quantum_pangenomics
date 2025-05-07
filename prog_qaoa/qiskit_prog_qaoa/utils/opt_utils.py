@@ -38,21 +38,20 @@ def cost_function(sample: str, n, T, graph: nx.Graph, lamda) -> float:
     x = []
     counts = {}
     for t in range(T):
-        x_int = sum(2 ** (ceil_log_n2-i-1) * int(sample[t * ceil_log_n2 + i]) for i in range(ceil_log_n2))
+        x_int = sum(2 ** i * int(sample[-1-i-t*ceil_log_n2]) for i in range(ceil_log_n2))
         x.append(x_int)
         counts[x_int] = counts.get(x_int, 0) + 1
 
+    if any(x[t] > n+1 for t in range(T)):
+        logger.error(f'Sampled an invalid node! Sample ints: {x}. Sample: {sample}.')
+        return 10000 # Should never happen
+
     for t in range(T-1):
-        if x[t] > n+1:
-            logger.error(f'Sampled an invalid node! Sample ints: {x}. Sample: {sample}.')
-            cost += 10000 # Should never happen
-        elif x[t] == n+1:
+        if x[t] == n+1:
             if not x[t+1] == n+1:
                 cost += lamda
         else:
-            if x[t+1] > n+1:
-                pass
-            elif not x[t+1] == n+1 and (nodes[x[t]-1], nodes[x[t+1]-1]) not in graph.edges:
+            if not x[t+1] == n+1 and (nodes[x[t]-1], nodes[x[t+1]-1]) not in graph.edges:
                 cost += lamda
 
     for i in range(1, n+1):

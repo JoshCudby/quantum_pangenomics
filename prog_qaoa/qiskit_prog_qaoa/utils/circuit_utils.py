@@ -15,7 +15,7 @@ def is_equal_to(num_qubits: int, value: int) -> QuantumCircuit:
     value: value to check
     """
     circ = QuantumCircuit(num_qubits + 1)
-    circ.mcx(list(range(num_qubits-1,-1,-1)), num_qubits, ctrl_state=value)
+    circ.mcx(list(range(num_qubits)), num_qubits, ctrl_state=value)
     return circ
 
 
@@ -27,8 +27,11 @@ def controlled_copy_with_swap(num_qubits: int, K: int) -> QuantumCircuit:
     num_qubits: size of register to be copied
     K: number of copy registers
     """
-    # Qubits: c_copy_flag, to_be_copied, K * (reg_to_be_copied_into)
+    # Qubits: c_copy_flag, to_be_copied, K * (reg_to_be_copied_into), 
     circ = QuantumCircuit(1 + (K+1) * num_qubits)
+    
+    # If final register not empty, visited a node too many times. Apply a 2*lamda penalty, since we cannot account for the next graph step
+    # circ
     
     # For each qubit i in final copy register:
     for i in range(num_qubits):
@@ -266,7 +269,7 @@ def compute_count(circuit: QuantumCircuit, registers: dict, j: int, n: int, K: i
         # circuit.save_statevector(f'before_c_add_{j}_{t}')
         circuit.unitary(
             control_add_one, 
-            list(range(circuit.find_bit(registers['count'][-1]).index, circuit.find_bit(registers['count'][0]).index - 1, -1)) + \
+            list(range(circuit.find_bit(registers['count'][0]).index, circuit.find_bit(registers['count'][-1]).index +1)) + \
                 [circuit.find_bit(registers['flag'][0]).index],
             label='control-add-1'
         )
@@ -340,7 +343,7 @@ def uncompute_count(circuit: QuantumCircuit, registers: dict, j: int, n: int, K:
         
         circuit.unitary(
             control_minus_one, 
-            list(range(circuit.find_bit(registers['count'][-1]).index, circuit.find_bit(registers['count'][0]).index - 1, -1)) + \
+            list(range(circuit.find_bit(registers['count'][0]).index, circuit.find_bit(registers['count'][-1]).index + 1)) + \
                 [circuit.find_bit(registers['flag'][0]).index],
             label='control-minus-1'
         )
