@@ -1,0 +1,23 @@
+H	VN:Z:1.0
+S	u0	*	LN:i:4	SC:f:1.0	st:Z:start
+S	u1	*	LN:i:4	SC:f:1.0
+S	u2	*	LN:i:4	SC:f:1.0
+S	u3	*	LN:i:4	SC:f:0.0
+S	u4	*	LN:i:4	SC:f:0.0
+S	u5	*	LN:i:4	SC:f:0.0
+S	u6	*	LN:i:4	SC:f:0.0
+S	u7	*	LN:i:4	SC:f:1.0	st:Z:end
+L	u0	+	u1	+	0M	EC:i:1
+L	u0	+	u2	+	0M	EC:i:1
+L	u1	+	u2	+	0M	EC:i:1
+L	u1	+	u3	+	0M	EC:i:1
+L	u2	+	u3	+	0M	EC:i:1
+L	u2	+	u7	+	0M	EC:i:1
+L	u3	+	u4	+	0M	EC:i:1
+L	u3	+	u5	+	0M	EC:i:1
+L	u3	+	u6	+	0M	EC:i:1
+L	u4	+	u5	+	0M	EC:i:1
+L	u4	+	u7	+	0M	EC:i:1
+L	u5	+	u6	+	0M	EC:i:1
+L	u5	+	u7	+	0M	EC:i:1
+L	u6	+	u7	+	0M	EC:i:1
