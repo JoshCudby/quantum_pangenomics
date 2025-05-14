@@ -19,19 +19,30 @@ def is_equal_to(num_qubits: int, value: int) -> QuantumCircuit:
     return circ
 
 
-def controlled_copy_with_swap(num_qubits: int, K: int) -> QuantumCircuit:
+def controlled_copy_with_swap(num_qubits: int, K: int, parameter: Parameter | None = None) -> QuantumCircuit:
     """
     Creates a controlled copy circuit that also shuffles all the registers in the copy list forward one place.
     |0>|to_be_copied>|copy_1>|copy_2>...|copy_K> -> |0>|to_be_copied>|copy_1>|copy_2>...|copy_K>
-    |1>|to_be_copied>|copy_1>|copy_2>...|copy_K> -> |1>|to_be_copied>|copy_2 + to_be_copied>...|copy_K>|copy_1> , where the addition is bitwise.
+    |1>|to_be_copied>|copy_1>|copy_2>...|copy_K> -> |1>|to_be_copied>|copy_K+ to_be_copied>|copy_1 >...|copy_K-1> , where the addition is bitwise.
+    
+    If copy_K is not empty (i.e. all-zero ket), applies a penalty phase.
     num_qubits: size of register to be copied
     K: number of copy registers
     """
-    # Qubits: c_copy_flag, to_be_copied, K * (reg_to_be_copied_into), 
-    circ = QuantumCircuit(1 + (K+1) * num_qubits)
+    # Qubits: c_copy_flag, to_be_copied, K * (reg_to_be_copied_into), final_reg_empty_flag
+    circ = QuantumCircuit(1 + (K+1) * num_qubits + 1)
     
-    # If final register not empty, visited a node too many times. Apply a 2*lamda penalty, since we cannot account for the next graph step
-    # circ
+    # Penalise only when computing, not uncomputing, and only when trying to make a new copy.
+    # If final register not empty, visited a node too many times. Apply a large penalty, since we cannot account for the next graph step. 
+    # It also messes up already-tracked graph steps, overwriting them with a bitwise-and with the new step.
+    # So apply 3x penalty.
+    if parameter is not None:
+        circ.mcx(list(range(K*num_qubits+1, (K+1)*num_qubits+1)), (K+1)*num_qubits+1, ctrl_state=0)
+        circ.cp(-parameter, 0, (K+1)*num_qubits+1)
+        circ.mcx(list(range(K*num_qubits+1, (K+1)*num_qubits+1)), (K+1)*num_qubits+1, ctrl_state=0)
+        circ.x((K+1)*num_qubits+1)
+        circ.cp(parameter, 0, (K+1)*num_qubits+1)
+        circ.x((K+1)*num_qubits+1)
     
     # For each qubit i in final copy register:
     for i in range(num_qubits):
@@ -46,7 +57,7 @@ def controlled_copy_with_swap(num_qubits: int, K: int) -> QuantumCircuit:
 
 
 def compute_next_nodes(
-        circuit: QuantumCircuit, registers: dict, j: int, n: int, K: int, T: int
+        circuit: QuantumCircuit, registers: dict, j: int, n: int, K: int, T: int, parameter: Parameter | None
 ) -> QuantumCircuit:
     """
     Appends a compute_next_nodes subroutine to a circuit, which initialises registers .
@@ -56,7 +67,7 @@ def compute_next_nodes(
         Resets the flag.
     """
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
-    cc_circ = controlled_copy_with_swap(ceil_log_n2, K)
+    cc_circ = controlled_copy_with_swap(ceil_log_n2, K, parameter)
     is_equal_circ = is_equal_to(ceil_log_n2, j)
     for t in range(T-1):
         # circuit.barrier(label=f'is_equal c_{t}, {j}')
@@ -74,10 +85,11 @@ def compute_next_nodes(
         copy_registers = list(range(
             circuit.find_bit(registers['next_node_0'][0]).index, circuit.find_bit(registers[f'next_node_{K-1}'][-1]).index + 1
         ))
+        too_many_visits_flag = circuit.find_bit(registers['visits_flag'][0]).index
 
         circuit.append(
             cc_circ, 
-            [flag] + to_copy + copy_registers
+            [flag] + to_copy + copy_registers + [too_many_visits_flag]
         )
 
         # circuit.barrier(label=f'uncompute is_equal c_{t}, {j}')
@@ -110,10 +122,11 @@ def uncompute_next_nodes(circuit: QuantumCircuit, registers, j, n, K, T):
         copy_registers = list(range(
             circuit.find_bit(registers['next_node_0'][0]).index, circuit.find_bit(registers[f'next_node_{K-1}'][-1]).index + 1
         ))
+        too_many_visits_flag = circuit.find_bit(registers['visits_flag'][0]).index
 
         circuit.append(
             cc_circ.reverse_ops(), 
-            [flag] + to_copy + copy_registers
+            [flag] + to_copy + copy_registers + [too_many_visits_flag]
         )
 
         # circuit.barrier(label=f'uncompute is_equal c_{t}, {j}')
@@ -177,7 +190,9 @@ def penalise_graph_end_steps(
     """
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
     # nodes = list(graph.nodes)
-    for j in range(1, n+1):
+    for j in range(1, 2 ** ceil_log_n2):
+        if j == n+1:
+            continue
         is_equal_circ = is_equal_to(ceil_log_n2, j)
         # circuit.barrier(label=f'penalty for {nodes[-1], nodes[j-1]}')
         for k in range(K):
@@ -218,6 +233,7 @@ def get_constraint_circuit(
     registers = {f'solution_{t}' : QuantumRegister(ceil_log_n2, name=f'solution_{t}') for t in range(T)}
     registers.update({f'next_node_{k}': QuantumRegister(ceil_log_n2, name=f'next_node_{k}') for k in range(K)})
     registers.update({'flag': QuantumRegister(1, name='flag')})
+    registers.update({'visits_flag': QuantumRegister(1, name='visits_flag')})
 
 
     for register in registers.values():
@@ -227,19 +243,25 @@ def get_constraint_circuit(
         circuit.append(state_prep_circuit, list(range(T * ceil_log_n2)))
 
     for j in range(1, n+1):
-        circuit = compute_next_nodes(circuit, registers, j, n, K, T)
+        circuit = compute_next_nodes(circuit, registers, j, n, K, T, 3*parameter)
         # circuit.save_statevector(label=f'after_compute_next_nodes_{j}')
         circuit = penalise_graph_steps(circuit, registers, j, parameter, graph, n, K)
         # circuit.save_statevector(label=f'after_penalise_{j}')
         circuit = uncompute_next_nodes(circuit, registers, j, n, K, T)
         # circuit.save_statevector(label=f'after_uncompute_next_nodes_{j}')
+        # if j == 10:
+        #     circuit.save_statevector(label=f'after_constraint_step_{j}')
 
-    circuit = compute_next_nodes(circuit, registers, n+1, n, K, T)
+    # Walk is allowed to stay in end indefinitely. end or end+end are not penalised, so any "allowed" steps are never penalised.
+    # Could miss a case where the path leaves end node several times, each occuring at the
+    # same point mod K, and the next nodes bitwise-sum to 0 or end.
+    circuit = compute_next_nodes(circuit, registers, n+1, n, K, T, parameter=None)
     # circuit.save_statevector(label='after_compute_next_nodes_end')
     circuit = penalise_graph_end_steps(circuit, registers, parameter, n, K)
     # circuit.save_statevector(label='after_penalise_end')
     circuit = uncompute_next_nodes(circuit, registers, n+1, n, K, T)
     # circuit.save_statevector(label='after_uncompute_next_nodes_end')
+    # circuit.save_statevector(label=f'after_constraint_step_{n+1}')
     
     return circuit
 
@@ -252,13 +274,8 @@ def compute_count(circuit: QuantumCircuit, registers: dict, j: int, n: int, K: i
     Resets the flag.
     """
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
-    ceil_log_K1 = int(np.ceil(np.log2(K+1)))
     is_equal_circ = is_equal_to(ceil_log_n2, j)
 
-    add_one_matrix = np.diag(np.ones(2 ** ceil_log_K1 - 1), -1)
-    add_one_matrix[0, -1] = 1
-
-    control_add_one = block_diag(np.eye(add_one_matrix.shape[0]), add_one_matrix)
     for t in range(T):
         circuit.append(
             is_equal_circ, 
@@ -267,12 +284,12 @@ def compute_count(circuit: QuantumCircuit, registers: dict, j: int, n: int, K: i
         )
         
         # circuit.save_statevector(f'before_c_add_{j}_{t}')
-        circuit.unitary(
-            control_add_one, 
-            list(range(circuit.find_bit(registers['count'][0]).index, circuit.find_bit(registers['count'][-1]).index +1)) + \
-                [circuit.find_bit(registers['flag'][0]).index],
-            label='control-add-1'
-        )
+        for i in range(registers['count'].size-1,0,-1):
+            circuit.mcx(
+                [circuit.find_bit(registers['flag'][0]).index] + list(range(circuit.find_bit(registers['count'][0]).index, circuit.find_bit(registers['count'][i]).index)),
+                circuit.find_bit(registers['count'][i]).index
+            )
+        circuit.cx(circuit.find_bit(registers['flag'][0]).index, circuit.find_bit(registers['count'][0]).index)
         # circuit.save_statevector(f'after_c_add_{j}_{t}')
         circuit.append(
             is_equal_circ, 
@@ -296,7 +313,8 @@ def penalise_count(
     """
     ceil_log_K1 = int(np.ceil(np.log2(K+1)))
     nodes = list(graph.nodes)
-    for i in range(K+1):
+    for i in range(2 ** ceil_log_K1):
+    # for i in range(K+1):
         if not graph.nodes[nodes[j-1]]["weight"] - i == 0:
             is_equal_circ = is_equal_to(ceil_log_K1, i)
 
@@ -327,26 +345,21 @@ def uncompute_count(circuit: QuantumCircuit, registers: dict, j: int, n: int, K:
     Resets the flag.
     """
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
-    ceil_log_K1 = int(np.ceil(np.log2(K+1)))
     is_equal_circ = is_equal_to(ceil_log_n2, j)
 
-    minus_one_matrix = np.diag(np.ones(2 ** ceil_log_K1 - 1), 1)
-    minus_one_matrix[-1, 0] = 1
-    control_minus_one = block_diag(np.eye(minus_one_matrix.shape[0]), minus_one_matrix)
     for t in range(T):
         circuit.append(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][0]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
                 + [circuit.find_bit(registers['flag'][0]).index],
-            
         )
         
-        circuit.unitary(
-            control_minus_one, 
-            list(range(circuit.find_bit(registers['count'][0]).index, circuit.find_bit(registers['count'][-1]).index + 1)) + \
-                [circuit.find_bit(registers['flag'][0]).index],
-            label='control-minus-1'
-        )
+        circuit.cx(circuit.find_bit(registers['flag'][0]).index, circuit.find_bit(registers['count'][0]).index)
+        for i in range(1, registers['count'].size):
+            circuit.mcx(
+                [circuit.find_bit(registers['flag'][0]).index] + list(range(circuit.find_bit(registers['count'][0]).index, circuit.find_bit(registers['count'][i]).index)),
+                circuit.find_bit(registers['count'][i]).index
+            )
 
         circuit.append(
             is_equal_circ, 
@@ -380,7 +393,7 @@ def get_objective_circuit(
         circuit.add_register(register)
 
     if state_prep_circuit is not None:
-        circuit.append(state_prep_circuit, list(range(T * ceil_log_n2)))
+        circuit.append(state_prep_circuit, list(range(state_prep_circuit.num_qubits)))
 
     for j in range(1, n+1):
         # circuit.save_statevector(label=f'before_count_{j}')
@@ -393,6 +406,8 @@ def get_objective_circuit(
         circuit = uncompute_count(circuit, registers, j, n, K, T)
         # circuit.save_statevector(label=f'after_uncount_{j}')
         # circuit.barrier()
+        # if j == 10:
+        #     circuit.save_statevector(f'after_penalise_count_{j}')
 
     return circuit
 
@@ -410,9 +425,11 @@ def uniform_over_range(num_qubits: int, M: int):
             circuit = QuantumCircuit(num_qubits)
             for j in range(i):
                 circuit.h(j)
-            add_one_matrix = np.diag(np.ones(2 ** num_qubits - 1), -1)
-            add_one_matrix[0, -1] = 1
-            circuit.unitary(add_one_matrix, list(range(num_qubits)))
+                
+            for i in range(num_qubits-1,0,-1):
+                circuit.mcx(list(range(i)), i)
+            circuit.x(0)
+            
             return circuit
     
     circuit = QuantumCircuit(num_qubits)
@@ -446,9 +463,9 @@ def uniform_over_range(num_qubits: int, M: int):
             circuit.ch(l[m+1], i, ctrl_state=0)
         MM += 2 ** l[m]
 
-    add_one_matrix = np.diag(np.ones(2 ** num_qubits - 1), -1)
-    add_one_matrix[0, -1] = 1
-    circuit.unitary(add_one_matrix, list(range(num_qubits)))
+    for i in range(num_qubits-1,0,-1):
+        circuit.mcx(list(range(i)), i)
+    circuit.x(0)
     return circuit
 
 
@@ -490,10 +507,14 @@ def get_phase_operator_gate(n: int, K: int, T: int, graph: nx.Graph, lamda: floa
     parameter = Parameter(f'theta_{round}')
     constraint_circuit = get_constraint_circuit(n, K, T, graph, state_prep_circuit=None, parameter=lamda*parameter)
     objective_circuit = get_objective_circuit(n, K, T, graph, state_prep_circuit=None, parameter=parameter)
-    constraint_circuit.append(
-        objective_circuit, 
-        range(objective_circuit.num_qubits)  
-    )
+    circuit = QuantumCircuit(max(constraint_circuit.num_qubits, objective_circuit.num_qubits))
+    
+    
+    logger.info('Constraint before objective')
+    circuit.append(constraint_circuit, list(range(constraint_circuit.num_qubits)))
+    circuit.append(objective_circuit, list(range(objective_circuit.num_qubits)))
+    
+    
     return constraint_circuit.to_instruction(label='phase_operator')
     
 
@@ -511,28 +532,30 @@ def get_prog_qaoa_circuit(
     lamda: float
 ) -> QuantumCircuit:
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
-    num_qubits = (K + T) * ceil_log_n2 + 1
+    num_qubits = (K + T) * ceil_log_n2 + 1 + 1
     logger.info(f'Num qubits: {num_qubits}')
     state_prep_gate = state_prep(n, T).to_instruction(label='state_prep')
 
-    total_circuit = QuantumCircuit(num_qubits, T * ceil_log_n2)
+    total_circuit = QuantumCircuit(num_qubits)
     total_circuit.append(
         state_prep_gate,
         list(range(state_prep_gate.num_qubits))
     )
-    total_circuit.save_statevector('after_prep')
+    # total_circuit.save_statevector('after_prep')
 
     for i in range(p):
         phase_operator_instruction = get_phase_operator_gate(n, K, T, graph, lamda, i)
         mixer_operator_instruction = get_mixer_gate(n, T, i)
+        if num_qubits > max(phase_operator_instruction.num_qubits, mixer_operator_instruction.num_qubits):
+            logger.error('Total circuit has spare qubits')
         total_circuit.append(
             phase_operator_instruction,
             list(range(phase_operator_instruction.num_qubits))
         )
-        total_circuit.save_statevector(f'after_phase_{i}')
+        # total_circuit.save_statevector(f'after_phase_{i}')
         total_circuit.append(
             mixer_operator_instruction,
             list(range(mixer_operator_instruction.num_qubits))
         )
-        total_circuit.save_statevector(f'after_mixer_{i}')
+        # total_circuit.save_statevector(f'after_mixer_{i}')
     return total_circuit

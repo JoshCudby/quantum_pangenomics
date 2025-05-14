@@ -7,24 +7,17 @@ from fnmatch import fnmatch
 from gfapy import Gfa
 
 from qiskit import QuantumCircuit, transpile
-# from qiskit.transpiler.passes.routing.commuting_2q_gate_routing import SwapStrategy
-
 from qiskit_aer import AerSimulator
 from qiskit_aer.primitives import SamplerV2 as Sampler #, EstimatorV2 as Estimator
 
 # from qiskit_algorithms.optimizers import SPSA # Breaks because QNSPSA wants base sampler V1, deprecated
 
-from qiskit_ibm_runtime.fake_provider import FakeFez, FakeHanoiV2
-
-# from qopt_best_practices.sat_mapping import SATMapper
+# from qiskit_ibm_runtime.fake_provider import FakeFez, FakeHanoiV2
 
 from qiskit_prog_qaoa.utils.opt_utils import objective, callback, soln_to_path, cost_function
 from qiskit_prog_qaoa.utils.circuit_utils import get_prog_qaoa_circuit
 from qiskit_prog_qaoa.utils.argparser import get_parser
 from qiskit_prog_qaoa.utils.logging import get_logger
-
-# import tracemalloc
-# tracemalloc.start(25)
 
 
 def print_circuit_info(qc: QuantumCircuit, circuit_name):
@@ -42,25 +35,27 @@ p: int = args.reps
 shots = args.shots
 init_type = args.init
 max_iter = args.maxiter
-method = args.method
+method: str = args.method
 lamda = args.lamda
 
 seed = 1
 rng = np.random.default_rng(seed=seed)
 
 backend_options = dict(
-    method='matrix_product_state',
+    method='statevector',
     device='GPU',
     max_memory_mb=args.memory*0.9,
     cuStateVec_enable=True,
     # fusion_enable=False,
-    matrix_product_state_max_bond_dimension=5,
+    # matrix_product_state_max_bond_dimension=5,
     blocking_enable=True,
     blocking_qubits=30,
     # batched_shots_gpu_max_qubits=24,
     # batched_shots_gpu=noisy,
     precision='single'
 )
+
+# MULTI GPU + CACHEBLOCKING BREAKS!!!!
 
 # fake_fez = FakeFez()
 # backend = AerSimulator.from_backend(fake_fez, **backend_options)
@@ -92,13 +87,13 @@ K = max(dict(graph.nodes(data="weight", default=0)).values()) # K should be more
 K = int(min(K, 5))
 nodes_weights = list(graph.nodes(data="weight"))
 total_weight = sum(x[1] if x[1] is not None else 0 for x in nodes_weights)
-T = int(np.floor(total_weight * 1.2)) 
+T = int(np.floor(total_weight * 1.1)) 
 ceil_log_n2 = int(np.ceil(np.log2(n+2)))
 logger.info(f'p={p}, n={n}, K={K}, T={T}, ceil_log_n2={ceil_log_n2}')
 logger.info(f'shots={shots}, iter={max_iter}')
 
 circuit = get_prog_qaoa_circuit(p=p, n=n, K=K, T=T, graph=graph, lamda=lamda)
-circuit.measure(list(range(T * ceil_log_n2)), list(range(T * ceil_log_n2)))
+circuit.measure_all()
 
 d_circuit = circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'] ,reps=1)
 gtd = ['circuit*', 'unitary', '*add-1', '*minus-1']
@@ -110,30 +105,6 @@ print_circuit_info(d_circuit, 'Circuit')
 
 t_circuit = transpile(d_circuit, backend=backend, optimization_level=3, seed_transpiler=seed)
 print_circuit_info(t_circuit, 'Transpiled Circuit')
-
-# snapshot3 = tracemalloc.take_snapshot()
-# top_stats = snapshot3.compare_to(snapshot2, 'lineno')
-
-# logger.info("[ Top 10 differences after transpile circuit]")
-# for stat in top_stats[:10]:
-#     logger.info(stat)
-
-
-# TODO: can we do a swap strategy mapping? It relies on commuting gates I think...
-# graph = circuit_to_graph(circuit, circuit.parameters[p]) 
-
-# swap_strat = SwapStrategy.from_line(range(graph.order()))
-# edge_coloring = {(idx, idx + 1): (idx + 1) % 2 for idx in range(graph.order())}
-
-# remapped_g, sat_map, min_sat_layers = SATMapper(timeout=60).remap_graph_with_sat(
-#     graph=graph, swap_strategy=swap_strat
-# )
-
-# cost_op = graph_to_operator(remapped_g)
-# singles = cost_op[cost_op.paulis.z.sum(axis=-1) == 1]
-# doubles = cost_op[cost_op.paulis.z.sum(axis=-1) == 2]
-
-# circ_dict = circuit_construction(singles, doubles, backend, swap_strat, edge_coloring, {}, p)
 
 if init_type == 'ramp':
     t = 0.7 * p
@@ -152,36 +123,42 @@ history = []
 ################################################
 ###### CHECK FOR INVALID NODES
 ################################################
-to_run = t_circuit.assign_parameters(init_params, inplace=False)
-result = backend.run(to_run).result()
+# logger.error('Checking for invalid nodes')
+# to_run = t_circuit.assign_parameters(init_params, inplace=False)
+# result = backend.run(to_run).result()
 
-savepoints = ['after_prep'] + [f'after_phase_{i}' for i in range(p)] + [f'after_mixer_{i}' for i in range(p)]
-for savepoint in savepoints:
-    data = result.data()[savepoint].data
-    data[np.abs(data) < 1e-8] = 0
-    data_nz = np.transpose(np.nonzero(data))
-    logger.error(f'Checking: {savepoint}')
-    for nz in data_nz:
-        binary_rep = np.binary_repr(nz[0])
-        if len(binary_rep) > T * ceil_log_n2:
-            logger.error('Unexpectedly large non-zero amplitude.')
-            logger.error(f'Rep: {binary_rep}. Len: {len(binary_rep)}')
-        if len(binary_rep) < T * ceil_log_n2:
-            binary_rep = binary_rep.rjust(T * ceil_log_n2, '0')
-        slice = binary_rep[-ceil_log_n2:]
-        if slice in ['000', '111']:
-            logger.error(f'Nonzero amplitude of: {binary_rep}. Amplitude: {data[nz[0]]}')
-        for t in range(1, T):
-            slice = binary_rep[-ceil_log_n2*(t+1):-ceil_log_n2*t]
-            if slice in ['000', '111']:
-                logger.error(f'Nonzero amplitude of: {binary_rep}. Amplitude: {data[nz[0]]}')
+# uniform_prob = (n+1) ** -T
+
+# # savepoints = ['after_prep'] + [f'after_phase_{i}' for i in range(p)] + [f'after_mixer_{i}' for i in range(p)]
+# savepoints = ['after_penalise_count_1']
+# for savepoint in savepoints:
+#     data = result.data()[savepoint].data
+#     data[np.abs(data) ** 2 < uniform_prob / 100] = 0
+#     data_nz = np.transpose(np.nonzero(data))
+#     logger.error(f'Checking: {savepoint}')
+#     for nz in data_nz:
+#         binary_rep = np.binary_repr(nz[0])
+#         if len(binary_rep) > T * ceil_log_n2:
+#             logger.error('Unexpectedly large non-zero amplitude.')
+#             logger.error(f'Rep: {binary_rep}. Len: {len(binary_rep)}')
+#         if len(binary_rep) < T * ceil_log_n2:
+#             binary_rep = binary_rep.rjust(T * ceil_log_n2, '0')
+#         slice = binary_rep[-ceil_log_n2:]
+#         if slice in ['0000','1100','1101', '1110', '1111']:
+#             logger.error(f'Nonzero amplitude of: {binary_rep}. Amplitude: {np.abs(data[nz[0]]) ** 2}')
+#         for t in range(1, T):
+#             slice = binary_rep[-ceil_log_n2*(t+1):-ceil_log_n2*t]
+#             if slice in ['0000','1100','1101', '1110', '1111']:
+#                 logger.error(f'Nonzero amplitude of: {binary_rep}. Amplitude: {np.abs(data[nz[0]]) ** 2}')
 ################################################
 
 
 
 logger.info(f'Opt method: {method}')
 
-if method == 'spsa':
+if method == 'none':
+    exit(0)
+elif method == 'spsa':
     raise Exception('SPSA algorithm from qiskit_algorithms does not support Qiskit 2.0')
     # spsa = SPSA(maxiter=max_iter, termination_checker=TerminationChecker())
     # result = spsa.minimize(objective, x0=init_params)
@@ -193,8 +170,8 @@ else:
         args=(n, T, graph, lamda, shots, history, t_circuit, sampler), 
         method=method, 
         bounds=tuple((0,1) for _ in range(2 * p)), 
-        options={"maxiter": max_iter, "maxfev": max_iter},  # "rhobeg": 0.01
-        callback=callback
+        options={"maxiter": max_iter, "maxfev": max_iter},  # "rhobeg": 0.01, "ftol": 1e-7
+        callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else None
     )
 
 logger.info(result)
@@ -208,8 +185,8 @@ with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/{filename}.p{p}.shots{shot
 if len(history):
     last_run_data = history[-1]
     counts = Counter(last_run_data[3])
-    most_common = counts.most_common(100)
+    most_common = counts.most_common(20)
     for e in most_common:
         logger.info(f'soln: {e[0]}. path: {soln_to_path(e[0], n, T, graph)}. cost: {cost_function(e[0], n, T, graph, lamda)}. count: {e[1]}')
 
-# Errors in 117256?? Mixed into wrong subspace...?
+exit(0)

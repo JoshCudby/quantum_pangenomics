@@ -18,8 +18,7 @@ def soln_to_path(soln, n, T, graph):
     path = []
     nodes = list(graph.nodes)
     for t in range(T):
-        x_bin = soln[t * ceil_log_n2: (t+1) * ceil_log_n2]
-        x_int = sum(2 ** (ceil_log_n2-i-1) * int(x_bin[i]) for i in range(ceil_log_n2))
+        x_int = sum(2 ** i * int(soln[-1-i-t*ceil_log_n2]) for i in range(ceil_log_n2))
         if x_int < n+1:
             path.append(nodes[x_int -1])
         elif x_int == n+1:
@@ -37,6 +36,9 @@ def cost_function(sample: str, n, T, graph: nx.Graph, lamda) -> float:
     cost = 0
     x = []
     counts = {}
+    if any([int(x) for x in sample[0:len(sample)-T*ceil_log_n2]]):
+        logger.error(f'Sampled non-zero ancillas. Sample: {sample}.')
+    
     for t in range(T):
         x_int = sum(2 ** i * int(sample[-1-i-t*ceil_log_n2]) for i in range(ceil_log_n2))
         x.append(x_int)
@@ -79,10 +81,10 @@ def objective(x: np.ndarray, n, T, graph, lamda, shots, history: list, circuit: 
     try:
         sampler_result = sampler_job.result()
         
-        counts = sampler_result[0].data.c.get_counts()
+        counts = sampler_result[0].data.meas.get_counts()
         sampling_time = time() - start
         start = time()
-        total_energy = cvar(counts, n, T, graph, lamda, alpha=0.05)
+        total_energy = cvar(counts, n, T, graph, lamda, alpha=0.75)
         
         classical_post_process_time = time() - start
         
@@ -92,7 +94,7 @@ def objective(x: np.ndarray, n, T, graph, lamda, shots, history: list, circuit: 
         logger.error(e)
         logger.error(sampler_job.result())
         logger.error(sampler_job.result()[0].data)
-        logger.error(sampler_job.result()[0].data.c)
+        logger.error(sampler_job.result()[0].data.meas)
 
 
 def callback(intermediate_result: OptimizeResult):

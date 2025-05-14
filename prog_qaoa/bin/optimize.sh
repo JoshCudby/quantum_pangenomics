@@ -59,8 +59,8 @@ outdir="$SCRATCH/out/prog_qaoa"
 
 # Qiskit Testing
 echo "Qiskit Testing"
-bsub -J "optimize_$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no" -M "$memory"\
- -o "$outdir/$filename.%J" -e "$outdir/error.$filename.%J" -G "qpg" -q "qpg" \
+bsub -J "optimize_$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no:j_exclusive=yes" -M "$memory"\
+ -o "$outdir/$filename.g$num_gpu.%J" -e "$outdir/error.$filename.g$num_gpu.%J" -G "qpg" -q "qpg" \
  "python3 $WORKING_DIR/optimize_prog_qaoa.py -f $filename -p $reps -m $memory -n $shots -i $maxiter --init $init -M $method"
 
 exit 0
