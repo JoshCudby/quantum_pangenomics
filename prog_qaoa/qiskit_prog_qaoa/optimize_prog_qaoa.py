@@ -14,7 +14,7 @@ from qiskit_aer.primitives import SamplerV2 as Sampler #, EstimatorV2 as Estimat
 
 # from qiskit_ibm_runtime.fake_provider import FakeFez, FakeHanoiV2
 
-from qiskit_prog_qaoa.utils.opt_utils import objective, callback, soln_to_path, cost_function
+from qiskit_prog_qaoa.utils.opt_utils import objective, callback, callback_cobyla, soln_to_path, cost_function
 from qiskit_prog_qaoa.utils.circuit_utils import get_prog_qaoa_circuit
 from qiskit_prog_qaoa.utils.argparser import get_parser
 from qiskit_prog_qaoa.utils.logging import get_logger
@@ -37,6 +37,7 @@ init_type = args.init
 max_iter = args.maxiter
 method: str = args.method
 lamda = args.lamda
+blocking = args.blocking
 
 seed = 1
 rng = np.random.default_rng(seed=seed)
@@ -49,13 +50,14 @@ backend_options = dict(
     # fusion_enable=False,
     # matrix_product_state_max_bond_dimension=5,
     blocking_enable=True,
-    blocking_qubits=30,
+    blocking_qubits=blocking,
     # batched_shots_gpu_max_qubits=24,
     # batched_shots_gpu=noisy,
     precision='single'
 )
 
-# MULTI GPU + CACHEBLOCKING BREAKS!!!!
+# (MULTI GPU +??) CACHEBLOCKING BREAKS!!!!
+# See N7_W3 runs 1555, 2156, 2198
 
 # fake_fez = FakeFez()
 # backend = AerSimulator.from_backend(fake_fez, **backend_options)
@@ -93,7 +95,6 @@ logger.info(f'p={p}, n={n}, K={K}, T={T}, ceil_log_n2={ceil_log_n2}')
 logger.info(f'shots={shots}, iter={max_iter}')
 
 circuit = get_prog_qaoa_circuit(p=p, n=n, K=K, T=T, graph=graph, lamda=lamda)
-circuit.measure_all()
 
 d_circuit = circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'] ,reps=1)
 gtd = ['circuit*', 'unitary', '*add-1', '*minus-1']
@@ -105,6 +106,8 @@ print_circuit_info(d_circuit, 'Circuit')
 
 t_circuit = transpile(d_circuit, backend=backend, optimization_level=3, seed_transpiler=seed)
 print_circuit_info(t_circuit, 'Transpiled Circuit')
+t_circuit.measure_all()
+
 
 if init_type == 'ramp':
     t = 0.7 * p
@@ -171,7 +174,7 @@ else:
         method=method, 
         bounds=tuple((0,1) for _ in range(2 * p)), 
         options={"maxiter": max_iter, "maxfev": max_iter},  # "rhobeg": 0.01, "ftol": 1e-7
-        callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else None
+        callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
     )
 
 logger.info(result)

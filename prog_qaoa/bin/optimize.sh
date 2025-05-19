@@ -13,6 +13,7 @@ shots=1000
 maxiter=100
 filename="test_filename"
 method="Powell"
+blocking="30"
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -33,6 +34,9 @@ while [ "$1" != "" ]; do
                                 ;;
         -g | --num-gpu )        shift
                                 num_gpu="$1"
+                                ;;
+        -b | --blocking )       shift
+                                blocking="$1"
                                 ;;
         -i )                    shift
                                 maxiter="$1"
@@ -60,7 +64,7 @@ outdir="$SCRATCH/out/prog_qaoa"
 # Qiskit Testing
 echo "Qiskit Testing"
 bsub -J "optimize_$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no:j_exclusive=yes" -M "$memory"\
- -o "$outdir/$filename.g$num_gpu.%J" -e "$outdir/error.$filename.g$num_gpu.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/optimize_prog_qaoa.py -f $filename -p $reps -m $memory -n $shots -i $maxiter --init $init -M $method"
+ -o "$outdir/$filename.g$num_gpu.cacheblocking$blocking.%J" -e "$outdir/error.$filename.g$num_gpu.cacheblocking$blocking.%J" -G "qpg" -q "qpg" \
+ "python3 $WORKING_DIR/optimize_prog_qaoa.py -f $filename -p $reps -b $blocking -m $memory -n $shots -i $maxiter --init $init -M $method"
 
 exit 0

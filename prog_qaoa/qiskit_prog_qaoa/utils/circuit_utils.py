@@ -190,9 +190,10 @@ def penalise_graph_end_steps(
     """
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
     # nodes = list(graph.nodes)
-    for j in range(1, 2 ** ceil_log_n2):
-        if j == n+1:
-            continue
+    # for j in range(1, 2 ** ceil_log_n2):
+    for j in range(1, n+1):
+        # if j == n+1:
+        #     continue
         is_equal_circ = is_equal_to(ceil_log_n2, j)
         # circuit.barrier(label=f'penalty for {nodes[-1], nodes[j-1]}')
         for k in range(K):

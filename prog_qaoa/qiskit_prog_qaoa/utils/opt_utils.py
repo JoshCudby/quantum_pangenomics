@@ -19,7 +19,9 @@ def soln_to_path(soln, n, T, graph):
     nodes = list(graph.nodes)
     for t in range(T):
         x_int = sum(2 ** i * int(soln[-1-i-t*ceil_log_n2]) for i in range(ceil_log_n2))
-        if x_int < n+1:
+        if x_int == 0 or x_int > n+1:
+            path.append('invalid node')
+        elif x_int < n+1:
             path.append(nodes[x_int -1])
         elif x_int == n+1:
             path.append('end')
@@ -44,7 +46,7 @@ def cost_function(sample: str, n, T, graph: nx.Graph, lamda) -> float:
         x.append(x_int)
         counts[x_int] = counts.get(x_int, 0) + 1
 
-    if any(x[t] > n+1 for t in range(T)):
+    if any(x[t] > n+1 for t in range(T)) or any(x[t] == 0 for t in range(T)):
         logger.error(f'Sampled an invalid node! Sample ints: {x}. Sample: {sample}.')
         return 10000 # Should never happen
 
@@ -101,6 +103,10 @@ def callback(intermediate_result: OptimizeResult):
     logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
     if intermediate_result.fun == -1:
         raise StopIteration
+    
+
+def callback_cobyla(xk: np.ndarray):
+    logger.info(f'Current params: {xk}.')
     
 
 class TerminationChecker:
