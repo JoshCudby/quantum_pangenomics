@@ -1,8 +1,7 @@
 from qiskit import QuantumCircuit, QuantumRegister
-from qiskit.circuit import Parameter, Instruction
+from qiskit.circuit import Parameter, ParameterExpression, Instruction
 import numpy as np
 import networkx as nx
-from scipy.linalg import block_diag
 from qiskit_prog_qaoa.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -19,7 +18,7 @@ def is_equal_to(num_qubits: int, value: int) -> QuantumCircuit:
     return circ
 
 
-def controlled_copy_with_swap(num_qubits: int, K: int, parameter: Parameter | None = None) -> QuantumCircuit:
+def controlled_copy_with_swap(num_qubits: int, K: int, parameter: Parameter | ParameterExpression | None = None) -> QuantumCircuit:
     """
     Creates a controlled copy circuit that also shuffles all the registers in the copy list forward one place.
     |0>|to_be_copied>|copy_1>|copy_2>...|copy_K> -> |0>|to_be_copied>|copy_1>|copy_2>...|copy_K>
@@ -37,6 +36,7 @@ def controlled_copy_with_swap(num_qubits: int, K: int, parameter: Parameter | No
     # It also messes up already-tracked graph steps, overwriting them with a bitwise-and with the new step.
     # So apply 3x penalty.
     if parameter is not None:
+        # TODO: should this also be controlled on 0????
         circ.mcx(list(range(K*num_qubits+1, (K+1)*num_qubits+1)), (K+1)*num_qubits+1, ctrl_state=0)
         circ.cp(-parameter, 0, (K+1)*num_qubits+1)
         circ.mcx(list(range(K*num_qubits+1, (K+1)*num_qubits+1)), (K+1)*num_qubits+1, ctrl_state=0)
@@ -57,7 +57,7 @@ def controlled_copy_with_swap(num_qubits: int, K: int, parameter: Parameter | No
 
 
 def compute_next_nodes(
-        circuit: QuantumCircuit, registers: dict, j: int, n: int, K: int, T: int, parameter: Parameter | None
+        circuit: QuantumCircuit, registers: dict, j: int, n: int, K: int, T: int, parameter: Parameter | ParameterExpression | None
 ) -> QuantumCircuit:
     """
     Appends a compute_next_nodes subroutine to a circuit, which initialises registers .
@@ -140,7 +140,7 @@ def uncompute_next_nodes(circuit: QuantumCircuit, registers, j, n, K, T):
 
 
 def penalise_graph_steps(
-        circuit: QuantumCircuit, registers: dict, i: int, parameter: Parameter, graph: nx.Graph, n: int, K:int
+        circuit: QuantumCircuit, registers: dict, i: int, parameter: Parameter | ParameterExpression, graph: nx.Graph, n: int, K:int
 ) -> QuantumCircuit:
     """
     Appends a penalise_graph_steps subroutine to a circuit, which penalises any step from node i to a node not adjacent to i.
@@ -178,7 +178,7 @@ def penalise_graph_steps(
 
 
 def penalise_graph_end_steps(
-    circuit: QuantumCircuit, registers: dict, parameter: Parameter, n: int, K: int
+    circuit: QuantumCircuit, registers: dict, parameter: Parameter | ParameterExpression, n: int, K: int
 ) -> QuantumCircuit:
     """
     Appends a penalise_graph_end_steps subroutine to a circuit, which penalises any step from the end node to a non-end node.
@@ -221,7 +221,7 @@ def get_constraint_circuit(
         K: int,
         T: int,
         graph: nx.Graph,
-        parameter=Parameter('theta_cons'),
+        parameter: Parameter | ParameterExpression =Parameter('theta_cons'),
         state_prep_circuit: QuantumCircuit | None = None,
 ) -> QuantumCircuit:
     """
@@ -448,7 +448,6 @@ def uniform_over_range(num_qubits: int, M: int):
             circuit.h(i)
 
     MM = 2 ** l[0]
-
 
     circuit.ry(-2 * np.arccos(np.sqrt(MM/M)), l[1])
 

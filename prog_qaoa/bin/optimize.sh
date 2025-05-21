@@ -2,7 +2,7 @@
 
 usage()
 {
-    echo "usage: optimize.sh [[-f file -m memory -p reps -n shots -g num_gpu -i init] | [-h]]"
+    echo "usage: optimize.sh [[-f file -m memory -M method -b blocking -p reps -n shots -g num_gpu -i max_iter --init] | [-h]]"
 }
 
 memory="4000"
@@ -59,7 +59,7 @@ done
 # LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CUDA_HOME/lib64
 # module load ISG/experimental/fg12/openmpi/5.0.4-cuda12.1-lsf
 WORKING_DIR="/nfs/users/nfs_j/jc59/quantumwork/pangenome/prog_qaoa/qiskit_prog_qaoa"
-outdir="$SCRATCH/out/prog_qaoa"
+outdir="$SCRATCH/out/prog_qaoa/tangle"
 
 # Qiskit Testing
 echo "Qiskit Testing"

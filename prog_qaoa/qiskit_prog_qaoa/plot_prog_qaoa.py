@@ -24,7 +24,7 @@ max_iter = args.maxiter
 
 filename_suffix = f'p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}'
 
-with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/{filename}.{filename_suffix}.pkl', 'rb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/tangle/{filename}.{filename_suffix}.pkl', 'rb') as f:
     data = pickle.load(f)
     
 history = data["history"]

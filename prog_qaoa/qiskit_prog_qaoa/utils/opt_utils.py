@@ -97,6 +97,95 @@ def objective(x: np.ndarray, n, T, graph, lamda, shots, history: list, circuit: 
         logger.error(sampler_job.result())
         logger.error(sampler_job.result()[0].data)
         logger.error(sampler_job.result()[0].data.meas)
+        
+        
+def oriented_soln_to_path(soln, n, T, graph):
+    ceil_log_n2 = int(np.ceil(np.log2(n+2)))
+
+    path = []
+    nodes = list(graph.nodes)
+    for t in range(T):
+        x_int = sum(2 ** (i-1) * int(soln[-1-i-t*(ceil_log_n2+1)]) for i in range(1, ceil_log_n2+1))
+        orientation = int(soln[-1-t*(ceil_log_n2+1)])
+        if x_int == 0 or x_int > n+1:
+            path.append('invalid node')
+        elif x_int < n+1:
+            path.append(nodes[2*(x_int -1) + orientation])
+        elif x_int == n+1:
+            path.append('end')
+        else:
+            path.append('invalid node')
+    return path
+
+        
+def oriented_cost_function(sample: str, n, T, graph: nx.Graph, lamda) -> float:
+    ceil_log_n2 = int(np.ceil(np.log2(n+2)))
+
+    nodes = list(graph.nodes)
+    cost = 0
+    x = []
+    orientations = []
+    counts = {}
+    if any([int(x) for x in sample[0:len(sample)-T*(ceil_log_n2+1)]]):
+        logger.error(f'Sampled non-zero ancillas. Sample: {sample}.')
+    
+    for t in range(T):
+        x_int = sum(2 ** (i-1) * int(sample[-1-i-t*(ceil_log_n2+1)]) for i in range(1, ceil_log_n2+1))
+        x.append(x_int)
+        orientations.append(int(sample[-1-t*(ceil_log_n2+1)]))
+        counts[x_int] = counts.get(x_int, 0) + 1
+
+    if any(x[t] > n+1 for t in range(T)) or any(x[t] == 0 for t in range(T)):
+        logger.error(f'Sampled an invalid node! Sample ints: {x}. Sample: {sample}.')
+        return 10000 # Should never happen
+
+    for t in range(T-1):
+        if x[t] == n+1:
+            if not x[t+1] == n+1:
+                cost += lamda
+        else:
+            if not x[t+1] == n+1 and (nodes[2*(x[t]-1) + orientations[t]], nodes[2*(x[t+1]-1) + orientations[t+1]]) not in graph.edges:
+                cost += lamda
+
+    for i in range(1, n+1):
+        cost += (counts.get(i, 0) - graph.nodes[nodes[2*(i-1)]]["weight"]) ** 2
+
+    if cost == 0.0:
+        logger.info(f'Sampled optimum: {sample}. Path: {oriented_soln_to_path(sample, n, T, graph)}')
+    return cost
+
+
+def oriented_cvar(counts, n, T, graph, lamda, alpha=1.0):
+    evals = [oriented_cost_function(key, n, T, graph, lamda) for key in counts.keys()]
+    energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
+    energies = sorted([x for xs in energies for x in xs])
+    # if energies[0] == 0:
+    #     return -1
+    end_idx = int(min(alpha,1) * len(energies))
+    return np.sum(energies[0:end_idx]) / end_idx
+
+        
+def oriented_objective(x: np.ndarray, n, T, graph, lamda, shots, history: list, circuit: QuantumCircuit, sampler: Sampler):
+    start = time()
+    assigned_circuit = circuit.assign_parameters(x, inplace=False)
+    sampler_job = sampler.run([assigned_circuit], shots=shots)
+    try:
+        sampler_result = sampler_job.result()
+        
+        counts = sampler_result[0].data.meas.get_counts()
+        sampling_time = time() - start
+        start = time()
+        total_energy = oriented_cvar(counts, n, T, graph, lamda, alpha=0.05)
+        
+        classical_post_process_time = time() - start
+        
+        history.append((sampling_time, total_energy, x.tolist(), counts, classical_post_process_time))
+        return total_energy
+    except Exception as e:
+        logger.error(e)
+        logger.error(sampler_job.result())
+        logger.error(sampler_job.result()[0].data)
+        logger.error(sampler_job.result()[0].data.meas)
 
 
 def callback(intermediate_result: OptimizeResult):

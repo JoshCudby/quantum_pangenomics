@@ -182,7 +182,7 @@ logger.info(result)
 obj_to_dump = dict(
     result=result, history=history, init_params=init_params, circuit=circuit, graph=graph, n=n, T=T, K=K, lamda=lamda
 )
-with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/tangle/{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
     pickle.dump(obj_to_dump, f)
 
 if len(history):
