@@ -36,7 +36,6 @@ def controlled_copy_with_swap(num_qubits: int, K: int, parameter: Parameter | Pa
     # It also messes up already-tracked graph steps, overwriting them with a bitwise-and with the new step.
     # So apply 3x penalty.
     if parameter is not None:
-        # TODO: should this also be controlled on 0????
         circ.mcx(list(range(K*num_qubits+1, (K+1)*num_qubits+1)), (K+1)*num_qubits+1, ctrl_state=0)
         circ.cp(-parameter, 0, (K+1)*num_qubits+1)
         circ.mcx(list(range(K*num_qubits+1, (K+1)*num_qubits+1)), (K+1)*num_qubits+1, ctrl_state=0)
@@ -70,14 +69,12 @@ def compute_next_nodes(
     cc_circ = controlled_copy_with_swap(ceil_log_n2, K, parameter)
     is_equal_circ = is_equal_to(ceil_log_n2, j)
     for t in range(T-1):
-        # circuit.barrier(label=f'is_equal c_{t}, {j}')
         circuit.append(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][0]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
                 + [circuit.find_bit(registers['flag'][0]).index]
         )
 
-        # circuit.barrier(label=f'c_copy c_{t+1} -> next node list')
         flag = circuit.find_bit(registers['flag'][0]).index
         to_copy = list(range(
             circuit.find_bit(registers[f'solution_{t+1}'][0]).index, circuit.find_bit(registers[f'solution_{t+1}'][-1]).index + 1
@@ -92,13 +89,11 @@ def compute_next_nodes(
             [flag] + to_copy + copy_registers + [too_many_visits_flag]
         )
 
-        # circuit.barrier(label=f'uncompute is_equal c_{t}, {j}')
         circuit.append(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][0]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
                 + [circuit.find_bit(registers['flag'][0]).index]
         )
-        # circuit.barrier()
     return circuit
 
 
@@ -107,14 +102,12 @@ def uncompute_next_nodes(circuit: QuantumCircuit, registers, j, n, K, T):
     cc_circ = controlled_copy_with_swap(ceil_log_n2, K)
     is_equal_circ = is_equal_to(ceil_log_n2, j)
     for t in range(T-2, -1, -1):
-        # circuit.barrier(label=f'is_equal c_{t}, {j}')
         circuit.append(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][0]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
                 + [circuit.find_bit(registers['flag'][0]).index]
         )
 
-        # circuit.barrier(label=f'c_copy c_{t+1} -> next node list')
         flag = circuit.find_bit(registers['flag'][0]).index
         to_copy = list(range(
             circuit.find_bit(registers[f'solution_{t+1}'][0]).index, circuit.find_bit(registers[f'solution_{t+1}'][-1]).index + 1
@@ -129,13 +122,11 @@ def uncompute_next_nodes(circuit: QuantumCircuit, registers, j, n, K, T):
             [flag] + to_copy + copy_registers + [too_many_visits_flag]
         )
 
-        # circuit.barrier(label=f'uncompute is_equal c_{t}, {j}')
         circuit.append(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][0]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
                 + [circuit.find_bit(registers['flag'][0]).index]
         )
-        # circuit.barrier()
     return circuit
 
 
@@ -155,7 +146,6 @@ def penalise_graph_steps(
     for j in range(1, n+1):
         if (nodes[i-1], nodes[j-1]) not in graph.edges:
             is_equal_circ = is_equal_to(ceil_log_n2, j)
-            # circuit.barrier(label=f'penalty for {nodes[i-1], nodes[j-1]}')
             for k in range(K):
                 circuit.append(
                     is_equal_circ,
@@ -173,7 +163,6 @@ def penalise_graph_steps(
                         circuit.find_bit(registers[f'next_node_{k}'][0]).index, circuit.find_bit(registers[f'next_node_{k}'][-1]).index + 1
                     )) + [circuit.find_bit(registers['flag'][0]).index]
                 )
-        # circuit.barrier()
     return circuit
 
 
@@ -189,13 +178,11 @@ def penalise_graph_end_steps(
             Resets the flag.
     """
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
-    # nodes = list(graph.nodes)
     # for j in range(1, 2 ** ceil_log_n2):
     for j in range(1, n+1):
         # if j == n+1:
         #     continue
         is_equal_circ = is_equal_to(ceil_log_n2, j)
-        # circuit.barrier(label=f'penalty for {nodes[-1], nodes[j-1]}')
         for k in range(K):
             circuit.append(
                 is_equal_circ,
@@ -230,7 +217,7 @@ def get_constraint_circuit(
     ceil_log_n2 = int(np.ceil(np.log2(n+2)))
     circuit = QuantumCircuit()
 
-    # T * ceil_log_n2 + K * ceil_log_n2 + 1
+    # T * ceil_log_n2 + K * ceil_log_n2 + 2
     registers = {f'solution_{t}' : QuantumRegister(ceil_log_n2, name=f'solution_{t}') for t in range(T)}
     registers.update({f'next_node_{k}': QuantumRegister(ceil_log_n2, name=f'next_node_{k}') for k in range(K)})
     registers.update({'flag': QuantumRegister(1, name='flag')})
@@ -400,15 +387,10 @@ def get_objective_circuit(
         # circuit.save_statevector(label=f'before_count_{j}')
         circuit = compute_count(circuit, registers, j, n, K, T)
         # circuit.save_statevector(label=f'after_count_{j}')
-        # circuit.barrier()
         circuit = penalise_count(circuit, registers, j, parameter, graph, K)
         # circuit.save_statevector(label=f'after_penalise_{j}')|
-        # circuit.barrier()
         circuit = uncompute_count(circuit, registers, j, n, K, T)
         # circuit.save_statevector(label=f'after_uncount_{j}')
-        # circuit.barrier()
-        # if j == 10:
-        #     circuit.save_statevector(f'after_penalise_count_{j}')
 
     return circuit
 

@@ -31,9 +31,11 @@ if prepare is None:
 
 logger.info(f'Filename: {filename}. Prepare: {prepare}.')
 
-with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/data.{filename}.prepare{prepare}.pkl', 'rb') as f:
+# with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/data.{filename}.prepare{prepare}.pkl', 'rb') as f:
+with open(f'/tmp/jc59/out/prog_qaoa/oriented/data.{filename}.prepare{prepare}.pkl', 'rb') as f:
     data = pickle.load(f)
 
+logger.error(data)
 if prepare != 'State':
     for key in data.keys():
         if key == 'global_phase':
@@ -46,7 +48,8 @@ if prepare != 'State':
 
             logger.info(sv.data)
 else:
-    data_file = f'/lustre/scratch127/qpg/jc59/data/{filename}.gfa'
+    # data_file = f'/lustre/scratch127/qpg/jc59/data/{filename}.gfa'
+    data_file = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{filename}.gfa'
     gfa = Gfa.from_file(data_file)
 
     graph = nx.DiGraph()
@@ -70,16 +73,13 @@ else:
     K = max(dict(graph.nodes(data="weight", default=0)).values()) # K should be more than max weight to allow for over-visiting a high weight node.
     K = int(min(K, 5))
     nodes_weights = list(graph.nodes(data="weight"))
-    total_weight = sum(x[1] if x[1] is not None else 0 for x in nodes_weights)
-    T = int(np.floor(total_weight * 1.2)) 
-    uniform_prob = (n+1) ** -T
-    allowed = ['0010','0011','0100',
-            '0101','0110','0111','1000',
-            '1001','1010','1011']
-
-    allowed_strings = list(product(allowed, repeat=5))
+    total_weight = sum(x[1] if x[1] is not None else 0 for x in nodes_weights) / 2
+    T = int(np.floor(total_weight * 1.1)) 
+    allowed_ints = range(2, 2*(n+1)+2)
+    allowed = [np.binary_repr(x, int(np.ceil(np.log2(2*(n+1)+2)))) for x in allowed_ints]
+    logger.info(allowed)
     allowed_binary_arrays = np.array(
-        [[int(y) for y in ''.join(x)] for x in allowed_strings], dtype=int
+        [[int(y) for y in ''.join(x)] for x in product(allowed, repeat=T)], dtype=int
     )
     expected_indexes = set(allowed_binary_arrays.dot(1 << np.arange(allowed_binary_arrays.shape[1])[::-1]))
 
@@ -95,5 +95,6 @@ else:
             logger.info(f'Expected indexes missing: {len(missing)}')
             logger.info(f'Unexpected indexes present: {len(unexpected)}')
             if len(missing) or len(unexpected):
-                with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/missing.{filename}.prepare{prepare}.pkl', 'wb') as f:
+                # with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/missing.{filename}.prepare{prepare}.pkl', 'wb') as f:
+                with open(f'/tmp/jc59/out/prog_qaoa/oriented/missing.{key}.{filename}.prepare{prepare}.pkl', 'wb') as f:
                     pickle.dump({'missing': missing, 'unexpected': unexpected}, f)

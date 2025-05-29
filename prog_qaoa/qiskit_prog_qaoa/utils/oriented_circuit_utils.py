@@ -261,7 +261,7 @@ def uncompute_next_nodes_without_parity(
     """
     
     is_equal_circ = is_equal_to_without_parity(n, j)
-    for t in range(T-1):
+    for t in range(T-2,-1,-1):
         circuit.append(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][1]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
@@ -274,7 +274,7 @@ def uncompute_next_nodes_without_parity(
         new_circuit = controlled_copy_with_swap(new_circuit, registers, K, t, parameter=None)
         
         circuit.append(
-            new_circuit.reverse_ops(),
+            new_circuit.inverse(),
             new_circuit.qubits
         )
         
@@ -317,7 +317,7 @@ def get_constraint_circuit(
             circuit = compute_next_nodes_with_parity(circuit, registers, j, b, n, K, T, 3*parameter)
             circuit = penalise_graph_steps(circuit, registers, j, b, parameter, graph, n, K)
             circuit = uncompute_next_nodes_with_parity(circuit, registers, j, b, n, K, T)
-    circuit.save_statevector('after_next_nodes_n')
+    # circuit.save_statevector('after_next_nodes_n')
 
 
     # Walk is allowed to stay in end indefinitely. end or end+end are not penalised, so any "allowed" steps are never penalised.
@@ -326,7 +326,7 @@ def get_constraint_circuit(
     circuit = compute_next_nodes_without_parity(circuit, registers, n+1, n, K, T, parameter=None)
     circuit = penalise_graph_end_steps(circuit, registers, parameter, n, K)
     circuit = uncompute_next_nodes_without_parity(circuit, registers, n+1, n, K, T)
-
+    # circuit.save_statevector('after_next_nodes_n1')
     return circuit
 
 

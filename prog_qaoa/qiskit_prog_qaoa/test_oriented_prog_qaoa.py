@@ -13,6 +13,11 @@ from qiskit_aer import AerSimulator
 from qiskit_prog_qaoa.utils.oriented_circuit_utils import state_prep, get_constraint_circuit, get_objective_circuit
 from qiskit_prog_qaoa.utils.logging import get_logger
 
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"
+
 def print_circuit_info(qc: QuantumCircuit, circuit_name):
     logger.info(f'{circuit_name} has {qc.num_qubits} qubits')
     logger.info(f'{circuit_name} has {qc.num_nonlocal_gates()} non-local gates and {qc.depth(lambda instr: len(instr.qubits) > 1)} non-local depth')
@@ -45,7 +50,8 @@ backend_options = dict(
 
 backend = AerSimulator(**backend_options)
 
-data_file = f'/lustre/scratch127/qpg/jc59/data/{filename}.gfa'
+# data_file = f'/lustre/scratch127/qpg/jc59/data/{filename}.gfa'
+data_file = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{filename}.gfa'
 gfa = Gfa.from_file(data_file)
 
 graph = nx.DiGraph()
@@ -96,11 +102,11 @@ objective_circuit = get_objective_circuit(n, K, T, graph, parameter=np.pi/64, st
 
 logger.info(f'Objective circuit qubits: {objective_circuit.num_qubits}')
 circuit.append(objective_circuit, list(range(objective_circuit.num_qubits)))
-circuit.save_statevector('after_objective') # type: ignore
+# circuit.save_statevector('after_objective') # type: ignore
 
 logger.info(f'Constraint circuit qubits: {constraint_circuit.num_qubits}')
 circuit.append(constraint_circuit, list(range(constraint_circuit.num_qubits)))
-circuit.save_statevector('after_constraint') # type: ignore
+# circuit.save_statevector('after_constraint') # type: ignore
 
 
 circuit.save_statevector('after_phase') # type: ignore
@@ -125,13 +131,16 @@ result = backend.run(t_circuit).result()
 uniform_prob = (n+1) ** -T
 
 try:
-    with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/data.{filename}.prepare{to_prepare}.pkl', 'rb') as f:
+    with open(f'/tmp/jc59/out/prog_qaoa/oriented/data.{filename}.prepare{to_prepare}.pkl', 'rb') as f:
+    # with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/data.{filename}.prepare{to_prepare}.pkl', 'rb') as f:
         data = pickle.load(f)
 except Exception as e:
     logger.error(e)
     data = {}
     
-savepoints= ['after_constraint', 'after_objective', 'after_phase', 'after_next_nodes_n']
+
+# for savepoint in result.data().keys():
+savepoints= ['after_constraint', 'after_objective', 'after_phase', 'after_next_nodes_n', 'after_compute_next_nodes_n1', 'after_next_nodes_n1']
 for savepoint in savepoints:
     try:
         sv = result.data()[savepoint].data
@@ -144,6 +153,7 @@ for savepoint in savepoints:
 data['global_phase'] = t_circuit.global_phase
 
 
-with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/data.{filename}.prepare{to_prepare}.pkl', 'wb') as f:
+# with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/data.{filename}.prepare{to_prepare}.pkl', 'wb') as f:
+with open(f'/tmp/jc59/out/prog_qaoa/oriented/data.{filename}.prepare{to_prepare}.pkl', 'wb') as f:
     pickle.dump(data, f)
 
