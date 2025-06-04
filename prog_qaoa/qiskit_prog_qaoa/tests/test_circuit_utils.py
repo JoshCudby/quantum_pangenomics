@@ -1024,13 +1024,13 @@ class TestObjectiveCircuit(unittest.TestCase):
         self.parameter = np.pi/16
         self.graph = toy_graph()
 
-        self.oc = get_objective_circuit(self.n, self.K, self.T, self.graph, self.parameter, None)
+        self.qc = get_objective_circuit(self.n, self.K, self.T, self.graph, self.parameter, None)
 
 
     def test_objective_circuit_no_penalty(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
             '100010110000', # sol0[0]sol0[1]sol0[2] sol1[0]sol1[1]sol1[2] sol2[0]sol2[1]sol2[2] flag count[0]count[1]
-            self.oc,
+            self.qc,
             self.simulator
         )
         self.assertEqual(
@@ -1053,7 +1053,7 @@ class TestObjectiveCircuit(unittest.TestCase):
     def test_objective_circuit_2_nodes_off_by_1(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
             '010010110000',
-            self.oc,
+            self.qc,
             self.simulator
         )
         self.assertEqual(
@@ -1077,7 +1077,7 @@ class TestObjectiveCircuit(unittest.TestCase):
     def test_objective_circuit_1_node_off_by_2_2_nodes_off_by_1(self):
         start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
             '010010010000',
-            self.oc,
+            self.qc,
             self.simulator
         )
         self.assertEqual(

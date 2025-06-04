@@ -103,7 +103,7 @@ def compute_next_nodes_with_parity(
                 + [circuit.find_bit(registers['flag'][0]).index],
         )
 
-        circuit = controlled_copy_with_swap(circuit, registers, K, t, parameter)
+        circuit = controlled_copy_with_swap(circuit, registers, K, t+1, parameter)
         
         circuit.append(
             is_equal_circ, 
@@ -137,7 +137,7 @@ def uncompute_next_nodes_with_parity(
         new_circuit = QuantumCircuit()
         for register in registers.values():
             new_circuit.add_register(register)
-        new_circuit = controlled_copy_with_swap(new_circuit, registers, K, t, parameter=None)
+        new_circuit = controlled_copy_with_swap(new_circuit, registers, K, t+1, parameter=None)
         
         circuit.append(
             new_circuit.reverse_ops(),
@@ -239,7 +239,7 @@ def compute_next_nodes_without_parity(
                 + [circuit.find_bit(registers['flag'][0]).index],
         )
         
-        circuit = controlled_copy_with_swap(circuit, registers, K, t, parameter)
+        circuit = controlled_copy_with_swap(circuit, registers, K, t+1, parameter)
         
         circuit.append(
             is_equal_circ, 
@@ -271,7 +271,7 @@ def uncompute_next_nodes_without_parity(
         new_circuit = QuantumCircuit()
         for register in registers.values():
             new_circuit.add_register(register)
-        new_circuit = controlled_copy_with_swap(new_circuit, registers, K, t, parameter=None)
+        new_circuit = controlled_copy_with_swap(new_circuit, registers, K, t+1, parameter=None)
         
         circuit.append(
             new_circuit.inverse(),
@@ -317,8 +317,6 @@ def get_constraint_circuit(
             circuit = compute_next_nodes_with_parity(circuit, registers, j, b, n, K, T, 3*parameter)
             circuit = penalise_graph_steps(circuit, registers, j, b, parameter, graph, n, K)
             circuit = uncompute_next_nodes_with_parity(circuit, registers, j, b, n, K, T)
-    # circuit.save_statevector('after_next_nodes_n')
-
 
     # Walk is allowed to stay in end indefinitely. end or end+end are not penalised, so any "allowed" steps are never penalised.
     # Could miss a case where the path leaves end node several times, each occuring at the
@@ -326,7 +324,6 @@ def get_constraint_circuit(
     circuit = compute_next_nodes_without_parity(circuit, registers, n+1, n, K, T, parameter=None)
     circuit = penalise_graph_end_steps(circuit, registers, parameter, n, K)
     circuit = uncompute_next_nodes_without_parity(circuit, registers, n+1, n, K, T)
-    # circuit.save_statevector('after_next_nodes_n1')
     return circuit
 
 
@@ -552,7 +549,7 @@ def get_phase_operator_gate(n: int, K: int, T: int, graph: nx.Graph, lamda: floa
     circuit.append(constraint_circuit, list(range(constraint_circuit.num_qubits)))
     circuit.append(objective_circuit, list(range(objective_circuit.num_qubits)))
     
-    return constraint_circuit.to_instruction(label='phase_operator')
+    return circuit.to_instruction(label='phase_operator')
     
 
 def get_mixer_gate(n: int, T: int, round: int) -> Instruction:

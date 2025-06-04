@@ -18,6 +18,11 @@ from qiskit_prog_qaoa.utils.oriented_circuit_utils import get_prog_qaoa_circuit
 from qiskit_prog_qaoa.utils.argparser import get_parser
 from qiskit_prog_qaoa.utils.logging import get_logger
 
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
+
 
 def print_circuit_info(qc: QuantumCircuit, circuit_name):
     logger.info(f'{circuit_name} has {qc.num_qubits} qubits')
@@ -46,7 +51,6 @@ backend_options = dict(
     device='GPU',
     max_memory_mb=args.memory*0.9,
     cuStateVec_enable=True,
-    blocking_enable=False,
     blocking_qubits=blocking,
     precision='single'
 )
@@ -56,7 +60,7 @@ sampler = Sampler(options=dict(backend_options=backend_options))
 
 
 # data_file = f'/lustre/scratch127/qpg/jc59/data/{filename}.gfa'
-data_file = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{filename}.gfa'
+data_file = f'/tmp/jc59/data/{filename}.gfa'
 gfa = Gfa.from_file(data_file)
 
 

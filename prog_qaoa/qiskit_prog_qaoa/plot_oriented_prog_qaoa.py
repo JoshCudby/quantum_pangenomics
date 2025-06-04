@@ -15,16 +15,15 @@ logger.info(args)
 
 filename = args.filename
 p: int = args.reps
-hardware = args.hardware
 shots = args.shots
-noisy = args.noisy
 init_type = args.init
 method = args.method
 max_iter = args.maxiter
 
 filename_suffix = f'p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}'
 
-with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/{filename}.{filename_suffix}.pkl', 'rb') as f:
+# with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/{filename}.{filename_suffix}.pkl', 'rb') as f:
+with open(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/prog_qaoa/out/oriented/{filename}.{filename_suffix}.pkl', 'rb') as f:
     data = pickle.load(f)
     
 history = data["history"]
@@ -50,18 +49,19 @@ axs[1].set_ylabel('Runtime')
 fig.tight_layout()
 fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/prog_qaoa/out/oriented.{filename}.convergence.{filename_suffix}.png')
 
+nodes_weights = list(graph.nodes(data="weight", default=0)) # type: ignore
 
 min_val = 0
-max_val = (T-1) * lamda + T ** 2 
-
+# Assume there is a 0-weight node without a self-edge. Then this max val is T visits to that node.
+max_val = (T-1) * lamda + T ** 2 + int(sum(x[1] ** 2 for x in nodes_weights[::2]))
+print(max_val)
 
 start = time()
 counts: dict = history[-1][3]
 evals = [oriented_cost_function(sample, n, T, graph, lamda) for sample in counts.keys()]
-print(evals)
 sample_vals = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
 sample_vals = [x for xs in sample_vals for x in xs]
-print(sample_vals)
+sample_vals = [x for x in sample_vals if not x == 10000]
 elapsed = time() - start
 logger.info(f'Time to compute energies {elapsed}')
 
@@ -79,13 +79,16 @@ rand_vals = [oriented_cost_function(sample, n, T, graph, lamda) for sample in ra
 alpha_qaoa = (min(sample_vals) - max_val) / (min_val - max_val)
 alpha_rand = (min(rand_vals) - max_val) / (min_val - max_val)
 
+print(len(sample_vals))
+print(len(rand_vals))
 fig, axs = plt.subplots(1,1,figsize=(8, 5))
-axs.hist(sample_vals, bins=100, label=f'QAOA samples at last iter, approx. ratio {alpha_qaoa*100:.2f}%', density=True)
-axs.hist(rand_vals, bins=100, label=f'Random samples, approx. ratio {alpha_rand*100:.2f}%', density=True, alpha=0.5)
+axs.hist(sample_vals, bins=max_val-min_val, label=f'QAOA samples at last iter, approx. ratio {alpha_qaoa*100:.2f}%', density=True)
+axs.hist(rand_vals, bins=max_val-min_val, label=f'Random samples, approx. ratio {alpha_rand*100:.2f}%', density=True, alpha=0.5)
 ylims = axs.get_ylim()
-axs.vlines(min_val, ylims[0], ylims[1], ls='--', color='k', label='Optimal solution')
-axs.vlines(min(sample_vals), ylims[0], ylims[1], ls=':', color='C0', label='QAOA best sample')
-axs.vlines(min(rand_vals), ylims[0], ylims[1], ls='-.', color='C1', label='Random best solution')
+axs.vlines(min_val, ylims[0], ylims[1], ls='--', color='k', label='Optimal energy')
+axs.vlines(max_val, ylims[0], ylims[1], ls='-', color='k', label='Maximum energy')
+axs.vlines(min(sample_vals), ylims[0], ylims[1], ls=':', color='C0', label='QAOA best energy')
+axs.vlines(min(rand_vals), ylims[0], ylims[1], ls='-.', color='C1', label='Random best energy')
 
 logger.info(f"QAOA gap: {min(sample_vals) - min_val}")
 logger.info(f"Random gap: {min(rand_vals) - min_val}")

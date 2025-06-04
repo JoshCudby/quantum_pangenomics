@@ -47,17 +47,10 @@ backend_options = dict(
     device='GPU',
     max_memory_mb=args.memory*0.9,
     cuStateVec_enable=True,
-    # fusion_enable=False,
-    # matrix_product_state_max_bond_dimension=5,
     blocking_enable=True,
     blocking_qubits=blocking,
-    # batched_shots_gpu_max_qubits=24,
-    # batched_shots_gpu=noisy,
     precision='single'
 )
-
-# (MULTI GPU +??) CACHEBLOCKING BREAKS!!!!
-# See N7_W3 runs 1555, 2156, 2198
 
 # fake_fez = FakeFez()
 # backend = AerSimulator.from_backend(fake_fez, **backend_options)
@@ -121,41 +114,6 @@ else:
 logger.info(f'Init: {init_params}')
 
 history = []
-
-
-################################################
-###### CHECK FOR INVALID NODES
-################################################
-# logger.error('Checking for invalid nodes')
-# to_run = t_circuit.assign_parameters(init_params, inplace=False)
-# result = backend.run(to_run).result()
-
-# uniform_prob = (n+1) ** -T
-
-# # savepoints = ['after_prep'] + [f'after_phase_{i}' for i in range(p)] + [f'after_mixer_{i}' for i in range(p)]
-# savepoints = ['after_penalise_count_1']
-# for savepoint in savepoints:
-#     data = result.data()[savepoint].data
-#     data[np.abs(data) ** 2 < uniform_prob / 100] = 0
-#     data_nz = np.transpose(np.nonzero(data))
-#     logger.error(f'Checking: {savepoint}')
-#     for nz in data_nz:
-#         binary_rep = np.binary_repr(nz[0])
-#         if len(binary_rep) > T * ceil_log_n2:
-#             logger.error('Unexpectedly large non-zero amplitude.')
-#             logger.error(f'Rep: {binary_rep}. Len: {len(binary_rep)}')
-#         if len(binary_rep) < T * ceil_log_n2:
-#             binary_rep = binary_rep.rjust(T * ceil_log_n2, '0')
-#         slice = binary_rep[-ceil_log_n2:]
-#         if slice in ['0000','1100','1101', '1110', '1111']:
-#             logger.error(f'Nonzero amplitude of: {binary_rep}. Amplitude: {np.abs(data[nz[0]]) ** 2}')
-#         for t in range(1, T):
-#             slice = binary_rep[-ceil_log_n2*(t+1):-ceil_log_n2*t]
-#             if slice in ['0000','1100','1101', '1110', '1111']:
-#                 logger.error(f'Nonzero amplitude of: {binary_rep}. Amplitude: {np.abs(data[nz[0]]) ** 2}')
-################################################
-
-
 
 logger.info(f'Opt method: {method}')
 
