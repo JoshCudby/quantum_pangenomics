@@ -127,7 +127,7 @@ def uncompute_next_nodes_with_parity(
         raise Exception(f'b should be binary. Current: {b}')
     
     is_equal_circ = is_equal_to_with_parity(n, j, b)
-    for t in range(T-1):
+    for t in range(T-2, -1, -1):
         circuit.append(
             is_equal_circ, 
             list(range(circuit.find_bit(registers[f'solution_{t}'][0]).index, circuit.find_bit(registers[f'solution_{t}'][-1]).index + 1)) \
@@ -140,7 +140,7 @@ def uncompute_next_nodes_with_parity(
         new_circuit = controlled_copy_with_swap(new_circuit, registers, K, t+1, parameter=None)
         
         circuit.append(
-            new_circuit.reverse_ops(),
+            new_circuit.inverse(),
             new_circuit.qubits
         )
         

@@ -1,10 +1,8 @@
 import numpy as np
 import pickle
-import networkx as nx
 from scipy.optimize import minimize
 from collections import Counter
 from fnmatch import fnmatch
-from gfapy import Gfa
 
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
@@ -14,7 +12,7 @@ from qiskit_aer.primitives import SamplerV2 as Sampler
 
 
 from qiskit_prog_qaoa.utils.opt_utils import oriented_objective, callback, callback_cobyla, oriented_soln_to_path, oriented_cost_function
-from qiskit_prog_qaoa.utils.oriented_circuit_utils import get_prog_qaoa_circuit
+from qiskit_prog_qaoa.utils.oriented_graph_to_circuit import gfa_file_to_oriented_prog_qaoa_circuit
 from qiskit_prog_qaoa.utils.argparser import get_parser
 from qiskit_prog_qaoa.utils.logging import get_logger
 
@@ -59,52 +57,22 @@ backend = AerSimulator(**backend_options)
 sampler = Sampler(options=dict(backend_options=backend_options))
 
 
+small_circuit, small_n, small_K, small_T, small_graph = gfa_file_to_oriented_prog_qaoa_circuit('/tmp/jc59/data/test_N3_W4.gfa', p, lamda)
+large_circuit, large_n, large_K, large_T, large_graph = gfa_file_to_oriented_prog_qaoa_circuit(f'/tmp/jc59/data/{filename}.gfa', p, lamda)
+
 # data_file = f'/lustre/scratch127/qpg/jc59/data/{filename}.gfa'
-data_file = f'/tmp/jc59/data/{filename}.gfa'
-gfa = Gfa.from_file(data_file)
 
-
-graph = nx.DiGraph()
-for index, segment_line in enumerate(gfa.segments):
-    graph.add_node(f'{segment_line.name}_+',  weight=segment_line.SC)
-    graph.add_node(f'{segment_line.name}_-',  weight=segment_line.SC)
-    
-for edge_line in gfa.edges:
-    v1 = edge_line.sid1
-    v2 = edge_line.sid2
-    graph.add_edges_from([
-        (f'{v1.name}_{v1.orient}', f'{v2.name}_{v2.orient}'),
-    ])
-    v1.invert()
-    v2.invert()
-    graph.add_edges_from([
-        (f'{v2.name}_{v2.orient}', f'{v1.name}_{v1.orient}'),
-    ])
-
-n = len(gfa.segments)
-nodes_weights = list(graph.nodes(data="weight", default=0)) # type: ignore
-
-K = max(x[1] for x in nodes_weights)  # K should be more than max weight to allow for over-visiting a high weight node.
-K = int(min(K, 5))
-total_weight = int(sum(x[1] for x in nodes_weights) / 2)
-T = int(np.floor(total_weight * 1.1)) 
-
-ceil_log_n2 = int(np.ceil(np.log2(n+2)))
-logger.info(f'p={p}, n={n}, K={K}, T={T}, ceil_log_n2={ceil_log_n2}')
-logger.info(f'shots={shots}, iter={max_iter}, lamda={lamda}')
-
-circuit = get_prog_qaoa_circuit(p=p, n=n, K=K, T=T, graph=graph, lamda=lamda)
-
-d_circuit = circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'] ,reps=1)
+# Optimise small circuit
+d_circuit = small_circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'] ,reps=1)
 gtd = ['circuit*']
 while any(fnmatch(key, p) for p in gtd for key in d_circuit.count_ops().keys()):
     d_circuit = d_circuit.decompose(gates_to_decompose=gtd)
 
-print_circuit_info(d_circuit, 'Circuit')
+print_circuit_info(d_circuit, 'Small Circuit')
 
 
 t_circuit = transpile(d_circuit, backend=backend, optimization_level=3, seed_transpiler=seed)
-print_circuit_info(t_circuit, 'Transpiled Circuit')
+print_circuit_info(t_circuit, 'Transpiled Small Circuit')
 t_circuit.measure_all()
 
 
@@ -134,7 +102,7 @@ else:
     result = minimize(
         oriented_objective, 
         x0=init_params,
-        args=(n, T, graph, lamda, shots, history, t_circuit, sampler), 
+        args=(small_n, small_T, small_graph, lamda, shots, history, t_circuit, sampler), 
         method=method, 
         bounds=tuple((0,1) for _ in range(2 * p)), 
         options={"maxiter": max_iter, "maxfev": max_iter, "rhobeg": 0.1},  # , "ftol": 1e-7
@@ -143,19 +111,56 @@ else:
 
 logger.info(result)
 
+d_circuit = large_circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'], reps=1)
+gtd = ['circuit*']
+while any(fnmatch(key, p) for p in gtd for key in d_circuit.count_ops().keys()):
+    d_circuit = d_circuit.decompose(gates_to_decompose=gtd)
+
+print_circuit_info(d_circuit, 'Large Circuit')
+
+t_circuit = transpile(d_circuit, backend, optimization_level=3, seed_transpiler=seed)
+print_circuit_info(t_circuit, 'Transpiled Large Circuit')
+
+t_circuit.measure_all()
+
+large_history=[]
+if method == 'none':
+    exit(0)
+elif method == 'spsa':
+    raise Exception('SPSA algorithm from qiskit_algorithms does not support Qiskit 2.0')
+    # spsa = SPSA(maxiter=max_iter, termination_checker=TerminationChecker())
+    # result = spsa.minimize(objective, x0=init_params)
+    # print(f'SPSA completed after {result.nit} iterations')
+else:
+    large_result = minimize(
+        oriented_objective, 
+        x0=result.x,
+        args=(large_n, large_T, large_graph, lamda, shots, large_history, t_circuit, sampler), 
+        method=method, 
+        bounds=tuple((0,1) for _ in range(2 * p)), 
+        options={"maxiter": 10, "maxfev": 10, "rhobeg": 0.1},  # , "ftol": 1e-7
+        callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
+    )
+    
+sample = backend.run(t_circuit, shots=shots).result()
+
+
 obj_to_dump = dict(
-    result=result, history=history, init_params=init_params, circuit=circuit, graph=graph, n=n, T=T, K=K, lamda=lamda
+    result=result, large_result=large_result, sample=sample,
+    history=history, large_history=large_history, opt_params=result.x, init_params=init_params, lamda=lamda, 
+    small_circuit=small_circuit, small_graph=small_graph, small_n=small_n, small_T=small_T, small_K=small_K,
+    large_circuit=large_circuit, large_graph=large_graph, large_n=large_n, large_T=large_T, large_K=large_K
 )
 # with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
-with open(f'/tmp/jc59/out/prog_qaoa/oriented/{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
+with open(f'/tmp/jc59/out/prog_qaoa/oriented/transfer.test_N3_W4.{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
     pickle.dump(obj_to_dump, f)
 
-if len(history):
-    last_run_data = history[-1]
-    counts = Counter(last_run_data[3])
-    most_common = counts.most_common(100)
-    for e in most_common:
-        if e[1] > 1:
-            logger.info(f'soln: {e[0]}. path: {oriented_soln_to_path(e[0], n, T, graph)}. cost: {oriented_cost_function(e[0], n, T, graph, lamda)}. count: {e[1]}')
+
+counts = Counter(sample.get_counts())
+most_common = counts.most_common(100)
+for e in most_common:
+    if e[1] > 1:
+        logger.info(f'soln: {e[0]}. path: {oriented_soln_to_path(e[0], large_n, large_T, large_graph)}. \
+        cost: {oriented_cost_function(e[0], large_n, large_T, large_graph, lamda)}. count: {e[1]}')
 
 exit(0)

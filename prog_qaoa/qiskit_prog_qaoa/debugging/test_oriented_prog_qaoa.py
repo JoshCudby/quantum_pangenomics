@@ -81,32 +81,33 @@ ceil_log_n2 = int(np.ceil(np.log2(n+2)))
 logger.info(f'n={n}, K={K}, T={T}, ceil_log_n2={ceil_log_n2}')
 
 
-state_prep_circuit = QuantumCircuit()
 if to_prepare == 'State':
     logger.info('Full state prep')
     state_prep_circuit = state_prep(n, T)
 else:
     logger.info(f'Preparing: {to_prepare}')
+    state_prep_circuit = QuantumCircuit(T * (ceil_log_n2+1))
     for i in range(len(to_prepare)):
-        state_prep_circuit = QuantumCircuit(T * ceil_log_n2)
         if to_prepare[::-1][i] == '1':
+            logger.info(f'x on qubit {i}')
             state_prep_circuit.x(i)
 
 
 circuit = QuantumCircuit((K+T)*(ceil_log_n2+1)+2)
 circuit.global_phase = 0
 circuit.append(state_prep_circuit, list(range(state_prep_circuit.num_qubits)))
+circuit.save_statevector('after_prep') # type: ignore
 
 constraint_circuit = get_constraint_circuit(n, K, T, graph, parameter=np.pi/20, state_prep_circuit=None) # type: ignore
 objective_circuit = get_objective_circuit(n, K, T, graph, parameter=np.pi/64, state_prep_circuit=None) # type: ignore
 
 logger.info(f'Objective circuit qubits: {objective_circuit.num_qubits}')
 circuit.append(objective_circuit, list(range(objective_circuit.num_qubits)))
-# circuit.save_statevector('after_objective') # type: ignore
+circuit.save_statevector('after_objective') # type: ignore
 
 logger.info(f'Constraint circuit qubits: {constraint_circuit.num_qubits}')
 circuit.append(constraint_circuit, list(range(constraint_circuit.num_qubits)))
-# circuit.save_statevector('after_constraint') # type: ignore
+circuit.save_statevector('after_constraint') # type: ignore
 
 
 circuit.save_statevector('after_phase') # type: ignore
@@ -128,7 +129,7 @@ print_circuit_info(t_circuit, 'Transpiled Circuit')
 result = backend.run(t_circuit).result()
 # logger.error(result)
 
-uniform_prob = (n+1) ** -T
+uniform_prob = (2*(n+1)) ** -T
 
 try:
     with open(f'/tmp/jc59/out/prog_qaoa/oriented/data.{filename}.prepare{to_prepare}.pkl', 'rb') as f:
@@ -140,7 +141,10 @@ except Exception as e:
     
 
 # for savepoint in result.data().keys():
-savepoints= ['after_constraint', 'after_objective', 'after_phase', 'after_next_nodes_n', 'after_compute_next_nodes_n1', 'after_next_nodes_n1']
+savepoints= ['after_prep', 'after_constraint', 'after_objective', 'after_phase', 
+             'after_next_nodes_n', 'after_compute_next_nodes_n1', 'after_next_nodes_n1', 'after_next_nodes_1_0',
+             'after_compute_next_nodes_1_0'
+             ]
 for savepoint in savepoints:
     try:
         sv = result.data()[savepoint].data

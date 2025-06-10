@@ -86,8 +86,8 @@ if to_prepare is None:
     to_prepare= 'State'
 else:
     logger.info(f'Preparing: {to_prepare}')
+    state_prep_circuit = QuantumCircuit(T * ceil_log_n2)
     for i in range(len(to_prepare)):
-        state_prep_circuit = QuantumCircuit(T * ceil_log_n2)
         if to_prepare[::-1][i] == '1':
             state_prep_circuit.x(i)
 

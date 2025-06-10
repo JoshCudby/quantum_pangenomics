@@ -70,6 +70,7 @@ else:
         ])
 
     n = len(gfa.segments)
+    ceil_log_n2 = int(np.ceil(np.log2(n+2)))
     K = max(dict(graph.nodes(data="weight", default=0)).values()) # K should be more than max weight to allow for over-visiting a high weight node.
     K = int(min(K, 5))
     nodes_weights = list(graph.nodes(data="weight"))
@@ -94,7 +95,12 @@ else:
             unexpected = sorted(coords - expected_indexes)
             logger.info(f'Expected indexes missing: {len(missing)}')
             logger.info(f'Unexpected indexes present: {len(unexpected)}')
+
+                
             if len(missing) or len(unexpected):
+                for i in range(10):
+                    logger.info(np.binary_repr(missing[i], (K+T)*(ceil_log_n2+1)+2))
+                    logger.info(np.binary_repr(unexpected[i], (K+T)*(ceil_log_n2+1)+2))
                 # with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/missing.{filename}.prepare{prepare}.pkl', 'wb') as f:
                 with open(f'/tmp/jc59/out/prog_qaoa/oriented/missing.{key}.{filename}.prepare{prepare}.pkl', 'wb') as f:
                     pickle.dump({'missing': missing, 'unexpected': unexpected}, f)

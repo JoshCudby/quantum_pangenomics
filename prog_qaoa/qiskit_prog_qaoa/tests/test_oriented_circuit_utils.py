@@ -483,6 +483,34 @@ class TestOrientedConstraintCircuit(unittest.TestCase):
             np.e**(3j* self.parameter),
             places=5
         )
+        
+        
+    def test_too_many_visits(self):
+        optimal_path = '0100' + '0100' + '0100' + '0001'
+        input_str =  optimal_path + '0' * (self.K * int(1 + np.ceil(np.log2(self.n+2))) + 2)
+        start_ket, start_amplitude, end_ket, end_amplitude = get_single_bitstring_mapping_with_amplitudes(
+            input_str,
+            self.qc,
+            self.simulator,
+            None
+        )
+        self.assertEqual(
+            start_ket,
+            input_str
+        )
+        self.assertAlmostEqual(
+            start_amplitude,
+            1. + 0.j
+        )
+        self.assertEqual(
+            end_ket,
+            input_str
+        )
+        self.assertAlmostEqual(
+            end_amplitude,
+            np.e**(3j* self.parameter),
+            places=5
+        )
    
 
 class TestOrientedPhaseGate(unittest.TestCase):
