@@ -175,7 +175,7 @@ def oriented_objective(x: np.ndarray, n, T, graph, lamda, shots, history: list, 
         counts = sampler_result[0].data.meas.get_counts()
         sampling_time = time() - start
         start = time()
-        total_energy = oriented_cvar(counts, n, T, graph, lamda, alpha=0.05)
+        total_energy = oriented_cvar(counts, n, T, graph, lamda, alpha=0.75)
         
         classical_post_process_time = time() - start
         

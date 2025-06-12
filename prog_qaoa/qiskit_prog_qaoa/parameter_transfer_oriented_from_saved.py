@@ -10,15 +10,16 @@ from qiskit_aer.primitives import SamplerV2 as Sampler
 
 # from qiskit_algorithms.optimizers import SPSA # Breaks because QNSPSA wants base sampler V1, deprecated
 
-from qiskit_prog_qaoa.utils.oriented_graph_to_circuit import gfa_file_to_oriented_prog_qaoa_circuit
+
 from qiskit_prog_qaoa.utils.opt_utils import oriented_objective, callback, callback_cobyla, oriented_soln_to_path, oriented_cost_function
+from qiskit_prog_qaoa.utils.oriented_graph_to_circuit import gfa_file_to_oriented_prog_qaoa_circuit
 from qiskit_prog_qaoa.utils.argparser import get_parser
 from qiskit_prog_qaoa.utils.logging import get_logger
 
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def print_circuit_info(qc: QuantumCircuit, circuit_name):
@@ -29,8 +30,10 @@ def print_circuit_info(qc: QuantumCircuit, circuit_name):
 
 logger = get_logger(__name__)
 parser = get_parser()
+parser.add_argument('-t', '--transfer')
 args = parser.parse_args()
 
+transfer = args.transfer
 filename = args.filename
 p: int = args.reps
 shots = args.shots
@@ -56,40 +59,28 @@ backend = AerSimulator(**backend_options)
 sampler = Sampler(options=dict(backend_options=backend_options))
 
 
-# data_file = f'/lustre/scratch127/qpg/jc59/data/{filename}.gfa'
-circuit, n, K, T, graph = gfa_file_to_oriented_prog_qaoa_circuit(f'/tmp/jc59/data/{filename}.gfa', p, lamda)
+with open(f'/tmp/jc59/out/prog_qaoa/oriented/{transfer}.p{p}.shots1000.init{init_type}.method{method}.iter{max_iter}.pkl', 'rb') as f:
+    data = pickle.load(f)
 
-ceil_log_n2 = int(np.ceil(np.log2(n+2)))
-logger.info(f'p={p}, n={n}, K={K}, T={T}, ceil_log_n2={ceil_log_n2}')
-logger.info(f'shots={shots}, iter={max_iter}, lamda={lamda}')
+init_params = data['result'].x
+logger.info(f'Init: {init_params}')
 
 
-d_circuit = circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'] ,reps=1)
+large_circuit, large_n, large_K, large_T, large_graph = gfa_file_to_oriented_prog_qaoa_circuit(f'/tmp/jc59/data/{filename}.gfa', p, lamda)
+
+d_circuit = large_circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'], reps=1)
 gtd = ['circuit*']
 while any(fnmatch(key, p) for p in gtd for key in d_circuit.count_ops().keys()):
     d_circuit = d_circuit.decompose(gates_to_decompose=gtd)
 
-print_circuit_info(d_circuit, 'Circuit')
+print_circuit_info(d_circuit, 'Large Circuit')
 
+t_circuit = transpile(d_circuit, backend, optimization_level=3, seed_transpiler=seed)
+print_circuit_info(t_circuit, 'Transpiled Large Circuit')
 
-t_circuit = transpile(d_circuit, backend=backend, optimization_level=3, seed_transpiler=seed)
-print_circuit_info(t_circuit, 'Transpiled Circuit')
 t_circuit.measure_all()
 
-
-if init_type == 'ramp':
-    t = 0.7 * p
-    betas = np.linspace(
-        (1 / p) * (t * (1 - 0.5 / p)), (1 / p) * (t * 0.5 / p), p
-    )
-    gammas = betas[::-1]
-    init_params = np.array(betas.tolist() + gammas.tolist())
-else:
-    init_params = rng.uniform(0.05, 0.95, p).tolist() + rng.uniform(0.05, 0.95, p).tolist()
-logger.info(f'Init: {init_params}')
-
-history = []
-
+large_history=[]
 logger.info(f'Opt method: {method}')
 
 if method == 'none':
@@ -100,31 +91,36 @@ elif method == 'spsa':
     # result = spsa.minimize(objective, x0=init_params)
     # print(f'SPSA completed after {result.nit} iterations')
 else:
-    result = minimize(
+    large_result = minimize(
         oriented_objective, 
         x0=init_params,
-        args=(n, T, graph, lamda, shots, history, t_circuit, sampler), 
+        args=(large_n, large_T, large_graph, lamda, shots, large_history, t_circuit, sampler), 
         method=method, 
         bounds=tuple((0,1) for _ in range(2 * p)), 
-        options={"maxiter": max_iter, "maxfev": max_iter, "rhobeg": 0.1, "ftol": 1e-7, "tol": 1e-7},  # , "ftol": 1e-7
+        options={"maxiter": 10, "maxfev": 10, "rhobeg": 0.01},  # , "ftol": 1e-7
         callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
     )
 
-logger.info(result)
+logger.info(large_result)
+to_run = t_circuit.assign_parameters(init_params)
+sample = backend.run(to_run, shots=shots).result()
+
 
 obj_to_dump = dict(
-    result=result, history=history, init_params=init_params, circuit=circuit, graph=graph, n=n, T=T, K=K, lamda=lamda
+    result=large_result, sample=sample,
+    history=large_history, init_params=init_params, lamda=lamda,
+    circuit=large_circuit, graph=large_graph, n=large_n, T=large_T, K=large_K
 )
 # with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
-with open(f'/tmp/jc59/out/prog_qaoa/oriented/{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.alpha75.pkl', 'wb') as f:
+with open(f'/tmp/jc59/out/prog_qaoa/oriented/transfer.{transfer}.{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
     pickle.dump(obj_to_dump, f)
 
-if len(history):
-    last_run_data = history[-1]
-    counts = Counter(last_run_data[3])
-    most_common = counts.most_common(100)
-    for e in most_common:
-        if e[1] > 1:
-            logger.info(f'soln: {e[0]}. path: {oriented_soln_to_path(e[0], n, T, graph)}. cost: {oriented_cost_function(e[0], n, T, graph, lamda)}. count: {e[1]}')
+
+counts = Counter(sample.get_counts())
+most_common = counts.most_common(100)
+for e in most_common:
+    if e[1] > 1:
+        logger.info(f'soln: {e[0]}. path: {oriented_soln_to_path(e[0], large_n, large_T, large_graph)}. \
+        cost: {oriented_cost_function(e[0], large_n, large_T, large_graph, lamda)}. count: {e[1]}')
 
 exit(0)

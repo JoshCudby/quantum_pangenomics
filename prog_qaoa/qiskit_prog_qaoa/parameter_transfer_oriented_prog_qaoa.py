@@ -111,56 +111,65 @@ else:
 
 logger.info(result)
 
-d_circuit = large_circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'], reps=1)
-gtd = ['circuit*']
-while any(fnmatch(key, p) for p in gtd for key in d_circuit.count_ops().keys()):
-    d_circuit = d_circuit.decompose(gates_to_decompose=gtd)
-
-print_circuit_info(d_circuit, 'Large Circuit')
-
-t_circuit = transpile(d_circuit, backend, optimization_level=3, seed_transpiler=seed)
-print_circuit_info(t_circuit, 'Transpiled Large Circuit')
-
-t_circuit.measure_all()
-
-large_history=[]
-if method == 'none':
-    exit(0)
-elif method == 'spsa':
-    raise Exception('SPSA algorithm from qiskit_algorithms does not support Qiskit 2.0')
-    # spsa = SPSA(maxiter=max_iter, termination_checker=TerminationChecker())
-    # result = spsa.minimize(objective, x0=init_params)
-    # print(f'SPSA completed after {result.nit} iterations')
-else:
-    large_result = minimize(
-        oriented_objective, 
-        x0=result.x,
-        args=(large_n, large_T, large_graph, lamda, shots, large_history, t_circuit, sampler), 
-        method=method, 
-        bounds=tuple((0,1) for _ in range(2 * p)), 
-        options={"maxiter": 10, "maxfev": 10, "rhobeg": 0.1},  # , "ftol": 1e-7
-        callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
-    )
-    
-sample = backend.run(t_circuit, shots=shots).result()
-
-
 obj_to_dump = dict(
-    result=result, large_result=large_result, sample=sample,
-    history=history, large_history=large_history, opt_params=result.x, init_params=init_params, lamda=lamda, 
-    small_circuit=small_circuit, small_graph=small_graph, small_n=small_n, small_T=small_T, small_K=small_K,
-    large_circuit=large_circuit, large_graph=large_graph, large_n=large_n, large_T=large_T, large_K=large_K
+    result=result,
+    history=history, init_params=init_params, lamda=lamda, 
+    circuit=small_circuit, graph=small_graph, n=small_n, T=small_T, K=small_K,
 )
-# with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
-with open(f'/tmp/jc59/out/prog_qaoa/oriented/transfer.test_N3_W4.{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
+with open(f'/tmp/jc59/out/prog_qaoa/oriented/test_N3_W4.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
     pickle.dump(obj_to_dump, f)
 
+# d_circuit = large_circuit.decompose(gates_to_decompose=['state_prep', 'phase_operator', 'mixer_operator'], reps=1)
+# gtd = ['circuit*']
+# while any(fnmatch(key, p) for p in gtd for key in d_circuit.count_ops().keys()):
+#     d_circuit = d_circuit.decompose(gates_to_decompose=gtd)
 
-counts = Counter(sample.get_counts())
-most_common = counts.most_common(100)
-for e in most_common:
-    if e[1] > 1:
-        logger.info(f'soln: {e[0]}. path: {oriented_soln_to_path(e[0], large_n, large_T, large_graph)}. \
-        cost: {oriented_cost_function(e[0], large_n, large_T, large_graph, lamda)}. count: {e[1]}')
+# print_circuit_info(d_circuit, 'Large Circuit')
+
+# t_circuit = transpile(d_circuit, backend, optimization_level=3, seed_transpiler=seed)
+# print_circuit_info(t_circuit, 'Transpiled Large Circuit')
+
+# t_circuit.measure_all()
+
+# large_history=[]
+# if method == 'none':
+#     exit(0)
+# elif method == 'spsa':
+#     raise Exception('SPSA algorithm from qiskit_algorithms does not support Qiskit 2.0')
+#     # spsa = SPSA(maxiter=max_iter, termination_checker=TerminationChecker())
+#     # result = spsa.minimize(objective, x0=init_params)
+#     # print(f'SPSA completed after {result.nit} iterations')
+# else:
+#     large_result = minimize(
+#         oriented_objective, 
+#         x0=result.x,
+#         args=(large_n, large_T, large_graph, lamda, shots, large_history, t_circuit, sampler), 
+#         method=method, 
+#         bounds=tuple((0,1) for _ in range(2 * p)), 
+#         options={"maxiter": 10, "maxfev": 10, "rhobeg": 0.01},  # , "ftol": 1e-7
+#         callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
+#     )
+
+# logger.info(large_result)
+# to_run = t_circuit.assign_parameters(result.x)
+# sample = backend.run(to_run, shots=shots).result()
+
+
+# obj_to_dump = dict(
+#     result=large_result, sample=sample,
+#     history=large_history, init_params=init_params, lamda=lamda, 
+#     circuit=large_circuit, graph=large_graph, n=large_n, T=large_T, K=large_K
+# )
+# # with open(f'/lustre/scratch127/qpg/jc59/out/prog_qaoa/oriented/{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
+# with open(f'/tmp/jc59/out/prog_qaoa/oriented/transfer.test_N3_W4.{filename}.p{p}.shots{shots}.init{init_type}.method{method}.iter{max_iter}.pkl', 'wb') as f:
+#     pickle.dump(obj_to_dump, f)
+
+
+# counts = Counter(sample.get_counts())
+# most_common = counts.most_common(100)
+# for e in most_common:
+#     if e[1] > 1:
+#         logger.info(f'soln: {e[0]}. path: {oriented_soln_to_path(e[0], large_n, large_T, large_graph)}. \
+#         cost: {oriented_cost_function(e[0], large_n, large_T, large_graph, lamda)}. count: {e[1]}')
 
 exit(0)
