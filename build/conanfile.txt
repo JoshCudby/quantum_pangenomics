@@ -1,0 +1,11 @@
+[generators]
+cmake
+
+[requires]
+nlohmann_json/3.1.1
+spdlog/1.9.2
+
+[options]
+*:shared=False
+
+[imports]

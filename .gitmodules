@@ -23,3 +23,6 @@
 [submodule "modules/oatk"]
 	path = modules/oatk
 	url = https://github.com/c-zhou/oatk.git
+[submodule "modules/qaoa_training_pipeline"]
+	path = modules/qaoa_training_pipeline
+	url = git@github.com:JoshCudby/qaoa_training_pipeline.git

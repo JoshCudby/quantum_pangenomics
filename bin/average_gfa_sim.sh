@@ -1,9 +1,9 @@
 #!/bin/bash
 
-input_file="$1"  # Change this to your file name
+input_file="$1"  
 temp_file="merged_data.tmp"
 
-column_names=("-" "len-t" "len-q" "covered" "used" "ncontig" "nbreaks" "nindel" "ndiff" "identity")  # Adjust as needed
+column_names=("-" "len-t" "len-q" "covered" "used" "ncontig" "nbreaks" "nindel" "ndiff" "identity")  
 
 # Remove the temp file if it exists
 rm -f "$temp_file"
@@ -17,13 +17,13 @@ BEGIN {
     split(col_names, names, " ");  # Split column names into an array
 }
 {
-    for (i = 1; i <= NF; i++) {
+    for (i = 2; i <= NF; i++) {
         sum[i] += $i;
         count[i]++;
     }
 }
 END {
-    for (i = 1; i in sum; i++) {
+    for (i = 2; i in sum; i++) {
         col_name = (i <= length(names)) ? names[i] : "Column" i;
         printf "%s mean: %.4f\n", col_name, sum[i] / count[i];
     }

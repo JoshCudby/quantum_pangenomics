@@ -31,7 +31,7 @@ def main():
         logger.info(f'Running pathfinder to get coverage from {args.filepath}')
         copy_numbers, nodes = run_pathfinder_coverage(args.data_dir, args.filepath, COVERAGE_SUFFIX)
     else:
-        logger.info(f'Copy numbers provided: {args.copy_numbers}')
+        # logger.info(f'Copy numbers provided: {args.copy_numbers}')
         copy_numbers = args.copy_numbers
         nodes = None
 

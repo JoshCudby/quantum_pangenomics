@@ -21,7 +21,7 @@ def mqlib_sample_qubo(qubo_description: QuboDescription):
         
         for _ in range(qubo_description.jobs):
             # Run the MQLib solver and capture output
-            process = subprocess.run([f"{MQLIB_DIR}/bin/MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-s", str(rng.integers(0, 65535)), "-ps"], capture_output=True)
+            process = subprocess.run(["MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-s", str(rng.integers(0, 65535)), "-ps"], capture_output=True)
             out = process.stdout.decode("utf-8")
 
             try:
@@ -85,7 +85,12 @@ def gurobi_sample_qubo(qubo_description: QuboDescription):
     
     paths = {}
     Q = np.array(qubo_description.Q)
-    with gp.Env() as env, gp.Model(env=env) as model:
+    params = {
+        "WLSACCESSID":"f7f8b2ea-2cd3-4f47-bd91-048a1dbed225",
+        "WLSSECRET":"d5f0c9b7-2ead-4e97-a3ee-5e57aa8a8381",
+        "LICENSEID":2525391
+    }
+    with gp.Env(params=params) as env, gp.Model(env=env) as model:
         model_vars = model.addMVar(shape=Q.shape[0], vtype=GRB.BINARY, name="x")
         model.setObjective(model_vars @ Q @ model_vars, GRB.MINIMIZE)
         model.Params.BestObjStop = - qubo_description.offset

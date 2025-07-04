@@ -1,0 +1,55 @@
+Determining if the function sgemm_ exists failed with the following output:
+Change Dir: /nfs/users/nfs_j/jc59/quantumwork/pangenome/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_48fd6/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_48fd6.dir/build.make CMakeFiles/cmTC_48fd6.dir/build
+gmake[1]: Entering directory '/nfs/users/nfs_j/jc59/quantumwork/pangenome/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_48fd6.dir/CheckFunctionExists.c.o
+/usr/bin/gcc   -DCHECK_FUNCTION_EXISTS=sgemm_ -o CMakeFiles/cmTC_48fd6.dir/CheckFunctionExists.c.o -c /usr/share/cmake-3.22/Modules/CheckFunctionExists.c
+Linking C executable cmTC_48fd6
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_48fd6.dir/link.txt --verbose=1
+/usr/bin/gcc   -DCHECK_FUNCTION_EXISTS=sgemm_ CMakeFiles/cmTC_48fd6.dir/CheckFunctionExists.c.o -o cmTC_48fd6 
+/usr/bin/ld: CMakeFiles/cmTC_48fd6.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text+0x14): undefined reference to `sgemm_'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_48fd6.dir/build.make:99: cmTC_48fd6] Error 1
+gmake[1]: Leaving directory '/nfs/users/nfs_j/jc59/quantumwork/pangenome/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_48fd6/fast] Error 2
+
+
+
+Determining if the function cheev_ exists failed with the following output:
+Change Dir: /nfs/users/nfs_j/jc59/quantumwork/pangenome/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_5eafe/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_5eafe.dir/build.make CMakeFiles/cmTC_5eafe.dir/build
+gmake[1]: Entering directory '/nfs/users/nfs_j/jc59/quantumwork/pangenome/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_5eafe.dir/CheckFunctionExists.c.o
+/usr/bin/gcc   -DCHECK_FUNCTION_EXISTS=cheev_ -o CMakeFiles/cmTC_5eafe.dir/CheckFunctionExists.c.o -c /usr/share/cmake-3.22/Modules/CheckFunctionExists.c
+Linking C executable cmTC_5eafe
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_5eafe.dir/link.txt --verbose=1
+/usr/bin/gcc   -DCHECK_FUNCTION_EXISTS=cheev_ CMakeFiles/cmTC_5eafe.dir/CheckFunctionExists.c.o -o cmTC_5eafe  /usr/lib/x86_64-linux-gnu/libblas.so /usr/lib/x86_64-linux-gnu/libf77blas.so /usr/lib/x86_64-linux-gnu/libatlas.so -lm -ldl 
+/usr/bin/ld: CMakeFiles/cmTC_5eafe.dir/CheckFunctionExists.c.o: in function `main':
+CheckFunctionExists.c:(.text+0x14): undefined reference to `cheev_'
+collect2: error: ld returned 1 exit status
+gmake[1]: *** [CMakeFiles/cmTC_5eafe.dir/build.make:102: cmTC_5eafe] Error 1
+gmake[1]: Leaving directory '/nfs/users/nfs_j/jc59/quantumwork/pangenome/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_5eafe/fast] Error 2
+
+
+
+Determining if the function cheev_ exists failed with the following output:
+Change Dir: /nfs/users/nfs_j/jc59/quantumwork/pangenome/build/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/gmake -f Makefile cmTC_29f5e/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_29f5e.dir/build.make CMakeFiles/cmTC_29f5e.dir/build
+gmake[1]: Entering directory '/nfs/users/nfs_j/jc59/quantumwork/pangenome/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_29f5e.dir/CheckFunctionExists.c.o
+/usr/bin/gcc   -DCHECK_FUNCTION_EXISTS=cheev_ -o CMakeFiles/cmTC_29f5e.dir/CheckFunctionExists.c.o -c /usr/share/cmake-3.22/Modules/CheckFunctionExists.c
+Linking C executable cmTC_29f5e
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_29f5e.dir/link.txt --verbose=1
+/usr/bin/gcc   -DCHECK_FUNCTION_EXISTS=cheev_ CMakeFiles/cmTC_29f5e.dir/CheckFunctionExists.c.o -o cmTC_29f5e  /usr/lib/x86_64-linux-gnu/liblapack.so /usr/lib/x86_64-linux-gnu/libblas.so /usr/lib/x86_64-linux-gnu/libf77blas.so /usr/lib/x86_64-linux-gnu/libatlas.so -fortranlibs 
+gcc: error: unrecognized command-line option ‘-fortranlibs’
+gmake[1]: *** [CMakeFiles/cmTC_29f5e.dir/build.make:103: cmTC_29f5e] Error 1
+gmake[1]: Leaving directory '/nfs/users/nfs_j/jc59/quantumwork/pangenome/build/CMakeFiles/CMakeTmp'
+gmake: *** [Makefile:127: cmTC_29f5e/fast] Error 2
+
+
+

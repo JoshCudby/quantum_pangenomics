@@ -1,4 +1,5 @@
 import numpy as np
+import pickle
 from qiskit_optimization import QuadraticProgram
 
 
@@ -19,8 +20,11 @@ def get_qp(data_file) -> QuadraticProgram:
 
 
 def get_objective_and_hamiltonian(data_file):
-    data = np.load(data_file, allow_pickle=True)
-    Q, offset, _, _  = data
+    with open(data_file, 'rb') as f:
+        data = pickle.load(f)
+    Q = data['Q']
+    offset = data['offset']
+    
     Q = np.triu(Q) * 2
     Q -= np.triu(np.triu(Q).T) / 2
 
@@ -31,9 +35,9 @@ def get_objective_and_hamiltonian(data_file):
     mod = QuadraticProgram("QUBO test")
     mod.binary_var_list(Q.shape[0])
     mod.minimize(constant=offset, linear=None, quadratic=Q)
-    hamiltonian, _ = mod.to_ising()
+    hamiltonian, ising_offset = mod.to_ising()
     hamiltonian = hamiltonian.sort(weight=True)
-    return mod.objective, hamiltonian
+    return mod.objective, hamiltonian, ising_offset
 
 
 def get_offset(data_file):

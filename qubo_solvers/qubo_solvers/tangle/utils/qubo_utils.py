@@ -4,7 +4,7 @@ from itertools import product
 from math import floor
 
 
-def get_tangle_qubo_matrix(graph: nx.DiGraph) -> np.ndarray:
+def get_tangle_qubo_matrix(graph: nx.Graph) -> np.ndarray:
     """Generates a matrix describing the max path problem qubo cost function.
     The cost function is C(x) = x^T Q x, where Q is the matrix returned by this function.
 

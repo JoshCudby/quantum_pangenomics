@@ -51,6 +51,8 @@ def main():
         paths = mqlib_sample_qubo(qubo_description)
     elif qubo_description.solver == Solver.GUROBI:
         paths = gurobi_sample_qubo(qubo_description)
+    else:
+        raise Exception(f'Unrecognised solver: {qubo_description.solver}')
 
     for time_limit in qubo_description.time_limits:
         for i in range(qubo_description.jobs):
