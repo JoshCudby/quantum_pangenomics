@@ -1,0 +1,77 @@
+import numpy as np
+import pickle
+import os
+import argparse
+from pathlib import Path
+from qubo_solvers.definitions import DATA_DIR, OUT_DIR
+from qubo_solvers.oriented_tangle.utils.graph_utils import edge2node_oriented_graph
+from qubo_solvers.oriented_tangle.utils.qubo_utils import edge2node_qubo_matrix_from_graph
+from qubo_solvers.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--filepath', default=f'{DATA_DIR}/test.gfa')
+    parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
+        type=lambda s: [int(item) for item in s.split(',') if len(item)])
+    parser.add_argument('-p', '--penalties', help='delimited list input', 
+        type=lambda s: [int(item) for item in s.split(',') if len(item)])
+    parser.add_argument('-d', '--data-dir', default=f"{OUT_DIR}/tangle")
+
+    args = parser.parse_args()
+
+    logger.info(f'Building qubo matrix for {args.filepath}')
+    filename = os.path.basename(args.filepath)
+    Path(args.data_dir).mkdir(exist_ok=True, parents=True)
+
+    if args.copy_numbers is None:
+        logger.error('Pathfinder does not support edge2node')
+        raise Exception('No copy numbers provided for edge2node')
+    else:
+        copy_numbers = args.copy_numbers
+
+    logger.info(f'Copy numbers: {copy_numbers}')
+
+
+    logger.info(f'Getting graph from {args.filepath}')
+    graph = edge2node_oriented_graph(args.filepath, copy_numbers)
+    Q, offset, T_max, V = edge2node_qubo_matrix_from_graph(graph, penalties=args.penalties)
+    
+    logger.info('Saving data')
+    savepath = f'{args.data_dir}/qubo_data_{filename}.pkl'
+    to_save = {
+        'Q': Q.tolist(),
+        'offset': offset,
+        'T_max': T_max,
+        'V': V,
+        'graph': graph
+    }
+    with open(savepath, 'wb') as file:
+        pickle.dump(to_save, file)
+
+
+    logger.info('Writing to MQLib format')
+    # Write to MQLib Format
+    mqlib_filepath = f'{args.data_dir}/mqlib_input_{filename}.txt'
+
+    ut_qubo_matrix = np.triu(Q)
+    non_zero = np.nonzero(ut_qubo_matrix)
+    non_zero_count = int(non_zero[0].shape[0])
+
+    with open(mqlib_filepath, 'w') as f:
+        f.write(f'{Q.shape[0]} {non_zero_count}\n')
+        to_write = ''
+        for i in range(len(non_zero[0])):
+            to_write += f'{non_zero[0][i] + 1} {non_zero[1][i] + 1} {-Q[non_zero[0][i], non_zero[1][i]]} \n'
+            if i % 500 == 0:
+                f.write(to_write)
+                to_write = ''
+
+        f.write(to_write)
+    logger.info('Finished building oriented qubo matrix')
+
+
+if __name__ == "__main__":
+    exit(main())

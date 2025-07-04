@@ -31,7 +31,7 @@ def mqlib_sample_qubo(qubo_description: QuboDescription):
                 solution = [int(x) for x in solution]
                 logger.info(out_data[0].split(',')[-1])
                 solution_energy = float(out_data[0].split(',')[3])
-            except ValueError:
+            except (ValueError, IndexError):
                 logger.error('Could not parse mqlib data')
                 logger.error(out)
                 paths[time_limit].append(([], np.inf, []))
@@ -208,7 +208,8 @@ def validate_path(path: list, graph: nx.Graph):
             logger.info(f'Broke graph edge at path entry {x}')
         elif len(end_nodes) > 0 and (v2 == 'end') and (v1 not in end_nodes):
             logger.info(f'Went to end node illegally at path entry {x}')
-    node_dict[v2] += 1
+    if len(path) > 1:
+        node_dict[v2] += 1
     
     nodes = list(graph.nodes)
     for i in range(int(len(nodes) / 2)):
@@ -216,4 +217,76 @@ def validate_path(path: list, graph: nx.Graph):
         missing_visits = graph.nodes[nodes[2 * i]]["weight"] - visits
         if  missing_visits != 0:
             logger.info(f'Did not meet node weight for node: {get_original_vertex_name(nodes[2 * i])}. Missing visits: {missing_visits}')
+            
+            
+            
+def validate_edge2node_path(path: list, graph: nx.Graph):
+    """Checks the constraints for a path on a graph.
+    
+    In particular:
+     - does the path go along graph edges at each time step
+     - is each node visited the correct number of times
+     - is exactly one node visited per time step
+
+    Args:
+        path (list): _description_
+        graph (nx.Graph): _description_
+    """
+    logger.info("Best path:")
+    print_path(path)
+    if not len(path):
+        return
+    
+    end_nodes = set()
+    start_nodes = set()
+    for node, val in dict(graph.nodes.data('start')).items():
+        if val == 'end':
+            end_nodes.add(node)
+        elif val == 'start':
+            start_nodes.add(node)
+    if len(end_nodes) > 0:
+        end_nodes.add('end')
+    
+    if len(start_nodes) > 0 and path[0][1] not in start_nodes:
+        logger.info('Did not start at start')
+    
+    time_offset = 0
+    i = 0
+    while i < len(path):
+        if i + time_offset == path[i][0]:
+            i += 1
+            continue
+        if path[i][0] < i + time_offset:
+            logger.info(f'Extra node at time {path[i][0]}')
+            time_offset -= 1
+            i += 1
+            continue
+        if path[i][0] > i + time_offset:
+            logger.info(f'Skipped time {path[i][0] - 1}')
+            time_offset += 1
+            i += 1
+            continue
+    
+    node_dict = {node: 0 for node in graph.nodes}
+    node_dict['end'] = 0
+    
+    for x in range(len(path) - 1):
+        v1 = path[x][1]
+        node_dict[v1] += 1
+        v2 = path[x + 1][1]            
+        if v1 == 'end' and not v2 == 'end':
+            logger.info(f'Left the end node at path entry {x}')
+        elif (not v1 == 'end') and (not v2 == 'end') and ((v1, v2) not in graph.edges):
+            logger.info(f'Broke graph edge at path entry {x}')
+        elif len(end_nodes) > 0 and (v2 == 'end') and (v1 not in end_nodes):
+            logger.info(f'Went to end node illegally at path entry {x}')
+    if len(path) > 1:
+        node_dict[v2] += 1
+    
+    nodes = list(graph.nodes)
+    for i in range(int(len(nodes))):
+        visits = node_dict[nodes[i]]
+        missing_visits = graph.nodes[nodes[i]]["weight"] - visits
+        if  missing_visits != 0:
+            logger.info(f'Did not meet node weight for node: {get_original_vertex_name(nodes[i])}. Missing visits: {missing_visits}')
 

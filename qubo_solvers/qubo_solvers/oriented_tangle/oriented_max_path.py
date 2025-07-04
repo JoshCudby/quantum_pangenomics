@@ -5,7 +5,7 @@ import os
 import numpy as np
 import argparse
 import re
-from qubo_solvers.oriented_tangle.utils.sampling_utils import dwave_sample_qubo, mqlib_sample_qubo, gurobi_sample_qubo, validate_path
+from qubo_solvers.oriented_tangle.utils.sampling_utils import dwave_sample_qubo, mqlib_sample_qubo, gurobi_sample_qubo, validate_path, validate_edge2node_path
 from qubo_solvers.definitions import DATA_DIR, OUT_DIR, Solver, QuboDescription
 from qubo_solvers.logging import get_logger
 
@@ -21,6 +21,7 @@ parser.add_argument('-j', '--jobs', type=int)
 parser.add_argument('-s', '--solver', required=True)
 parser.add_argument('-d', '--data-dir', default=f'{OUT_DIR}/oriented')
 parser.add_argument('-o', '--output')
+parser.add_argument('--edge2node', action='store_true')
 
 
 def setup(args) -> QuboDescription:
@@ -56,7 +57,10 @@ def main():
 
     for time_limit in qubo_description.time_limits:
         for i in range(qubo_description.jobs):
-            validate_path(paths[time_limit][i][2], qubo_description.graph)
+            if args.edge2node:
+                validate_edge2node_path(paths[time_limit][i][2], qubo_description.graph)
+            else:
+                validate_path(paths[time_limit][i][2], qubo_description.graph)
             logger.info(f'Energy of path: {paths[time_limit][i][1]}')
 
     now = datetime.now().strftime('%d%m%Y_%H%M')
