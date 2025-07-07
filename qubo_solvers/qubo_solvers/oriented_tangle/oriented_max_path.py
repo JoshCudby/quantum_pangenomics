@@ -58,6 +58,7 @@ def main():
     for time_limit in qubo_description.time_limits:
         for i in range(qubo_description.jobs):
             if args.edge2node:
+                logger.info('Validating edge2node')
                 validate_edge2node_path(paths[time_limit][i][2], qubo_description.graph)
             else:
                 validate_path(paths[time_limit][i][2], qubo_description.graph)

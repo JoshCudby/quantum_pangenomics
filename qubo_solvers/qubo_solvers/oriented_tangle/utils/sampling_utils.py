@@ -3,7 +3,7 @@ import networkx as nx
 import re
 import gurobipy as gp
 import subprocess
-from qubo_solvers.definitions import MQLIB_DIR, QuboDescription
+from qubo_solvers.definitions import QuboDescription
 from qubo_solvers.logging import get_logger
 from gurobipy import GRB
 from math import floor
@@ -31,6 +31,8 @@ def mqlib_sample_qubo(qubo_description: QuboDescription):
                 solution = [int(x) for x in solution]
                 logger.info(out_data[0].split(',')[-1])
                 solution_energy = float(out_data[0].split(',')[3])
+                logger.info(f'Inner product with Q: {solution @ np.array(qubo_description.Q) @ solution}')
+                logger.info(f'Energy calculated by offset: {qubo_description.offset - solution_energy}')
             except (ValueError, IndexError):
                 logger.error('Could not parse mqlib data')
                 logger.error(out)
@@ -85,12 +87,7 @@ def gurobi_sample_qubo(qubo_description: QuboDescription):
     
     paths = {}
     Q = np.array(qubo_description.Q)
-    params = {
-        "WLSACCESSID":"f7f8b2ea-2cd3-4f47-bd91-048a1dbed225",
-        "WLSSECRET":"d5f0c9b7-2ead-4e97-a3ee-5e57aa8a8381",
-        "LICENSEID":2525391
-    }
-    with gp.Env(params=params) as env, gp.Model(env=env) as model:
+    with gp.Env() as env, gp.Model(env=env) as model:
         model_vars = model.addMVar(shape=Q.shape[0], vtype=GRB.BINARY, name="x")
         model.setObjective(model_vars @ Q @ model_vars, GRB.MINIMIZE)
         model.Params.BestObjStop = - qubo_description.offset
@@ -288,5 +285,5 @@ def validate_edge2node_path(path: list, graph: nx.Graph):
         visits = node_dict[nodes[i]]
         missing_visits = graph.nodes[nodes[i]]["weight"] - visits
         if  missing_visits != 0:
-            logger.info(f'Did not meet node weight for node: {get_original_vertex_name(nodes[i])}. Missing visits: {missing_visits}')
+            logger.info(f'Did not meet node weight for node: {nodes[i]}. Missing visits: {missing_visits}')
 
