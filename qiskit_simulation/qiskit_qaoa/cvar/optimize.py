@@ -51,9 +51,9 @@ backend_options = dict(
 fake_fez = FakeFez()
 backend = AerSimulator.from_backend(fake_fez, **backend_options)
 
-data_file = f'/lustre/scratch127/qpg/jc59/out/tangle/qubo_data_{filename}.gfa.npy'
+data_file = f'/lustre/scratch127/qpg/jc59/out/oriented/qubo_data_{filename}.gfa.pkl'
 
-_, hamiltonian = get_objective_and_hamiltonian(data_file)
+_, hamiltonian, _ = get_objective_and_hamiltonian(data_file)
 qc = QAOAAnsatz(
     cost_operator=hamiltonian,
     reps = p,
@@ -69,7 +69,7 @@ def print_circuit_info(qc, circuit_name):
 
 print_circuit_info(transpiled_qc, '(Transpiled) Circuit')
 
-graph = circuit_to_graph(qc, qc.parameters[p]) # Why 4??
+graph = circuit_to_graph(qc, qc.parameters[p])
 
 swap_strat = SwapStrategy.from_line(range(graph.order()))
 edge_coloring = {(idx, idx + 1): (idx + 1) % 2 for idx in range(graph.order())}
@@ -156,7 +156,7 @@ def objective(x: np.ndarray):
     return total_energy
 
 result = minimize(
-    objective, x0=init_params, method="COBYLA", options={"maxiter": 100, "rhobeg": 0.1}
+    objective, x0=init_params, method="COBYLA", options={"maxiter": 100, "rhobeg": 0.05, "ftol": 1e-7, "tol": 1e-7}
 )
 logger.info(result)
 

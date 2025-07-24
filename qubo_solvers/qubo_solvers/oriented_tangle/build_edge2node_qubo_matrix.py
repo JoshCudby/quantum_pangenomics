@@ -3,10 +3,9 @@ import pickle
 import os
 import argparse
 from pathlib import Path
-from qubo_solvers.definitions import DATA_DIR, OUT_DIR, COVERAGE_SUFFIX
-from qubo_solvers.oriented_tangle.utils.graph_utils import oriented_graph_with_copy_numbers
-from qubo_solvers.oriented_tangle.utils.qubo_utils import qubo_matrix_from_graph
-from qubo_solvers.pathfinder_coverage import run_pathfinder_coverage
+from qubo_solvers.definitions import DATA_DIR, OUT_DIR
+from qubo_solvers.oriented_tangle.utils.graph_utils import edge2node_oriented_graph
+from qubo_solvers.oriented_tangle.utils.qubo_utils import edge2node_qubo_matrix_from_graph
 from qubo_solvers.logging import get_logger
 
 logger = get_logger(__name__)
@@ -16,7 +15,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--filepath', default=f'{DATA_DIR}/test.gfa')
     parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
-        type=lambda s: [float(item) for item in s.split(',') if len(item)])
+        type=lambda s: [int(item) for item in s.split(',') if len(item)])
     parser.add_argument('-p', '--penalties', help='delimited list input', 
         type=lambda s: [int(item) for item in s.split(',') if len(item)])
     parser.add_argument('-d', '--data-dir', default=f"{OUT_DIR}/tangle")
@@ -28,20 +27,17 @@ def main():
     Path(args.data_dir).mkdir(exist_ok=True, parents=True)
 
     if args.copy_numbers is None:
-        logger.info(f'Running pathfinder to get coverage from {args.filepath}')
-        copy_numbers, nodes = run_pathfinder_coverage(args.data_dir, args.filepath, COVERAGE_SUFFIX)
+        logger.error('Pathfinder does not support edge2node')
+        raise Exception('No copy numbers provided for edge2node')
     else:
-        # logger.info(f'Copy numbers provided: {args.copy_numbers}')
         copy_numbers = args.copy_numbers
-        nodes = None
 
-    # copy_numbers = [max(int(x), 1) for x in copy_numbers]
     logger.info(f'Copy numbers: {copy_numbers}')
 
 
     logger.info(f'Getting graph from {args.filepath}')
-    graph = oriented_graph_with_copy_numbers(args.filepath, copy_numbers, nodes)
-    Q, offset, T_max, V = qubo_matrix_from_graph(graph, penalties=args.penalties)
+    graph = edge2node_oriented_graph(args.filepath, copy_numbers)
+    Q, offset, T_max, V = edge2node_qubo_matrix_from_graph(graph, penalties=args.penalties)
     
     logger.info('Saving data')
     savepath = f'{args.data_dir}/qubo_data_{filename}.pkl'

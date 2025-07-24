@@ -13,6 +13,31 @@ from qiskit_qaoa.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+def cost_op_to_multigraph(hamiltonian: SparsePauliOp):
+    """"QAOA Cost operator as a circuit to a graph"""
+    graph, edges = nx.MultiGraph(), []
+    graph.add_nodes_from(range(hamiltonian.num_qubits))
+    seen_edges = set()
+
+    for op in hamiltonian:
+        edge = set([i  for i in range(hamiltonian.num_qubits) if str(op.paulis[0][i]) == 'Z'])
+        
+        if edge in seen_edges:
+            logger.info(op)
+            raise ValueError(f'Circuit contains edge {edge} multiple times')
+
+        # logger.info(edge)
+        seen_edges.add(edge)
+
+        param_expression = copy.deepcopy(iop.params[0])
+        param_expression = param_expression.assign(next(iter(param_expression.parameters)), 1)
+        weight = float(param_expression) / 2.0
+        edges.append((edge[0], edge[1], weight))
+
+    graph.add_weighted_edges_from(edges)
+    return graph
+
+
 def circuit_to_graph(qc: QuantumCircuit, parameter) -> nx.Graph:
     """"QAOA Cost operator as a circuit to a graph"""
     logger.info(parameter)
@@ -38,6 +63,7 @@ def circuit_to_graph(qc: QuantumCircuit, parameter) -> nx.Graph:
             logger.info(inst)
             raise ValueError(f'Circuit contains edge {edge} multiple times')
 
+        # logger.info(edge)
         seen_edges.add(edge)
         seen_edges.add(edge[::-1])
 

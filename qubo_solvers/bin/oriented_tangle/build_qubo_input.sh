@@ -46,8 +46,9 @@ esac
 
 ## MAIN
 WORKING_DIR=/nfs/users/nfs_j/jc59/quantumwork/pangenome/qubo_solvers
-source ~/.venv/qubo/bin/activate
+source $WORKING_DIR/qubo_venv/bin/activate
 outdir="$SCRATCH/out/oriented"
+mkdir -p $outdir
 
 bsub -J  "build_qubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -G "qpg" \
  -o "$outdir/build.$filename.%J" -e "$outdir/error.build.$filename.%J" -q qpg -gpu - \

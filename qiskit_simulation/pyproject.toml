@@ -9,7 +9,8 @@ dependencies = [
   "qiskit-aer-gpu",
   "scipy",
   "scikit-optimize",
-  "matplotlib"
+  "matplotlib",
+  "gfapy"
   # qopt best practices
 ]
 
