@@ -53,8 +53,10 @@ def get_offset(data_file):
 
 
 def get_ising_offset(data_file):
-    data = np.load(data_file, allow_pickle=True)
-    Q, offset, _, _  = data
+    with open(data_file, 'rb') as f:
+        data = pickle.load(f)
+    Q = data['Q']
+    offset = data['offset']
     Q = np.triu(Q) * 2
     Q -= np.triu(np.triu(Q).T) / 2
 

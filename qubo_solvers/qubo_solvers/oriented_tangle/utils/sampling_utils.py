@@ -21,7 +21,9 @@ def mqlib_sample_qubo(qubo_description: QuboDescription):
         
         for _ in range(qubo_description.jobs):
             # Run the MQLib solver and capture output
-            process = subprocess.run(["MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-s", str(rng.integers(0, 65535)), "-ps"], capture_output=True)
+            # process = subprocess.run(["MQLib", "-fQ", input_filepath, "-h", "PALUBECKIS2004bMST2", "-r", str(time_limit), "-s", str(rng.integers(0, 65535)), "-ps"], capture_output=True)
+            process = subprocess.run(["MQLib", "-fQ", input_filepath, "-h", "BURER2002", "-r", str(time_limit), "-s", str(rng.integers(0, 65535)), "-ps"], capture_output=True)
+
             out = process.stdout.decode("utf-8")
 
             try:
@@ -29,10 +31,9 @@ def mqlib_sample_qubo(qubo_description: QuboDescription):
                 out_data = [x for x in out.split('\n') if len(x) > 0]
                 solution = out_data[2].split()
                 solution = [int(x) for x in solution]
+                logger.info(out_data[0].split(','))
                 logger.info(out_data[0].split(',')[-1])
                 solution_energy = float(out_data[0].split(',')[3])
-                logger.info(f'Inner product with Q: {solution @ np.array(qubo_description.Q) @ solution}')
-                logger.info(f'Energy calculated by offset: {qubo_description.offset - solution_energy}')
             except (ValueError, IndexError):
                 logger.error('Could not parse mqlib data')
                 logger.error(out)
@@ -207,6 +208,8 @@ def validate_path(path: list, graph: nx.Graph):
             logger.info(f'Went to end node illegally at path entry {x}')
     if len(path) > 1:
         node_dict[v2] += 1
+    if len(path) == 1:
+        node_dict[path[0][1]] += 1
     
     nodes = list(graph.nodes)
     for i in range(int(len(nodes) / 2)):
