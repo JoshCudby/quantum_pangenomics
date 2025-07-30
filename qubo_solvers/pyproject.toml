@@ -5,7 +5,9 @@ description = "QPG QUBO Solvers for Tangle Resolution"
 dependencies = [
   "gfapy",
   "gurobipy",
-  "dwave-ocean_sdk"
+  "dwave-ocean_sdk",
+  "numpy",
+  "networkx",
 ]
 
 [build-system]
