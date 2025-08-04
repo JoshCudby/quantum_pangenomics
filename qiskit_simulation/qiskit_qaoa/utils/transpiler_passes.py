@@ -362,6 +362,7 @@ class ExtendedSwapStrategy(SwapStrategy):
         dt = self._distance_tensors.get(order, None)
         if dt is not None:
             return dt
+        
         distance_tensor = -1* np.ones([self._num_vertices]*order)
         node_combinations = list(combinations(list(range(self._num_vertices)), order))
 
@@ -369,11 +370,15 @@ class ExtendedSwapStrategy(SwapStrategy):
             cmap = self.swapped_coupling_map(i)
             distance = cmap.distance_matrix          
             for nodes in node_combinations:
+                sub_distance = distance[nodes, :][:, nodes]
                 if (
+                    np.max(sub_distance) <= order - 1
+                    and
                     np.any(
-                        np.all(np.linalg.matrix_power(distance[nodes, :][:, nodes] <= 1, order) > 0, axis=1)
+                        np.all(np.linalg.matrix_power(sub_distance <= 1, order) > 0, axis=1)
                     ) # If nodes form a connected subgraph
-                    and distance_tensor[nodes] == -1
+                    and 
+                    distance_tensor[nodes] == -1
                 ):
                     self._distances[nodes] = i
                     for perm in permutations(nodes, len(nodes)):
@@ -389,6 +394,7 @@ class CommutingGateRouter(TransformationPass):
         self,
         swap_strategy: ExtendedSwapStrategy | None = None,
         edge_coloring: dict[tuple[int, int], int] | None = None,
+        max_layers: int | None = None
     ) -> None:
         r"""
         Args:
@@ -411,6 +417,9 @@ class CommutingGateRouter(TransformationPass):
         self._swap_strategy = swap_strategy
         self._bit_indices: dict[Qubit, int] | None = None
         self._edge_coloring = edge_coloring
+        if max_layers is None:
+            max_layers = len(swap_strategy)
+        self._max_layers = max_layers
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
         """Run the pass by decomposing the nodes it applies on.
@@ -681,7 +690,7 @@ class CommutingGateRouter(TransformationPass):
         for sub_node in node.op:
             bits = tuple([dag.find_bit(sub_node.qargs[i]).index for i in range(len(sub_node.qargs))])
             distance = swap_strategy.distance_nodes(bits)
-            if distance == math.inf:
+            if distance >= self._max_layers:
                 cannot_implement.append(sub_node)
                 # raise TranspilerError(
                 #     f"{swap_strategy} cannot implement operator on {bits}."

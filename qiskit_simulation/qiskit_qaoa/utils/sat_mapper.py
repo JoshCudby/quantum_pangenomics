@@ -5,8 +5,9 @@ from threading import Timer
 
 import numpy as np
 
-from pysat.formula import CNF, IDPool
+from pysat.formula import CNF, IDPool, WCNF
 from pysat.solvers import Solver
+from pysat.examples.rc2 import RC2
 
 from qopt_best_practices.sat_mapping import SATMapper
 from qopt_best_practices.sat_mapping.sat_mapper import SATResult
@@ -16,7 +17,118 @@ from qiskit_qaoa.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+
+def get_cnfs(program_interactions, swap_strategy, num_layers, variables):
+    program_interactions = sorted(program_interactions,key=lambda e: len(e))
+    nodes = set([node for interaction in program_interactions for node in interaction])
+    num_nodes_g1 = len(nodes)
+    num_nodes_g2: int = swap_strategy.distance_matrix.shape[0]
+        
+    # Make a cnf for the one-to-one mapping constraint
+    cnf1 = []
+    for i in range(num_nodes_g1):
+        clause = variables[i, :].tolist()
+        cnf1.append(clause)
+        for k, m in combinations(clause, 2):
+            cnf1.append([-1 * k, -1 * m])
+    for j in range(num_nodes_g2):
+        clause = variables[:, j].tolist()
+        for k, m in combinations(clause, 2):
+            cnf1.append([-1 * k, -1 * m])
+
+    # Populate the distance tensors
+    for l in set([len(interaction) for interaction in program_interactions if len(interaction) > 2]):
+        logger.info(f'Start populating order {l} distance tensor')
+        swap_strategy.distance_tensor(l)
+        logger.info(f'Finished populating order {l} distance tensor')
+
+    logger.info(f'Num layers: {num_layers}')
+
+    # Make a cnf for the adjacency constraint
+    cnf2 = []
+    
+    old_num_qubits = 0
+    distance_tensor = np.array(0)
+    connectivity_tensor = np.array(0)
+    for interaction in program_interactions:
+        num_qubits = len(interaction)
+        if num_qubits != old_num_qubits:
+            logger.info('Re-computing distance tensor')
+            old_num_qubits = num_qubits
+            if num_qubits == 2:
+                distance_tensor = swap_strategy.distance_matrix
+            else:
+                distance_tensor = swap_strategy.distance_tensor(num_qubits)
+            connectivity_tensor = ((-1 < distance_tensor) & (distance_tensor <= num_layers)).astype(int)
+        
+        clause_tensor = np.multiply(connectivity_tensor,  variables[interaction[-1],:])
+        fixed_nodes_tensor = np.array([
+            [-variables[interaction[i], index_set[i]] for i in range(len(index_set))] for index_set in product(range(num_nodes_g2), repeat=num_qubits-1)
+        ]).reshape([num_nodes_g2]*(num_qubits-1)+[num_qubits-1])
+        clause = np.concatenate(
+            (
+                fixed_nodes_tensor,
+                clause_tensor,
+            ),
+            axis=-1,
+        ).reshape((num_nodes_g2**(num_qubits-1), num_qubits-1+num_nodes_g2))
+        cnf2.extend([c[c != 0].tolist() for c in clause])
+
+    return cnf1, cnf2
+
+
 class HigherOrderSatMapper(SATMapper):
+
+    def hubo_max_sat(
+        self,
+        program_interactions: list[tuple], 
+        swap_strategy: ExtendedSwapStrategy, 
+        num_layers: int
+    ) -> dict[int, tuple] | None:
+        nodes = set([node for interaction in program_interactions for node in interaction])
+        num_nodes_g1 = len(nodes)
+        num_nodes_g2: int = swap_strategy.distance_matrix.shape[0]
+        variable_pool = IDPool(start_from=1)
+        variables = np.array(
+            [
+                [variable_pool.id(f"v_{i}_{j}") for j in range(num_nodes_g2)]
+                for i in range(num_nodes_g1)
+            ],
+            dtype=int,
+        )
+        vid2mapping = {v: idx for idx, v in np.ndenumerate(variables)}
+
+        cnf1, cnf2 = get_cnfs(program_interactions, swap_strategy, num_layers, variables)
+        logger.info(f'Hard constraints: {len(cnf1)}')
+        logger.info(f'Soft constraints: {len(cnf2)}')
+        wcnf = WCNF()
+        wcnf.extend(cnf1)
+        wcnf.extend(cnf2, weights=[1]*len(cnf2))
+        
+        wcnf.to_file(f'./{num_layers}.wcnf')
+        
+
+        def interrupt(solver: RC2):
+            logger.info('Timeout reached')
+            if solver.oracle is not None:
+                solver.oracle.interrupt()
+            
+            
+        # with RC2(wcnf) as rc2: 
+        #     logger.info('Computing MAX SAT solution')
+        #     timer = Timer(self.timeout, interrupt, [rc2])
+        #     timer.start()
+        #     rc2.compute()
+        #     timer.cancel()
+        #     sol = rc2.oracle.get_model()
+        #     if sol is not None:
+        #         cost = rc2.cost
+        #         mapping = [vid2mapping[idx] for idx in sol if idx > 0]
+
+        #         return {num_layers: (cost, mapping)}
+        #     return None
+
+
     def find_hubo_mappings(
         self, 
         program_interactions: list[tuple], 
@@ -28,9 +140,7 @@ class HigherOrderSatMapper(SATMapper):
         nodes = set([node for interaction in program_interactions for node in interaction])
         num_nodes_g1 = len(nodes)
         num_nodes_g2: int = swap_strategy.distance_matrix.shape[0]
-        
-        logger.info(num_nodes_g1, num_nodes_g2)
-        
+                
         if num_nodes_g1 > num_nodes_g2:
             return {num_nodes_g2: SATResult(False, [], [], 0)}
             
@@ -53,17 +163,11 @@ class HigherOrderSatMapper(SATMapper):
         def interrupt(solver: Solver):
             solver.interrupt()
 
-        # Make a cnf for the one-to-one mapping constraint
-        cnf1 = []
-        for i in range(num_nodes_g1):
-            clause = variables[i, :].tolist()
-            cnf1.append(clause)
-            for k, m in combinations(clause, 2):
-                cnf1.append([-1 * k, -1 * m])
-        for j in range(num_nodes_g2):
-            clause = variables[:, j].tolist()
-            for k, m in combinations(clause, 2):
-                cnf1.append([-1 * k, -1 * m])
+        # Populate the distance tensors
+        for l in set([len(interaction) for interaction in program_interactions if len(interaction) > 2]):
+            logger.info(f'Start populating order {l} distance tensor')
+            swap_strategy.distance_tensor(l)
+            logger.info(f'Finished populating order {l} distance tensor')
 
         # Perform a binary search over the number of swap layers to find the minimum
         # number of swap layers that satisfies the subgraph isomorphism problem.
@@ -71,41 +175,8 @@ class HigherOrderSatMapper(SATMapper):
             num_layers = (min_layers + max_layers) // 2
             logger.info(f'Num layers: {num_layers}')
 
-            # Make a cnf for the adjacency constraint
-            cnf2 = []
-            
-            old_num_qubits = 0
-            distance_tensor = np.array(0) 
-            for interaction in program_interactions:
-                num_qubits = len(interaction)
-                if num_qubits != old_num_qubits:
-                    old_num_qubits = num_qubits
-                    if num_qubits == 2:
-                        distance_tensor = swap_strategy.distance_matrix
-                    else:
-                        logger.info(f'Start populating order {num_qubits} distance tensor')
-                        distance_tensor = swap_strategy.distance_tensor(num_qubits)
-                        logger.info(f'Finished populating order {num_qubits} distance tensor')
-                    
-                connectivity_tensor = ((-1 < distance_tensor) & (distance_tensor <= num_layers)).astype(int)
-                
-                clause_tensor = np.multiply(connectivity_tensor,  variables[interaction[-1],:])
-                fixed_nodes_tensor = np.array([
-                    [-variables[interaction[i], index_set[i]] for i in range(len(index_set))] for index_set in product(range(num_nodes_g2), repeat=num_qubits-1)
-                ]).reshape([num_nodes_g2]*(num_qubits-1)+[num_qubits-1])
-                clause = np.concatenate(
-                    (
-                        fixed_nodes_tensor,
-                        clause_tensor,
-                    ),
-                    axis=-1,
-                ).reshape((num_nodes_g2**(num_qubits-1), num_qubits-1+num_nodes_g2))
-                cnf2.extend([c[c != 0].tolist() for c in clause])
-                
-
-            cnf = CNF(from_clauses=cnf1 + cnf2)     
-            
-            
+            cnf1, cnf2 = get_cnfs(program_interactions, swap_strategy, num_layers, variables)
+            cnf = CNF(from_clauses=cnf1 + cnf2)   
 
             with Solver(bootstrap_with=cnf, use_timer=True) as solver:
                 # Solve the SAT problem with a timeout.

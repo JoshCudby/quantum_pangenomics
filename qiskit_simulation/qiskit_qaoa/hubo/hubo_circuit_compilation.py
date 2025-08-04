@@ -2,7 +2,6 @@ import numpy as np
 import networkx as nx
 import re
 import gfapy
-from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
 from sympy import Poly, Symbol
 
 from qiskit import QuantumCircuit, transpile
@@ -12,6 +11,8 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
 
 from qopt_best_practices.sat_mapping import SATMapper
+from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
+
 
 from qiskit.quantum_info import SparsePauliOp
 
@@ -85,12 +86,12 @@ def hamiltonian_to_doubles_graph(hamiltonian: SparsePauliOp) -> nx.Graph:
 def hamiltonian_to_interactions(hamiltonian: SparsePauliOp) -> list[tuple]:
     interactions = []
     for t in hamiltonian:
-        if np.sum(t.paulis[0].z) < 2 or np.sum(t.paulis[0].z) > 5:
-            continue
-        if np.sum(t.paulis[0].z) == 2:
+        if np.sum(t.paulis[0].z) < 2 or np.sum(t.paulis[0].z) > 4:
+            pass
+        elif np.sum(t.paulis[0].z) == 2 and rng.random() > 0.5:
             edge = np.nonzero(t.paulis[0].z)[0]
             interactions.append(edge)
-        if rng.random() > 0.01:
+        elif rng.random() > 0.95:
             edge = np.nonzero(t.paulis[0].z)[0]
             interactions.append(edge)
     return interactions
@@ -98,6 +99,7 @@ def hamiltonian_to_interactions(hamiltonian: SparsePauliOp) -> list[tuple]:
 
 extended_swap_strat = ExtendedSwapStrategy.from_heavy_hex(2, 2)
 num_physical_qubits = extended_swap_strat._num_vertices
+logger.info(f'Physical qubits: {num_physical_qubits}')
 
 basis_gates=["sx", "x", "rz", "rzz", "cz", "id"]
 
@@ -109,20 +111,20 @@ backend_options = dict(
 )
 # fake_fez = FakeFez()
 # fake_algiers = FakeAlgiers()
+# backend = AerSimulator.from_backend(fake_algiers, **backend_options)
 
 config = AerSimulator._DEFAULT_CONFIGURATION
 config["n_qubits"] = num_physical_qubits
-config = AerBackendConfiguration.from_dict(AerSimulator._DEFAULT_CONFIGURATION)
+config["basis_gates"] = basis_gates
+config = AerBackendConfiguration.from_dict(config)
 backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map)
 
-# backend = AerSimulator.from_backend(fake_algiers, **backend_options)
 
-
-filename = 'trivial'
+filename = 'test_N3_W4'
 filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{filename}.gfa'
 
 gfa = gfapy.Gfa.from_file(filepath, vlevel=0)
-copy_numbers = [1,1,1]
+copy_numbers = [2,1,1,1]
 
 
 graph = nx.DiGraph()
@@ -188,12 +190,16 @@ ising = Poly(ising, Z)
 ising_expr_coeffs = ising.as_expr().as_coefficients_dict()
 
 num_qubits = n*T
+logger.info(f'Virtual qubits: {num_qubits}')
+
 hamiltonian = SparsePauliOp('I' * num_qubits, ising_expr_coeffs[1])
 for (monomial, coeff) in ising_expr_coeffs.items():
     if monomial == 1:
         continue
     hamiltonian += SparsePauliOp(monomial_to_pauli(monomial, n * T), coeff)
 hamiltonian = hamiltonian.sort(weight=True)
+
+logger.info(f'Number of hamiltonian terms: {len(hamiltonian)}')
 
 logger.info('------------------------------------')
 logger.info('------------------------------------')
@@ -222,19 +228,16 @@ pm = PassManager(
         ),
         SwapToFinalMapping(),
         InverseCancellation(gates_to_cancel=[SwapGate()]),
-        HighLevelSynthesis(basis_gates=["sx", "x", "rz", "rzz", "cx", "id"]),
+        HighLevelSynthesis(basis_gates=["sx", "x", "rz", "rzz", "cx", "id", "swap"]),
         InverseCancellation(gates_to_cancel=[CXGate()]),
     ]
 )
 
 
-# cost_circ = QuantumCircuit(num_qubits)
+# cost_circ = QuantumCircuit(num_physical_qubits)
 # cost_circ.append(PauliEvolutionGate(hamiltonian), range(num_qubits))
 # tcost = pm.run(cost_circ)
-# ttcost = transpile(tcost, basis_gates=["h", "rz", "cz"])
-# tttcost = transpile(ttcost, basis_gates=["sx", "rz", "cz"])
-# backend_tcost = transpile(tttcost, backend=backend, basis_gates=basis_gates)
-
+# backend_tcost = transpile(tcost, optimization_level=3, backend=backend, basis_gates=basis_gates)
 
 # print_circuit_info(backend_tcost, 'Commuting gate routed circuit on backend')
 # logger.info(backend_tcost.count_ops())
@@ -243,59 +246,117 @@ logger.info('------------------------------------')
 logger.info('------------------------------------')
 
 
-program_graph = hamiltonian_to_doubles_graph(hamiltonian)
-sat_results = SATMapper(timeout=60).find_initial_mappings(
-    program_graph, extended_swap_strat, 0, len(extended_swap_strat)
-)
-solutions = [k for k, v in sat_results.items() if v.satisfiable]
-if len(solutions):
-    min_k = min(solutions)
-    logger.info(f'Min SWAP layers to satisfy doubles: {min_k}')
-    edge_map = dict(sat_results[min_k].mapping)
-    print(f'Doubles edge map: {edge_map}')
+# program_graph = hamiltonian_to_doubles_graph(hamiltonian)
+# sat_results = SATMapper(timeout=60).find_initial_mappings(
+#     program_graph, extended_swap_strat, 0, len(extended_swap_strat)
+# )
+# solutions = [k for k, v in sat_results.items() if v.satisfiable]
+# if len(solutions):
+#     min_k = min(solutions)
+#     logger.info(f'Min SWAP layers to satisfy doubles: {min_k}')
+#     edge_map = dict(sat_results[min_k].mapping)
+#     print(f'Doubles edge map: {edge_map}')
+
+#     new_hamiltonian = hamiltonian.apply_layout([edge_map[i] for i in range(num_qubits)], num_physical_qubits)
+    
+#     new_cost_circ = QuantumCircuit(num_physical_qubits)
+#     new_cost_circ.append(PauliEvolutionGate(new_hamiltonian), range(num_physical_qubits))
+#     new_tcost = pm.run(new_cost_circ)
+#     print_circuit_info(new_tcost, 'Remapped, commuting gate routed circuit')
+#     backend_new_tcost = transpile(new_tcost, optimization_level=3, backend=backend, basis_gates=basis_gates)
+    
+#     print_circuit_info(backend_new_tcost, 'Remapped, commuting gate routed circuit on backend')
+#     logger.info(backend_new_tcost.count_ops())
+
+# else:
+#     logger.info('Could not find graph remapping')
+    
+    
+# logger.info('------------------------------------')
+# logger.info('------------------------------------')    
+
+
+logger.info(f'Hamiltonian: {len(hamiltonian)}')
+logger.info(f'Order 2: {len([i for i in hamiltonian if sum(i.paulis[0].z) == 2])}')
+logger.info(f'Order 3: {len([i for i in hamiltonian if sum(i.paulis[0].z) == 3])}')
+logger.info(f'Order 4: {len([i for i in hamiltonian if sum(i.paulis[0].z) == 4])}')
+
+program_interactions = hamiltonian_to_interactions(hamiltonian)
+
+logger.info(f'Program interactions: {len(program_interactions)}')
+logger.info(f'Order 2: {len([i for i in program_interactions if len(i) == 2])}')
+logger.info(f'Order 3: {len([i for i in program_interactions if len(i) == 3])}')
+logger.info(f'Order 4: {len([i for i in program_interactions if len(i) == 4])}')
+
+
+mapper = HigherOrderSatMapper(timeout=60)
+results = {}
+for num_layers in range(0,2,2):
+    logger.info('--------------------------------------------------')
+    sat_results = mapper.hubo_max_sat(
+        program_interactions, extended_swap_strat, num_layers
+    )
+    if sat_results is None:
+        logger.info('No results')
+        continue
+    mapping = sat_results[num_layers][1]
+    edge_map = dict(mapping)
+    logger.info(f'Cost: {sat_results[num_layers][0]}')
+    logger.info(edge_map)
+
+    pm = PassManager(
+        [
+            HighLevelSynthesis(basis_gates=["PauliEvolution"]), # Not needed if set up circuit as PauliEvolutionGate
+            FindCommutingPauliEvolutionsMulti(), 
+            CommutingGateRouter(
+                extended_swap_strat,
+                max_layers=num_layers
+            ),
+            SwapToFinalMapping(),
+            HighLevelSynthesis(basis_gates=["sx", "x", "rz", "rzz", "cx", "id", "swap"]),
+            InverseCancellation(gates_to_cancel=[CXGate()]),
+        ]
+    )
+
 
     new_hamiltonian = hamiltonian.apply_layout([edge_map[i] for i in range(num_qubits)], num_physical_qubits)
-    
     new_cost_circ = QuantumCircuit(num_physical_qubits)
     new_cost_circ.append(PauliEvolutionGate(new_hamiltonian), range(num_physical_qubits))
     new_tcost = pm.run(new_cost_circ)
+    
     print_circuit_info(new_tcost, 'Remapped, commuting gate routed circuit')
+    print(new_tcost.count_ops())
+    
     backend_new_tcost = transpile(new_tcost, optimization_level=3, backend=backend, basis_gates=basis_gates)
     
     print_circuit_info(backend_new_tcost, 'Remapped, commuting gate routed circuit on backend')
-    logger.info(backend_new_tcost.count_ops())
-
-else:
-    logger.info('Could not find graph remapping')
+    print(backend_new_tcost.count_ops())
+    results[num_layers] = (new_tcost, backend_new_tcost)
     
-    
-logger.info('------------------------------------')
-logger.info('------------------------------------')    
 
-program_interactions = hamiltonian_to_interactions(hamiltonian)
-sat_results = HigherOrderSatMapper(timeout=60).find_hubo_mappings(
-    program_interactions, extended_swap_strat, 0, len(extended_swap_strat)
-)
-solutions = [k for k, v in sat_results.items() if v.satisfiable]
-if len(solutions):
-    # Problem:
-    # To achieve high order connections, might end up using very many swap layers
-    # Might be more efficient to find a good mapping for low-order ones and dump high order gates at the end with requisite swaps
-    min_k = min(solutions)
-    logger.info(f'Min SWAP layers to satisfy HUBO: {min_k}')
-    edge_map = dict(sat_results[min_k].mapping)
-    print(f'HUBO edge map: {edge_map}')
+# sat_results = HigherOrderSatMapper(timeout=60).find_hubo_mappings(
+#     program_interactions, extended_swap_strat, 0, len(extended_swap_strat)
+# )
+# solutions = [k for k, v in sat_results.items() if v.satisfiable]
+# if len(solutions):
+#     # Problem:
+#     # To achieve high order connections, might end up using very many swap layers
+#     # Might be more efficient to find a good mapping for low-order ones and dump high order gates at the end with requisite swaps
+#     min_k = min(solutions)
+#     logger.info(f'Min SWAP layers to satisfy HUBO: {min_k}')
+#     edge_map = dict(sat_results[min_k].mapping)
+#     print(f'HUBO edge map: {edge_map}')
 
-    new_hamiltonian = hamiltonian.apply_layout([edge_map[i] for i in range(num_qubits)], num_physical_qubits)
+#     new_hamiltonian = hamiltonian.apply_layout([edge_map[i] for i in range(num_qubits)], num_physical_qubits)
     
-    new_cost_circ = QuantumCircuit(num_physical_qubits)
-    new_cost_circ.append(PauliEvolutionGate(new_hamiltonian), range(num_physical_qubits))
-    new_tcost = pm.run(new_cost_circ)
-    print_circuit_info(new_tcost, 'Remapped HUBO, commuting gate routed circuit')
-    backend_new_tcost = transpile(new_tcost, optimization_level=3, backend=backend, basis_gates=basis_gates)
+#     new_cost_circ = QuantumCircuit(num_physical_qubits)
+#     new_cost_circ.append(PauliEvolutionGate(new_hamiltonian), range(num_physical_qubits))
+#     new_tcost = pm.run(new_cost_circ)
+#     print_circuit_info(new_tcost, 'Remapped HUBO, commuting gate routed circuit')
+#     backend_new_tcost = transpile(new_tcost, optimization_level=3, backend=backend, basis_gates=basis_gates)
     
-    print_circuit_info(backend_new_tcost, 'Remapped HUBO, commuting gate routed circuit on backend')
-    logger.info(backend_new_tcost.count_ops())
+#     print_circuit_info(backend_new_tcost, 'Remapped HUBO, commuting gate routed circuit on backend')
+#     logger.info(backend_new_tcost.count_ops())
 
-else:
-    logger.info('Could not find graph remapping for HUBO')
+# else:
+#     logger.info('Could not find graph remapping for HUBO')
