@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from itertools import combinations, product
 from threading import Timer
-
 import numpy as np
+import subprocess
 
 from pysat.formula import CNF, IDPool, WCNF
 from pysat.solvers import Solver
-from pysat.examples.rc2 import RC2
 
 from qopt_best_practices.sat_mapping import SATMapper
 from qopt_best_practices.sat_mapping.sat_mapper import SATResult
@@ -35,12 +34,6 @@ def get_cnfs(program_interactions, swap_strategy, num_layers, variables):
         clause = variables[:, j].tolist()
         for k, m in combinations(clause, 2):
             cnf1.append([-1 * k, -1 * m])
-
-    # Populate the distance tensors
-    for l in set([len(interaction) for interaction in program_interactions if len(interaction) > 2]):
-        logger.info(f'Start populating order {l} distance tensor')
-        swap_strategy.distance_tensor(l)
-        logger.info(f'Finished populating order {l} distance tensor')
 
     logger.info(f'Num layers: {num_layers}')
 
@@ -72,6 +65,14 @@ def get_cnfs(program_interactions, swap_strategy, num_layers, variables):
             ),
             axis=-1,
         ).reshape((num_nodes_g2**(num_qubits-1), num_qubits-1+num_nodes_g2))
+        # for c in clause:
+        #     to_add = c[c != 0].tolist()
+        #     if len(to_add) == 4 and np.allclose([-41, 76, 88, 94], to_add):
+        #         logger.info(interaction)
+        #     if len(to_add) == 1:
+        #         logger.info(interaction)
+        #         logger.info(to_add)
+        #     cnf2.append(to_add)
         cnf2.extend([c[c != 0].tolist() for c in clause])
 
     return cnf1, cnf2
@@ -106,27 +107,41 @@ class HigherOrderSatMapper(SATMapper):
         wcnf.extend(cnf2, weights=[1]*len(cnf2))
         
         wcnf.to_file(f'./{num_layers}.wcnf')
+                
+                
+        time_limit=str(self.timeout)
+        mem_limit=str(2**20)
+        subprocess.run(
+            ["/nfs/users/nfs_j/jc59/quantumwork/pangenome/sat/run", "--timestamp", "-d", "15", 
+             "-o", f"output{num_layers}.out", "-v", f"output{num_layers}.var", "-w", f"output{num_layers}.wat",
+                "-C", time_limit, "-W", time_limit, "-M" , mem_limit, "/nfs/users/nfs_j/jc59/quantumwork/pangenome/sat/NuWLS-c_static", f'./{num_layers}.wcnf']
+        )
         
-
-        def interrupt(solver: RC2):
-            logger.info('Timeout reached')
-            if solver.oracle is not None:
-                solver.oracle.interrupt()
-            
-            
-        # with RC2(wcnf) as rc2: 
-        #     logger.info('Computing MAX SAT solution')
-        #     timer = Timer(self.timeout, interrupt, [rc2])
-        #     timer.start()
-        #     rc2.compute()
-        #     timer.cancel()
-        #     sol = rc2.oracle.get_model()
-        #     if sol is not None:
-        #         cost = rc2.cost
-        #         mapping = [vid2mapping[idx] for idx in sol if idx > 0]
-
-        #         return {num_layers: (cost, mapping)}
-        #     return None
+        try:
+            with open(f'output{num_layers}.out', 'r') as f:
+                out = f.readlines()
+            out_data = [x.split() for x in out if len(x) > 0]
+            sol, cost = None, None
+            for line in out_data[::-1]:
+                if line[1] == 'v':
+                    sol = [int(c) for c in line[2]]
+                elif line[1] == 'o':
+                    cost = line[2]
+                else: 
+                    continue
+                if sol is not None and cost is not None:
+                    # for clause in cnf2:
+                    #     if not np.any([
+                    #         sol[np.abs(x) - 1] if np.sign(x) == 1 else 1 - sol[np.abs(x) - 1] for x in clause
+                    #     ]):
+                    #         logger.info(clause)
+                    return {num_layers: (cost, [vid2mapping[idx+1] for idx in range(len(sol)) if sol[idx] > 0])}
+                
+        except Exception as e:
+            logger.error('Could not parse SAT data')
+            logger.error(e)
+            return None
+    
 
 
     def find_hubo_mappings(

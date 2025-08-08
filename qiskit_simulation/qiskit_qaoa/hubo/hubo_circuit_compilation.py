@@ -1,8 +1,11 @@
 import numpy as np
 import networkx as nx
-import re
+import pickle
 import gfapy
+import argparse
 from sympy import Poly, Symbol
+from itertools import combinations
+from collections import Counter
 
 from qiskit import QuantumCircuit, transpile
 from qiskit.circuit.library import QAOAAnsatz,  PauliEvolutionGate, CXGate, SwapGate
@@ -10,8 +13,6 @@ from qiskit.circuit.library import QAOAAnsatz,  PauliEvolutionGate, CXGate, Swap
 from qiskit_aer import AerSimulator
 from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
 
-from qopt_best_practices.sat_mapping import SATMapper
-from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
 
 
 from qiskit.quantum_info import SparsePauliOp
@@ -21,84 +22,60 @@ from qiskit.transpiler import PassManager
 from qiskit.transpiler.passes import HighLevelSynthesis, InverseCancellation
 from qopt_best_practices.transpilation.swap_cancellation_pass import SwapToFinalMapping
 
-
-from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, CommutingGateRouter, FindCommutingPauliEvolutionsMulti
+from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
+from qiskit_qaoa.utils.hamiltonian_utils import hamiltonian_to_doubles_graph, hamiltonian_to_interactions, monomial_to_pauli
+from qiskit_qaoa.utils.string_utils import bin_rep
+from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, CommutingGateRouter, FindCommutingPauliEvolutionsMulti, DecomposePauliZEvolution
 from qiskit_qaoa.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
 rng = np.random.default_rng(seed=1)
 
+parser = argparse.ArgumentParser()
+parser.add_argument('-f', '--filename')
+parser.add_argument('-e', '--extra', type=int, default=1)
+parser.add_argument('--fraction-four', type=float)
+parser.add_argument('--fraction-six', type=float)
+parser.add_argument('-t', '--timeout', type=int)
+parser.add_argument('-R', '--grid-rows', type=int)
+parser.add_argument('-C', '--grid-cols', type=int)
+parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
+    type=lambda s: [float(item) for item in s.split(',') if len(item)])
+args = parser.parse_args()
 
 class Binary(Symbol):
     def _eval_power(self, other):
         return self
     
+
+def two_qubit_count(qc: QuantumCircuit):
+    ops = qc.count_ops()
+    return ops.get("cz", 0) + ops.get("rzz", 0) + ops.get("cx", 0) + ops.get("swap", 0)
+   
     
-def monomial_to_pauli(monomial, size):
-    indices = [int(re.search(r'[0-9]+', atom.name).group(0)) for atom in monomial.atoms()]
-    pauli_str = ['I'] * size
-    for i in indices:
-        pauli_str[i] = 'Z'
-    return ''.join(pauli_str)
-
-
-def two_qubit_count(qc):
-    return qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)
-
-
-def depth(qc):
-    return qc.depth(lambda instr: len(instr.qubits) > 1)
-
-
-def bin_rep(k, n):
-    return [int(x) for x in np.binary_repr(k, n)[::-1]]
-
-
-def callback_func(**kwargs):
-    pass_ = kwargs['pass_']
-    dag = kwargs['dag']
-    logger.info(pass_, dag.properties())
-    
-    
-def print_circuit_info(qc, circuit_name):
-    logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
+def print_circuit_info(qc: QuantumCircuit, circuit_name: str):
+    logger.info(f'{circuit_name} has {two_qubit_count(qc)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
     
-    
-def hamiltonian_to_doubles_graph(hamiltonian: SparsePauliOp) -> nx.Graph:
-    edges = []
-    weights = []
-    for t in hamiltonian:
-        if np.sum(t.paulis[0].z) == 2:
-            edge = np.nonzero(t.paulis[0].z)[0]
-            edges.append(edge)
-            weights.append(t.coeffs[0])
-            
-    program_graph = nx.Graph()
-    for i in range(hamiltonian.num_qubits):
-        program_graph.add_node(i)
-    for idx in range(len(weights)):
-        program_graph.add_edge(edges[idx][0],edges[idx][1],weight=weights[idx])
-    return program_graph
 
-
-def hamiltonian_to_interactions(hamiltonian: SparsePauliOp) -> list[tuple]:
-    interactions = []
-    for t in hamiltonian:
-        if np.sum(t.paulis[0].z) < 2 or np.sum(t.paulis[0].z) > 4:
-            pass
-        elif np.sum(t.paulis[0].z) == 2 and rng.random() > 0.5:
-            edge = np.nonzero(t.paulis[0].z)[0]
-            interactions.append(edge)
-        elif rng.random() > 0.95:
-            edge = np.nonzero(t.paulis[0].z)[0]
-            interactions.append(edge)
-    return interactions
-
-
-extended_swap_strat = ExtendedSwapStrategy.from_heavy_hex(2, 2)
+extended_swap_strat = ExtendedSwapStrategy.from_heavy_hex(args.grid_rows, args.grid_cols)
 num_physical_qubits = extended_swap_strat._num_vertices
+
+coupling_map = extended_swap_strat._coupling_map
+    
+coupling_map_edge = list(coupling_map)
+physical_qubits = list(coupling_map.physical_qubits)
+dual_coupling_map = nx.Graph()
+
+for qubit in physical_qubits:
+    edges = [edge for edge in coupling_map_edge if edge[0]==qubit]
+    for edge1, edge2 in combinations(edges, 2):
+        dual_coupling_map.add_edge(tuple(sorted(edge1)), tuple(sorted(edge2)))
+edge_colouring = nx.greedy_color(dual_coupling_map, interchange=True)
+
+
+
 logger.info(f'Physical qubits: {num_physical_qubits}')
 
 basis_gates=["sx", "x", "rz", "rzz", "cz", "id"]
@@ -109,9 +86,7 @@ backend_options = dict(
     precision='single',
     basis_gates=basis_gates
 )
-# fake_fez = FakeFez()
-# fake_algiers = FakeAlgiers()
-# backend = AerSimulator.from_backend(fake_algiers, **backend_options)
+
 
 config = AerSimulator._DEFAULT_CONFIGURATION
 config["n_qubits"] = num_physical_qubits
@@ -119,12 +94,17 @@ config["basis_gates"] = basis_gates
 config = AerBackendConfiguration.from_dict(config)
 backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map)
 
+# qc = QuantumCircuit(num_physical_qubits)
+# for layer in range(18):
+#     for swap in extended_swap_strat.swap_layer(layer):
+#         qc.swap(swap[0], swap[1])
+# print_circuit_info(qc, 'Swaps only, 18 layers')
 
-filename = 'test_N3_W4'
-filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{filename}.gfa'
+
+filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{args.filename}.gfa'
 
 gfa = gfapy.Gfa.from_file(filepath, vlevel=0)
-copy_numbers = [2,1,1,1]
+copy_numbers = args.copy_numbers
 
 
 graph = nx.DiGraph()
@@ -209,38 +189,11 @@ qaoa_cost_op = QAOAAnsatz(
     mixer_operator=QuantumCircuit(num_qubits),
     initial_state=QuantumCircuit(num_qubits)
 )
-tqaoa = transpile(qaoa_cost_op, basis_gates=["sx", "rz", "cz"])
-backend_tqaoa = transpile(tqaoa, backend=backend, basis_gates=basis_gates)
+# tqaoa = transpile(qaoa_cost_op, basis_gates=["sx", "rz", "cz"])
+backend_tqaoa = transpile(qaoa_cost_op, optimization_level=3, backend=backend, basis_gates=basis_gates)
 
 print_circuit_info(backend_tqaoa, 'Default qaoa circuit on backend')
 logger.info(backend_tqaoa.count_ops())
-
-logger.info('------------------------------------')
-logger.info('------------------------------------')
-
-
-pm = PassManager(
-    [
-        HighLevelSynthesis(basis_gates=["PauliEvolution"]), # Not needed if set up circuit as PauliEvolutionGate
-        FindCommutingPauliEvolutionsMulti(), 
-        CommutingGateRouter(
-            extended_swap_strat,
-        ),
-        SwapToFinalMapping(),
-        InverseCancellation(gates_to_cancel=[SwapGate()]),
-        HighLevelSynthesis(basis_gates=["sx", "x", "rz", "rzz", "cx", "id", "swap"]),
-        InverseCancellation(gates_to_cancel=[CXGate()]),
-    ]
-)
-
-
-# cost_circ = QuantumCircuit(num_physical_qubits)
-# cost_circ.append(PauliEvolutionGate(hamiltonian), range(num_qubits))
-# tcost = pm.run(cost_circ)
-# backend_tcost = transpile(tcost, optimization_level=3, backend=backend, basis_gates=basis_gates)
-
-# print_circuit_info(backend_tcost, 'Commuting gate routed circuit on backend')
-# logger.info(backend_tcost.count_ops())
 
 logger.info('------------------------------------')
 logger.info('------------------------------------')
@@ -275,23 +228,22 @@ logger.info('------------------------------------')
 # logger.info('------------------------------------')
 # logger.info('------------------------------------')    
 
-
+all_pauli_z = np.array(
+    [i.paulis[0].z for i in hamiltonian]
+)
 logger.info(f'Hamiltonian: {len(hamiltonian)}')
-logger.info(f'Order 2: {len([i for i in hamiltonian if sum(i.paulis[0].z) == 2])}')
-logger.info(f'Order 3: {len([i for i in hamiltonian if sum(i.paulis[0].z) == 3])}')
-logger.info(f'Order 4: {len([i for i in hamiltonian if sum(i.paulis[0].z) == 4])}')
+logger.info(f'Orders: {Counter(np.sum(all_pauli_z, axis=1))}')
 
-program_interactions = hamiltonian_to_interactions(hamiltonian)
+program_interactions = hamiltonian_to_interactions(hamiltonian, args.fraction_four, args.fraction_six)
+lengths = Counter([len(interaction) for interaction in program_interactions])
 
 logger.info(f'Program interactions: {len(program_interactions)}')
-logger.info(f'Order 2: {len([i for i in program_interactions if len(i) == 2])}')
-logger.info(f'Order 3: {len([i for i in program_interactions if len(i) == 3])}')
-logger.info(f'Order 4: {len([i for i in program_interactions if len(i) == 4])}')
+logger.info(f'Orders: {Counter([len(interaction) for interaction in program_interactions])}')
 
 
-mapper = HigherOrderSatMapper(timeout=60)
+mapper = HigherOrderSatMapper(timeout=args.timeout)
 results = {}
-for num_layers in range(0,2,2):
+for num_layers in range(0, 101, 10):
     logger.info('--------------------------------------------------')
     sat_results = mapper.hubo_max_sat(
         program_interactions, extended_swap_strat, num_layers
@@ -310,11 +262,16 @@ for num_layers in range(0,2,2):
             FindCommutingPauliEvolutionsMulti(), 
             CommutingGateRouter(
                 extended_swap_strat,
-                max_layers=num_layers
+                edge_colouring,
+                max_layers=num_layers,
+                perform_extra_swaps=bool(args.extra)
             ),
             SwapToFinalMapping(),
-            HighLevelSynthesis(basis_gates=["sx", "x", "rz", "rzz", "cx", "id", "swap"]),
-            InverseCancellation(gates_to_cancel=[CXGate()]),
+            DecomposePauliZEvolution(extended_swap_strat._coupling_map),
+            HighLevelSynthesis(
+                basis_gates=["sx", "x", "rz", "rzz", "cx", "id", "swap"], 
+            ),
+            InverseCancellation(gates_to_cancel=[CXGate(), SwapGate()]),
         ]
     )
 
@@ -332,6 +289,10 @@ for num_layers in range(0,2,2):
     print_circuit_info(backend_new_tcost, 'Remapped, commuting gate routed circuit on backend')
     print(backend_new_tcost.count_ops())
     results[num_layers] = (new_tcost, backend_new_tcost)
+    
+    
+with open(f'/lustre/scratch127/qpg/jc59/hubo/results_{args.filename}_extra{args.extra}_four{args.fraction_four}_six{args.fraction_six}.pkl', 'wb') as f:
+    pickle.dump(results, f)
     
 
 # sat_results = HigherOrderSatMapper(timeout=60).find_hubo_mappings(

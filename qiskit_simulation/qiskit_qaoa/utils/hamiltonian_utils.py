@@ -1,6 +1,12 @@
 import numpy as np
+import networkx as nx
+import re
 import pickle
+from qiskit.quantum_info import SparsePauliOp
 from qiskit_optimization import QuadraticProgram
+
+
+rng = np.random.default_rng(seed=1)
 
 
 def get_qp(data_file) -> QuadraticProgram:
@@ -69,3 +75,42 @@ def get_ising_offset(data_file):
     mod.minimize(constant=offset, linear=None, quadratic=Q)
     _, ising_offset = mod.to_ising()
     return ising_offset
+
+
+def monomial_to_pauli(monomial, size):
+    indices = [int(re.search(r'[0-9]+', atom.name).group(0)) for atom in monomial.atoms()]
+    pauli_str = ['I'] * size
+    for i in indices:
+        pauli_str[i] = 'Z'
+    return ''.join(pauli_str)
+
+
+def hamiltonian_to_doubles_graph(hamiltonian: SparsePauliOp) -> nx.Graph:
+    edges = []
+    weights = []
+    for t in hamiltonian:
+        if np.sum(t.paulis[0].z) == 2:
+            edge = np.nonzero(t.paulis[0].z)[0]
+            edges.append(edge)
+            weights.append(t.coeffs[0])
+            
+    program_graph = nx.Graph()
+    for i in range(hamiltonian.num_qubits):
+        program_graph.add_node(i)
+    for idx in range(len(weights)):
+        program_graph.add_edge(edges[idx][0],edges[idx][1],weight=weights[idx])
+    return program_graph
+
+
+def hamiltonian_to_interactions(hamiltonian: SparsePauliOp, fraction_4=0.0, fraction_6=0.8) -> list[tuple]:
+    interactions = []
+    for t in hamiltonian:
+        if np.sum(t.paulis[0].z) < 2 or np.sum(t.paulis[0].z) > 6:
+            pass
+        elif np.sum(t.paulis[0].z) <= 4 and rng.random() > fraction_4:
+            edge = np.nonzero(t.paulis[0].z)[0]
+            interactions.append(edge)
+        elif rng.random() > fraction_6:
+            edge = np.nonzero(t.paulis[0].z)[0]
+            interactions.append(edge)
+    return interactions

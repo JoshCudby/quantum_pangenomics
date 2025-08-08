@@ -3,7 +3,7 @@ wl=60
 mem=32768
 
 echo "c [MSE2023] -- begin -- [MSE2023]"
-./run --timestamp -d 15 -o output.out -v output.var -w output.wat -C $wl -W $wl -M $mem ./NuWLS-c_static $1
+"$HOME"/quantumwork/pangenome/sat/run --timestamp -d 15 -o output.out -v output.var -w output.wat -C $wl -W $wl -M $mem "$HOME"/quantumwork/pangenome/sat/NuWLS-c_static $1
 cat output.out
 rm -f output.out
 rm -f output.var

@@ -30,6 +30,10 @@ def to_bitstring(integer, num_bits):
     return [int(digit) for digit in result]
 
 
+def bin_rep(k, n):
+    return [int(x) for x in np.binary_repr(k, n)[::-1]]
+
+
 def bitstring_to_energy(bitstring: list, op: SparsePauliOp):
     assert all(x in [0, 1] for x in bitstring), "Bitstring should be binary integers"
     pauli_string = ''.join(['X' if x == 1 else 'I' for x in bitstring])

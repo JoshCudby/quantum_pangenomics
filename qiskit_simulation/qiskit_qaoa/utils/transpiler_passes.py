@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import pickle
 import networkx as nx
 import numpy as np
+import numpy.typing as npt
 import math
 from typing import Tuple
 from collections.abc import Iterable
@@ -10,7 +12,7 @@ from itertools import combinations, permutations
 from qiskit import QuantumCircuit
 
 from qiskit.circuit import Gate, Qubit, Clbit
-from qiskit.circuit.library import PauliEvolutionGate
+from qiskit.circuit.library import PauliEvolutionGate, CXGate, RZZGate
 from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
 from qiskit.transpiler import TransformationPass
@@ -68,6 +70,93 @@ class CommutingBlock(Gate):
     def __iter__(self):
         """Iterate through the nodes in the block."""
         return iter(self.node_block)
+    
+    
+class DecomposePauliZEvolution(TransformationPass):
+    """Decomposes :class:`.PauliEvolutionGate`s, where the operators are all Z, on a coupling map."""
+    def __init__(
+        self,
+        coupling_map: CouplingMap
+    ) -> None:
+        r"""
+        Args:
+            coupling_map: A CouplingMap from a backend or SwapStrategy
+        """
+        super().__init__()
+        self._coupling_map = coupling_map
+        
+    
+    def run(self, dag: DAGCircuit) -> DAGCircuit:
+        new_dag = dag.copy_empty_like()
+        for node in dag.topological_op_nodes():
+            if isinstance(node.op, PauliEvolutionGate) and self.valid_operator(node.op.operator):
+                sub_dag = self._decompose(dag, node)
+                new_dag.compose(sub_dag)
+            else:
+                new_dag.apply_operation_back(node.op, node.qargs, node.cargs)
+        return new_dag
+        
+        
+    @staticmethod
+    def valid_operator(operator: SparsePauliOp) -> bool:
+        """Determine if only a single Pauli consisting of only Zs.
+
+        Args:
+            operator: The operator to check if it consists only of a single Pauli Z string.
+
+        Returns:
+            True if the operator consists of only single a single Pauli Z string (like ``IZZIIZIZ``),
+            and False otherwise.
+        """
+        return len(operator.paulis) == 1 and sum(operator.paulis[0].x) == 0 and sum(operator.paulis[0].z) > 1
+    
+    
+    def _decompose(self, dag: DAGCircuit, node: DAGOpNode) -> DAGCircuit:
+        """Decompose the SparsePauliOp into CX and RZ on a coupling map.
+
+        Args:
+            dag: The dag needed to get access to qubits.
+            node: The operator with the Pauli term we need to apply.
+
+        Returns:
+            A dag made of two-qubit :class:`.PauliEvolutionGate`.
+        """
+        sub_dag = dag.copy_empty_like()
+        
+        pauli_z = node.op.operator.paulis[0].z
+        qubits = [dag.find_bit(node.qargs[i]).index for i in range(len(node.qargs)) if i in np.nonzero(pauli_z)[0]] 
+        
+        qubits_copy = list(qubits.copy())
+        cx_gates = []
+        while len(qubits_copy) > 2:
+            applied = False
+            for qubit in qubits_copy:
+                neighbours = [self._coupling_map.distance(qubit, qubit2) == 1 for qubit2 in qubits_copy]
+                num_neighbours = sum(neighbours)
+                if num_neighbours == 0:
+                    raise Exception('Disconnected qubit in decomposition')
+                if num_neighbours == 1:
+                    neighbour = qubits_copy[neighbours.index(True)]
+                    sub_dag.apply_operation_back(CXGate(), [dag.qubits[qubit], dag.qubits[neighbour]])
+                    cx_gates.append((qubit, neighbour))
+                    qubits_copy.remove(qubit)
+                    applied = True
+                    break
+            if not applied:
+                logger.info('No single neighbour qubit found. Apply a random cx to break loops')
+                qubit = qubits_copy[0]
+                neighbours = [self._coupling_map.distance(qubit, qubit2) == 1 for qubit2 in qubits_copy]
+                neighbour = qubits_copy[neighbours.index(True)]
+                sub_dag.apply_operation_back(CXGate(), [dag.qubits[qubit], dag.qubits[neighbour]])
+                cx_gates.append((qubit, neighbour))
+                qubits_copy.remove(qubit)
+            
+        sub_dag.apply_operation_back(RZZGate(2 * node.op.time), [dag.qubits[qubits_copy[0]], dag.qubits[qubits_copy[1]]])
+        for gate in cx_gates[::-1]:
+            sub_dag.apply_operation_back(CXGate(), [dag.qubits[gate[0]], dag.qubits[gate[1]]])
+
+        return sub_dag
+
 
 
 class FindCommutingPauliEvolutionsMulti(TransformationPass):
@@ -80,18 +169,18 @@ class FindCommutingPauliEvolutionsMulti(TransformationPass):
             The DAG circuit in which to look for the commuting evolutions.
 
         Returns:
-            The dag in which :class:`.PauliEvolutionGate`s made of commuting two-qubit Paulis
-            have been replaced with :class:`.Commuting2qBlocks`` gate instructions. These gates
-            contain nodes of two-qubit :class:`.PauliEvolutionGate`s.
+            The dag in which :class:`.PauliEvolutionGate`s made of commuting Paulis
+            have been replaced with :class:`.CommutingBlocks`` gate instructions. These gates
+            contain nodes of :class:`.PauliEvolutionGate`s.
         """
 
         for node in dag.op_nodes():
             if isinstance(node.op, PauliEvolutionGate):
-                operator = node.op.operator
+                operator: SparsePauliOp = node.op.operator
                 if self.single_qubit_terms_only(operator):
                     continue
 
-                if self.summands_commute(node.op.operator):
+                if self.summands_commute(operator):
                     sub_dag = self._decompose(dag, node.op)
 
                     block_op = CommutingBlock(set(sub_dag.op_nodes()))
@@ -279,7 +368,7 @@ class ExtendedSwapStrategy(SwapStrategy):
 
         line_node_counters = [mapping[((0, 2*cols), (1, 2*cols))]]
 
-        for col_idx in range(2*rows,0,-1):
+        for col_idx in range(2*cols,0,-1):
             line_node_counters.append(mapping[(0, col_idx)])
             line_node_counters.append(mapping[((0, col_idx),(0, col_idx-1))])
         line_node_counters.append(mapping[(0, 0)])
@@ -287,29 +376,29 @@ class ExtendedSwapStrategy(SwapStrategy):
 
         for row_idx in range(1, rows):
             if row_idx % 2 == 1:
-                for col_idx in range(2*rows+1):
+                for col_idx in range(2*cols+1):
                     line_node_counters.append(mapping[(row_idx, col_idx)])
                     line_node_counters.append(mapping[((row_idx, col_idx), (row_idx, col_idx+1))])
-                line_node_counters.append(mapping[(row_idx, 2*rows+1)])
-                line_node_counters.append(mapping[((row_idx, 2*rows+1), (row_idx+1, 2*rows+1))])
+                line_node_counters.append(mapping[(row_idx, 2*cols+1)])
+                line_node_counters.append(mapping[((row_idx, 2*cols+1), (row_idx+1, 2*cols+1))])
             else:
-                for col_idx in range(2*rows+1,0,-1):
+                for col_idx in range(2*cols+1,0,-1):
                     line_node_counters.append(mapping[(row_idx, col_idx)])
                     line_node_counters.append(mapping[((row_idx, col_idx), (row_idx, col_idx-1))])
                 line_node_counters.append(mapping[(row_idx, 0)])
                 line_node_counters.append(mapping[((row_idx, 0), (row_idx+1, 0))])
                 
         if rows % 2 == 0:
-            for col_idx in range(2*rows+1,1,-1):
+            for col_idx in range(2*cols+1,1,-1):
                 line_node_counters.append(mapping[(rows, col_idx)])
                 line_node_counters.append(mapping[((rows, col_idx), (rows, col_idx-1))])
             line_node_counters.append(mapping[(rows, 1)])
             # line_node_counters.append(mapping[((rows, 1), (rows-1, 1))])  : leave the last one out   
         else:
-            for col_idx in range(2*rows):
+            for col_idx in range(2*cols):
                 line_node_counters.append(mapping[(rows, col_idx)])
                 line_node_counters.append(mapping[((rows, col_idx), (rows, col_idx+1))])
-            line_node_counters.append(mapping[(rows, 2*rows)])
+            line_node_counters.append(mapping[(rows, 2*cols)])
             # line_node_counters.append(mapping[((rows, 2*rows), (rows-1, 2*rows))])      : leave the last one out      
 
         swap_1 = tuple((line_node_counters[i], line_node_counters[i + 1]) for i in range(0, len(line_node_counters) - 1, 2))
@@ -343,13 +432,15 @@ class ExtendedSwapStrategy(SwapStrategy):
         
         for i in range(len(self._swap_layers) + 1):
             cmap = self.swapped_coupling_map(i)
-            neighbouring = []
-            for node in nodes:
-                neighbouring.append(
-                    any([cmap.distance(node, other) == 1 for other in nodes])
-                )
-            
-            if all(neighbouring):
+            distance_matrix: npt.NDArray[np.float64] = cmap.distance_matrix
+            sub_distance = distance_matrix[nodes, :][:, nodes]
+            if (
+                np.max(sub_distance) <= len(nodes) - 1
+                and
+                np.any(
+                    np.all(np.linalg.matrix_power(sub_distance <= 1, len(nodes)) > 0, axis=1)
+                ) # If nodes form a connected subgraph
+            ):
                 self._distances[nodes] = i
                 return i
         return math.inf
@@ -363,12 +454,38 @@ class ExtendedSwapStrategy(SwapStrategy):
         if dt is not None:
             return dt
         
+        try:
+            with open(f'/lustre/scratch127/qpg/jc59/hubo/swap_strategy_distance_qubits_{self._num_vertices}_order_{order}.pkl', 'rb') as f:
+                dt = pickle.load(f)
+                return dt
+        except FileNotFoundError:
+            pass
+        
         distance_tensor = -1* np.ones([self._num_vertices]*order)
         node_combinations = list(combinations(list(range(self._num_vertices)), order))
+        
+        lower_order = self.distance_tensor(order - 1)
+        impossible = np.transpose(np.nonzero(lower_order == -1))
+        impossible_combinations = impossible[np.nonzero(
+            np.all(np.array([impossible[:, -i] - impossible[:,-i-1] for i in range(1, impossible.shape[1])]) > 0, axis=0)
+        )[0], :]
+        
+        for comb in impossible_combinations:
+            comb = list(comb)
+            for i in range(comb[-1] + 1, self._num_vertices):
+                try:
+                    node_combinations.remove(tuple(comb + [i]))
+                except ValueError as e:
+                    logger.error(e)
+                    logger.error(tuple(comb + [i]))
+                    raise e
 
+        
         for i in range(len(self._swap_layers) + 1):
+            if len(node_combinations) == 0:
+                break
             cmap = self.swapped_coupling_map(i)
-            distance = cmap.distance_matrix          
+            distance: npt.NDArray[np.float64] = cmap.distance_matrix          
             for nodes in node_combinations:
                 sub_distance = distance[nodes, :][:, nodes]
                 if (
@@ -384,7 +501,12 @@ class ExtendedSwapStrategy(SwapStrategy):
                     for perm in permutations(nodes, len(nodes)):
                         distance_tensor[perm] = i
                     node_combinations.remove(nodes)
+                    
         self._distance_tensors[order] = distance_tensor
+        
+        with open(f'/lustre/scratch127/qpg/jc59/hubo/swap_strategy_distance_qubits_{self._num_vertices}_order_{order}.pkl', 'wb') as f:
+            pickle.dump(distance_tensor, f)
+        
         return distance_tensor
                     
 
@@ -394,7 +516,8 @@ class CommutingGateRouter(TransformationPass):
         self,
         swap_strategy: ExtendedSwapStrategy | None = None,
         edge_coloring: dict[tuple[int, int], int] | None = None,
-        max_layers: int | None = None
+        max_layers: int | None = None,
+        perform_extra_swaps: bool = True
     ) -> None:
         r"""
         Args:
@@ -417,9 +540,10 @@ class CommutingGateRouter(TransformationPass):
         self._swap_strategy = swap_strategy
         self._bit_indices: dict[Qubit, int] | None = None
         self._edge_coloring = edge_coloring
-        if max_layers is None:
+        if max_layers is None and swap_strategy is not None:
             max_layers = len(swap_strategy)
         self._max_layers = max_layers
+        self._perform_extra_swaps = perform_extra_swaps
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
         """Run the pass by decomposing the nodes it applies on.
@@ -441,6 +565,8 @@ class CommutingGateRouter(TransformationPass):
 
             if swap_strategy is None:
                 raise TranspilerError("No swap strategy given at init or in the property set.")
+            elif self._max_layers is None:
+                self._max_layers = len(swap_strategy)
         else:
             swap_strategy = self._swap_strategy
 
@@ -464,6 +590,7 @@ class CommutingGateRouter(TransformationPass):
         # Used to keep track of nodes that do not decompose using swap strategies.
         accumulator = new_dag.copy_empty_like()
         cannot_implement = []
+        
         for node in dag.topological_op_nodes():
             if isinstance(node.op, CommutingBlock):
 
@@ -484,7 +611,12 @@ class CommutingGateRouter(TransformationPass):
             accumulator.apply_operation_back(sub_node.op, sub_node.qargs, sub_node.cargs)
         
         logger.info(f'Gates we cannot directly implement: {len(cannot_implement)}')
-        self._compose_non_swap_nodes(accumulator, current_layout, new_dag)
+        logger.info([tuple([dag.find_bit(sub_node.qargs[i]).index for i in range(len(sub_node.qargs))]) for sub_node in cannot_implement])
+        
+        if self._perform_extra_swaps:
+            self._compose_non_swap_nodes(accumulator, current_layout, new_dag)
+        else:
+            logger.info('Not implementing those gates')
 
         self.property_set["virtual_permutation_layout"] = current_layout
 
@@ -555,7 +687,7 @@ class CommutingGateRouter(TransformationPass):
         if self._edge_coloring is not None:
             return self._edge_coloring_build_sub_layers(current_layer)
         else:
-            return self._greedy_build_sub_layers(current_layer)
+            return self._greedy_build_sub_layers_2(current_layer)
 
     def _edge_coloring_build_sub_layers(
         self, current_layer: dict[tuple[int, int], Gate]
@@ -564,23 +696,65 @@ class CommutingGateRouter(TransformationPass):
         sub_layers: list[dict[tuple[int, int], Gate]] = [
             {} for _ in set(self._edge_coloring.values())
         ]
+        greedy_gates = {}
         for edge, gate in current_layer.items():
-            color = self._edge_coloring[edge]
-            sub_layers[color][edge] = gate
+            if len(edge) == 2:
+                color = self._edge_coloring[tuple(sorted(edge))]
+                sub_layers[color][edge] = gate
+            else:
+                greedy_gates[edge] = gate
+        greed_sub_layers = self._greedy_build_sub_layers_2(greedy_gates)
+        sub_layers.extend(greed_sub_layers)
+        return sub_layers
+    
+    
+    @staticmethod
+    def _greedy_build_sub_layers_2(
+        current_layer: dict[tuple[int, int], Gate]
+    ) -> list[dict[tuple[int, int], Gate]]:
+        """The greedy method of building sub-layers of commuting gates.
+        We have multi-qubit Z rotations, which need to be decomposed into multiple layers, throughout all of which each qubit is blocked out.
+        
+        """
+        sub_layers = []
+        current_sub_layer_index = 0
+        while len(current_layer) > 0:
+            current_sub_layer, remaining_gates = {}, {}
+            blocked_vertices: dict[int, set[tuple]] = {}
+
+            for edge, evo_gate in sorted(current_layer.items(), key=lambda e: -len(e[0])):
+                if blocked_vertices.get(current_sub_layer_index, set()).isdisjoint(edge):
+                    current_sub_layer[edge] = evo_gate
+
+                    # A vertex becomes blocked once a gate is applied to it.
+                    for i in range(max(0, 2 * (len(edge) - 2)) + 1):
+                        bv = blocked_vertices.get(current_sub_layer_index + i, set())
+                        bv = bv.union(edge)
+                        blocked_vertices[current_sub_layer_index + i] = bv
+                else:
+                    remaining_gates[edge] = evo_gate
+
+            current_layer = remaining_gates
+            sub_layers.append(current_sub_layer)
+            current_sub_layer_index += 1
 
         return sub_layers
+    
 
     @staticmethod
     def _greedy_build_sub_layers(
         current_layer: dict[tuple[int, int], Gate]
     ) -> list[dict[tuple[int, int], Gate]]:
-        """The greedy method of building sub-layers of commuting gates."""
+        """The greedy method of building sub-layers of commuting gates.
+        We have multi-qubit Z rotations, which need to be decomposed into multiple layers, throughout all of which each qubit is blocked out.
+        
+        """
         sub_layers = []
         while len(current_layer) > 0:
             current_sub_layer, remaining_gates = {}, {}
             blocked_vertices: set[tuple] = set()
 
-            for edge, evo_gate in current_layer.items():
+            for edge, evo_gate in sorted(current_layer.items(), key=lambda e: -len(e[0])):
                 if blocked_vertices.isdisjoint(edge):
                     current_sub_layer[edge] = evo_gate
 
@@ -617,6 +791,7 @@ class CommutingGateRouter(TransformationPass):
 
         # Iterate over and apply gate layers
         max_distance = max(gate_layers.keys())
+        logger.info(f'Max layers needed to apply swap decompose: {max_distance}')
 
         circuit_with_swap = QuantumCircuit(len(dag.qubits))
 
@@ -630,7 +805,10 @@ class CommutingGateRouter(TransformationPass):
 
             # Not all gates that are applied at the ith swap layer can be applied at the same
             # time. We therefore greedily build sub-layers.
+            # logger.info(f'Layer {i}. Gates in layer: {current_layer.keys()}')
+            # logger.info(f'Unmapped gates in layer: {[indices for indices, _ in gate_layers.get(i, {}).items()]}')
             sub_layers = self._build_sub_layers(current_layer)
+            # logger.info(f'Layer {i}. Sub-layers: {len(sub_layers)}. Max interaction size: {max([len(key) for key in current_layer.keys()]) if len(current_layer.keys()) > 0 else 0}')
 
             # Apply sub-layers
             for sublayer in sub_layers:
@@ -661,16 +839,13 @@ class CommutingGateRouter(TransformationPass):
 
         for node in op.node_block:
             edge = tuple([dag.find_bit(node.qargs[i]).index for i in range(len(node.qargs))])
-            if len(edge) == 0:
-                logger.info(node.op)
-            # edge = (dag.find_bit(node.qargs[0]).index, dag.find_bit(node.qargs[1]).index)
 
             v_bits = layout.get_virtual_bits()        
             bits = tuple([v_bits[dag.qubits[edge[i]]] for i in range(len(edge))])
 
             distance = swap_strategy.distance_nodes(bits)
             
-            if distance != math.inf:
+            if distance <= self._max_layers:
                 gate_layers[distance][edge] = node.op
 
         return gate_layers
@@ -690,7 +865,7 @@ class CommutingGateRouter(TransformationPass):
         for sub_node in node.op:
             bits = tuple([dag.find_bit(sub_node.qargs[i]).index for i in range(len(sub_node.qargs))])
             distance = swap_strategy.distance_nodes(bits)
-            if distance >= self._max_layers:
+            if distance > self._max_layers:
                 cannot_implement.append(sub_node)
                 # raise TranspilerError(
                 #     f"{swap_strategy} cannot implement operator on {bits}."
