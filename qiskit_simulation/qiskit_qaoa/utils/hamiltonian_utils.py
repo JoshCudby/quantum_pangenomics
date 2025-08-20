@@ -85,6 +85,12 @@ def monomial_to_pauli(monomial, size):
     return ''.join(pauli_str)
 
 
+def indices_to_pauli(t, k, n, T):
+    p = ['I'] * n * T
+    p[t*n + k] = 'Z'
+    return SparsePauliOp(''.join(p), 1)
+
+
 def hamiltonian_to_doubles_graph(hamiltonian: SparsePauliOp) -> nx.Graph:
     edges = []
     weights = []

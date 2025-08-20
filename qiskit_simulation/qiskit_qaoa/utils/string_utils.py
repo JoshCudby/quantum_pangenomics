@@ -7,7 +7,7 @@ logger = get_logger(__name__)
 _PARITY = np.array([-1 if bin(i).count("1") % 2 else 1 for i in range(256)], dtype=np.int8)
 
 
-def evaluate_sparse_pauli_samples(samples: list[str], observable: SparsePauliOp) -> complex:
+def evaluate_sparse_pauli_samples(samples: list[str], observable: SparsePauliOp) -> np.typing.NDArray:
     """Utility for the evaluation of the expectation value of a measured state."""
     packed_uint8 = np.packbits(observable.paulis.z, axis=1, bitorder="little")
 

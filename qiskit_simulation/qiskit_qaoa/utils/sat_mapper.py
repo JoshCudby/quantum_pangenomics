@@ -106,30 +106,33 @@ class HigherOrderSatMapper(SATMapper):
         wcnf.extend(cnf1)
         wcnf.extend(cnf2, weights=[1]*len(cnf2))
         
-        wcnf.to_file(f'./{num_layers}.wcnf')
+        wcnf.to_file(f'./{num_nodes_g1}.{num_nodes_g2}.{num_layers}.wcnf')
                 
                 
         time_limit=str(self.timeout)
         mem_limit=str(2**20)
         subprocess.run(
             ["/nfs/users/nfs_j/jc59/quantumwork/pangenome/sat/run", "--timestamp", "-d", "15", 
-             "-o", f"output{num_layers}.out", "-v", f"output{num_layers}.var", "-w", f"output{num_layers}.wat",
-                "-C", time_limit, "-W", time_limit, "-M" , mem_limit, "/nfs/users/nfs_j/jc59/quantumwork/pangenome/sat/NuWLS-c_static", f'./{num_layers}.wcnf']
+             "-o", f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.out", "-v", f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.var", 
+             "-w", f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.wat", "-C", time_limit, "-W", time_limit, "-M" , mem_limit, 
+                "/nfs/users/nfs_j/jc59/quantumwork/pangenome/sat/NuWLS-c_static", f'./{num_nodes_g1}.{num_nodes_g2}.{num_layers}.wcnf']
         )
         
         try:
             with open(f'output{num_layers}.out', 'r') as f:
                 out = f.readlines()
             out_data = [x.split() for x in out if len(x) > 0]
-            sol, cost = None, None
+            sol, cost, satisfiable = None, None, None
             for line in out_data[::-1]:
                 if line[1] == 'v':
                     sol = [int(c) for c in line[2]]
                 elif line[1] == 'o':
                     cost = line[2]
+                elif line[1] == 's':
+                    satisfiable = True
                 else: 
                     continue
-                if sol is not None and cost is not None:
+                if satisfiable and sol is not None and cost is not None:
                     # for clause in cnf2:
                     #     if not np.any([
                     #         sol[np.abs(x) - 1] if np.sign(x) == 1 else 1 - sol[np.abs(x) - 1] for x in clause

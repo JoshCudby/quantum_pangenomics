@@ -1,10 +1,8 @@
 import numpy as np
 import networkx as nx
 import pickle
-import gfapy
 import argparse
 from itertools import combinations
-from functools import reduce
 from collections import Counter
 
 from qiskit import QuantumCircuit, transpile
@@ -20,9 +18,9 @@ from qiskit.transpiler.passes import HighLevelSynthesis, InverseCancellation
 from qopt_best_practices.transpilation.swap_cancellation_pass import SwapToFinalMapping
 
 from qiskit_qaoa.hubo.graph_to_hubo_hamiltonian import graph_to_hubo_hamiltonian
+from qiskit_qaoa.utils.gfa_utils import gfa_file_to_graph
 from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
 from qiskit_qaoa.utils.hamiltonian_utils import hamiltonian_to_interactions
-from qiskit_qaoa.utils.gfa_utils import gfa_file_to_graph
 from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, CommutingGateRouter, FindCommutingPauliEvolutionsMulti, DecomposePauliZEvolution
 from qiskit_qaoa.utils.logging import get_logger
 
@@ -36,8 +34,6 @@ parser.add_argument('-e', '--extra', type=int, default=1)
 parser.add_argument('--fraction-four', type=float)
 parser.add_argument('--fraction-six', type=float)
 parser.add_argument('-t', '--timeout', type=int)
-parser.add_argument('-R', '--grid-rows', type=int)
-parser.add_argument('-C', '--grid-cols', type=int)
 parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
     type=lambda s: [float(item) for item in s.split(',') if len(item)])
 args = parser.parse_args()
@@ -53,8 +49,13 @@ def print_circuit_info(qc: QuantumCircuit, circuit_name: str):
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
     
     
+filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{args.filename}.gfa'
+graph, n, N, T = gfa_file_to_graph(filepath, args.copy_numbers)
+num_qubits = n*T
+logger.info(f'Virtual qubits: {num_qubits}')
 
-extended_swap_strat = ExtendedSwapStrategy.from_heavy_hex(args.grid_rows, args.grid_cols)
+
+extended_swap_strat = ExtendedSwapStrategy.from_line(range(num_qubits))
 num_physical_qubits = extended_swap_strat._num_vertices
 coupling_map = extended_swap_strat._coupling_map
     
@@ -87,13 +88,7 @@ config["n_qubits"] = num_physical_qubits
 config["basis_gates"] = basis_gates
 config = AerBackendConfiguration.from_dict(config)
 backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map)
-
-
-
-filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{args.filename}.gfa'
-graph, n, N, T = gfa_file_to_graph(filepath, args.copy_numbers)
-num_qubits = n*T
-logger.info(f'Virtual qubits: {num_qubits}')
+logger.info(backend.configuration().to_dict()["n_qubits"])
 
 hamiltonian = graph_to_hubo_hamiltonian(graph, n, N, T, lamda=10)
 
@@ -107,44 +102,14 @@ qaoa_cost_op = QAOAAnsatz(
     mixer_operator=QuantumCircuit(num_qubits),
     initial_state=QuantumCircuit(num_qubits)
 )
-# tqaoa = transpile(qaoa_cost_op, basis_gates=["sx", "rz", "cz"])
 backend_tqaoa = transpile(qaoa_cost_op, optimization_level=3, backend=backend, basis_gates=basis_gates)
 
-print_circuit_info(backend_tqaoa, 'Default qaoa circuit on backend')
+print_circuit_info(backend_tqaoa, 'Default qaoa cost layer on backend')
 logger.info(backend_tqaoa.count_ops())
 
 logger.info('------------------------------------')
 logger.info('------------------------------------')
 
-
-# program_graph = hamiltonian_to_doubles_graph(hamiltonian)
-# sat_results = SATMapper(timeout=60).find_initial_mappings(
-#     program_graph, extended_swap_strat, 0, len(extended_swap_strat)
-# )
-# solutions = [k for k, v in sat_results.items() if v.satisfiable]
-# if len(solutions):
-#     min_k = min(solutions)
-#     logger.info(f'Min SWAP layers to satisfy doubles: {min_k}')
-#     edge_map = dict(sat_results[min_k].mapping)
-#     print(f'Doubles edge map: {edge_map}')
-
-#     new_hamiltonian = hamiltonian.apply_layout([edge_map[i] for i in range(num_qubits)], num_physical_qubits)
-    
-#     new_cost_circ = QuantumCircuit(num_physical_qubits)
-#     new_cost_circ.append(PauliEvolutionGate(new_hamiltonian), range(num_physical_qubits))
-#     new_tcost = pm.run(new_cost_circ)
-#     print_circuit_info(new_tcost, 'Remapped, commuting gate routed circuit')
-#     backend_new_tcost = transpile(new_tcost, optimization_level=3, backend=backend, basis_gates=basis_gates)
-    
-#     print_circuit_info(backend_new_tcost, 'Remapped, commuting gate routed circuit on backend')
-#     logger.info(backend_new_tcost.count_ops())
-
-# else:
-#     logger.info('Could not find graph remapping')
-    
-    
-# logger.info('------------------------------------')
-# logger.info('------------------------------------')    
 
 all_pauli_z = np.array(
     [i.paulis[0].z for i in hamiltonian]
@@ -163,7 +128,7 @@ mapper = HigherOrderSatMapper(timeout=args.timeout)
 results: dict[str | int, SparsePauliOp | dict] = {
     'old_hamiltonian': hamiltonian,
 }
-for num_layers in range(0, len(extended_swap_strat._swap_layers), 10):
+for num_layers in range(0, len(extended_swap_strat._swap_layers), 3):
     logger.info('--------------------------------------------------')
     sat_results = mapper.hubo_max_sat(
         program_interactions, extended_swap_strat, num_layers
@@ -203,7 +168,7 @@ for num_layers in range(0, len(extended_swap_strat._swap_layers), 10):
     print_circuit_info(new_tcost, 'Remapped, commuting gate routed circuit')
     print(new_tcost.count_ops())
     
-    backend_new_tcost = transpile(new_tcost, optimization_level=3, backend=backend, basis_gates=basis_gates)
+    backend_new_tcost = transpile(new_tcost, optimization_level=3, coupling_map=coupling_map, basis_gates=basis_gates) # 
     
     print_circuit_info(backend_new_tcost, 'Remapped, commuting gate routed circuit on backend')
     print(backend_new_tcost.count_ops())
@@ -213,33 +178,6 @@ for num_layers in range(0, len(extended_swap_strat._swap_layers), 10):
     }
     
     
-with open(f'/lustre/scratch127/qpg/jc59/hubo/results_{args.filename}_extra{args.extra}_four{args.fraction_four}_six{args.fraction_six}.R{args.grid_rows}C{args.grid_cols}.pkl', 'wb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/hubo/simulation_results_{args.filename}_extra{args.extra}_four{args.fraction_four}_six{args.fraction_six}.pkl', 'wb') as f:
     pickle.dump(results, f)
     
-
-# sat_results = HigherOrderSatMapper(timeout=60).find_hubo_mappings(
-#     program_interactions, extended_swap_strat, 0, len(extended_swap_strat)
-# )
-# solutions = [k for k, v in sat_results.items() if v.satisfiable]
-# if len(solutions):
-#     # Problem:
-#     # To achieve high order connections, might end up using very many swap layers
-#     # Might be more efficient to find a good mapping for low-order ones and dump high order gates at the end with requisite swaps
-#     min_k = min(solutions)
-#     logger.info(f'Min SWAP layers to satisfy HUBO: {min_k}')
-#     edge_map = dict(sat_results[min_k].mapping)
-#     print(f'HUBO edge map: {edge_map}')
-
-#     new_hamiltonian = hamiltonian.apply_layout([edge_map[i] for i in range(num_qubits)], num_physical_qubits)
-    
-#     new_cost_circ = QuantumCircuit(num_physical_qubits)
-#     new_cost_circ.append(PauliEvolutionGate(new_hamiltonian), range(num_physical_qubits))
-#     new_tcost = pm.run(new_cost_circ)
-#     print_circuit_info(new_tcost, 'Remapped HUBO, commuting gate routed circuit')
-#     backend_new_tcost = transpile(new_tcost, optimization_level=3, backend=backend, basis_gates=basis_gates)
-    
-#     print_circuit_info(backend_new_tcost, 'Remapped HUBO, commuting gate routed circuit on backend')
-#     logger.info(backend_new_tcost.count_ops())
-
-# else:
-#     logger.info('Could not find graph remapping for HUBO')

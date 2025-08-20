@@ -155,8 +155,13 @@ def objective(x: np.ndarray):
     history.append((sampling_time, total_energy, x.tolist(), counts, classical_post_process_time))
     return total_energy
 
+method = "COBYLA"
 result = minimize(
-    objective, x0=init_params, method="COBYLA", options={"maxiter": 100, "rhobeg": 0.05, "ftol": 1e-7, "tol": 1e-7}
+    objective, x0=init_params, 
+    method=method, 
+    bounds=tuple((0,1) for _ in range(2 * p)), 
+    options={"maxiter": max_iter, "maxfev": max_iter},  # "rhobeg": 0.01, "ftol": 1e-7
+    callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
 )
 logger.info(result)
 

@@ -89,7 +89,7 @@ class DecomposePauliZEvolution(TransformationPass):
     def run(self, dag: DAGCircuit) -> DAGCircuit:
         new_dag = dag.copy_empty_like()
         for node in dag.topological_op_nodes():
-            if isinstance(node.op, PauliEvolutionGate) and self.valid_operator(node.op.operator):
+            if isinstance(node.op, PauliEvolutionGate) and self.valid_operator(node, dag):
                 sub_dag = self._decompose(dag, node)
                 new_dag.compose(sub_dag)
             else:
@@ -97,8 +97,7 @@ class DecomposePauliZEvolution(TransformationPass):
         return new_dag
         
         
-    @staticmethod
-    def valid_operator(operator: SparsePauliOp) -> bool:
+    def valid_operator(self, node: DAGOpNode, dag: DAGCircuit) -> bool:
         """Determine if only a single Pauli consisting of only Zs.
 
         Args:
@@ -108,7 +107,15 @@ class DecomposePauliZEvolution(TransformationPass):
             True if the operator consists of only single a single Pauli Z string (like ``IZZIIZIZ``),
             and False otherwise.
         """
-        return len(operator.paulis) == 1 and sum(operator.paulis[0].x) == 0 and sum(operator.paulis[0].z) > 1
+        pauli_z = node.op.operator.paulis[0].z
+        qubits = [dag.find_bit(node.qargs[i]).index for i in range(len(node.qargs)) if i in np.nonzero(pauli_z)[0]] 
+        return len(node.op.operator.paulis) == 1 and sum(node.op.operator.paulis[0].x) == 0 and sum(node.op.operator.paulis[0].z) > 1 \
+            and any(
+                np.all(np.linalg.matrix_power(
+                    np.array([[self._coupling_map.distance(qubit1, qubit2) <= 1 for qubit2 in qubits] for qubit1 in qubits]), 
+                    len(qubits)
+                ), axis=0)
+            )
     
     
     def _decompose(self, dag: DAGCircuit, node: DAGOpNode) -> DAGCircuit:
@@ -134,6 +141,11 @@ class DecomposePauliZEvolution(TransformationPass):
                 neighbours = [self._coupling_map.distance(qubit, qubit2) == 1 for qubit2 in qubits_copy]
                 num_neighbours = sum(neighbours)
                 if num_neighbours == 0:
+                    logger.info(node.label)
+                    logger.info(f'Initial qubits: {qubits}')
+                    logger.info(f'Current qubits: {qubits_copy}')
+                    logger.info(f'Qubit: {qubit}')
+                    logger.info(f'Neighbours: { [[self._coupling_map.distance(qubit1, qubit2) == 1 for qubit2 in qubits] for qubit1 in qubits]}')
                     raise Exception('Disconnected qubit in decomposition')
                 if num_neighbours == 1:
                     neighbour = qubits_copy[neighbours.index(True)]
@@ -181,7 +193,7 @@ class FindCommutingPauliEvolutionsMulti(TransformationPass):
                     continue
 
                 if self.summands_commute(operator):
-                    sub_dag = self._decompose(dag, node.op)
+                    sub_dag = self._decompose(dag, node)
 
                     block_op = CommutingBlock(set(sub_dag.op_nodes()))
                     wire_order = {
@@ -189,7 +201,16 @@ class FindCommutingPauliEvolutionsMulti(TransformationPass):
                         for idx, wire in enumerate(sub_dag.qubits)
                         if wire not in sub_dag.idle_wires()
                     }
-                    dag.replace_block_with_op([node], block_op, wire_order)
+                    try:
+                        dag.replace_block_with_op([node], block_op, wire_order)
+                        # dag.replace_block_with_op([node], CommutingBlock([]), wire_order)
+                    except Exception as e:
+                        logger.info(e)
+                        logger.info(node.num_qubits)
+                        logger.info(node.qargs)
+                        logger.info(node.op)
+                        logger.info(node.op.num_qubits)
+                        raise e
 
         return dag
 
@@ -249,7 +270,7 @@ class FindCommutingPauliEvolutionsMulti(TransformationPass):
 
         return edge
 
-    def _decompose(self, dag: DAGCircuit, op: PauliEvolutionGate) -> DAGCircuit:
+    def _decompose(self, dag: DAGCircuit, node: DAGOpNode) -> DAGCircuit:
         """Decompose the SparsePauliOp into local-qubit.
 
         Args:
@@ -260,7 +281,7 @@ class FindCommutingPauliEvolutionsMulti(TransformationPass):
             A dag made of two-qubit :class:`.PauliEvolutionGate`.
         """
         sub_dag = dag.copy_empty_like()
-
+        op: PauliEvolutionGate = node.op
         required_paulis = {
             self._pauli_to_edge(pauli): (pauli, coeff)
             for pauli, coeff in zip(op.operator.paulis, op.operator.coeffs)
@@ -268,13 +289,13 @@ class FindCommutingPauliEvolutionsMulti(TransformationPass):
 
         for edge, (pauli, coeff) in required_paulis.items():
             
-            qubits = [dag.qubits[edge[i]] for i in range(len(edge))]
+            qubits = [node.qargs[edge[i]] for i in range(len(edge))]
 
             simple_pauli = Pauli(pauli.to_label().replace("I", ""))
 
-            pauli_2q = PauliEvolutionGate(simple_pauli, op.time * np.real(coeff))
-            sub_dag.apply_operation_back(pauli_2q, qubits)
-
+            pauli = PauliEvolutionGate(simple_pauli, op.time * np.real(coeff))
+            sub_dag.apply_operation_back(pauli, qubits)
+        
         return sub_dag
 
 
@@ -446,6 +467,25 @@ class ExtendedSwapStrategy(SwapStrategy):
         return math.inf
     
     
+    def all_connected_subgraphs(self, layer: int, order: int):
+        cmap = self.swapped_coupling_map(layer)
+        g = [set(cmap.neighbors(q)) for q in cmap.physical_qubits]
+        def _recurse(t: tuple, possible: set[int], excluded: set[int]):
+            if len(t) == order:
+                yield t
+            else:
+                excluded = set(excluded)
+                for i in possible.difference(excluded):
+                    new_t = (*t, i)
+                    new_possible = possible | g[i]
+                    excluded.add(i)
+                    yield from _recurse(new_t, new_possible, excluded)
+        excluded = set()
+        for (i, possible) in enumerate(g):
+            excluded.add(i)
+            yield from _recurse((i,), possible, excluded)
+    
+    
     def distance_tensor(self, order) -> np.ndarray:
         if order == 2:
             return self.distance_matrix
@@ -461,46 +501,17 @@ class ExtendedSwapStrategy(SwapStrategy):
         except FileNotFoundError:
             pass
         
-        distance_tensor = -1* np.ones([self._num_vertices]*order)
-        node_combinations = list(combinations(list(range(self._num_vertices)), order))
         
-        lower_order = self.distance_tensor(order - 1)
-        impossible = np.transpose(np.nonzero(lower_order == -1))
-        impossible_combinations = impossible[np.nonzero(
-            np.all(np.array([impossible[:, -i] - impossible[:,-i-1] for i in range(1, impossible.shape[1])]) > 0, axis=0)
-        )[0], :]
-        
-        for comb in impossible_combinations:
-            comb = list(comb)
-            for i in range(comb[-1] + 1, self._num_vertices):
-                try:
-                    node_combinations.remove(tuple(comb + [i]))
-                except ValueError as e:
-                    logger.error(e)
-                    logger.error(tuple(comb + [i]))
-                    raise e
-
-        
+        distance_tensor = np.full([self._num_vertices]*order, -1)        
         for i in range(len(self._swap_layers) + 1):
-            if len(node_combinations) == 0:
-                break
-            cmap = self.swapped_coupling_map(i)
-            distance: npt.NDArray[np.float64] = cmap.distance_matrix          
-            for nodes in node_combinations:
-                sub_distance = distance[nodes, :][:, nodes]
-                if (
-                    np.max(sub_distance) <= order - 1
-                    and
-                    np.any(
-                        np.all(np.linalg.matrix_power(sub_distance <= 1, order) > 0, axis=1)
-                    ) # If nodes form a connected subgraph
-                    and 
-                    distance_tensor[nodes] == -1
-                ):
-                    self._distances[nodes] = i
-                    for perm in permutations(nodes, len(nodes)):
+            subgraphs = self.all_connected_subgraphs(i, order)
+            for subgraph in subgraphs:
+                subgraph = tuple(sorted(subgraph))
+                if distance_tensor[subgraph] == -1:
+                    self._distances[subgraph] = i
+                    for perm in permutations(subgraph, len(subgraph)):
                         distance_tensor[perm] = i
-                    node_combinations.remove(nodes)
+
                     
         self._distance_tensors[order] = distance_tensor
         

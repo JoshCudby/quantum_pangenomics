@@ -1,5 +1,7 @@
 **/*.pyc
 
+qpg/
+
 /tmp
 build/**/*
 
