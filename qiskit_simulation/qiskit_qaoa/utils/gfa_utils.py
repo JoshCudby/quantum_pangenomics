@@ -23,8 +23,8 @@ def gfa_file_to_graph(filepath: str, copy_numbers: list[float]):
         ])
 
     nodes = list(graph.nodes)
-    N = len(nodes)
-    n = int(np.ceil(np.log2(N+1)))
+    V = len(nodes)
+    n = int(np.ceil(np.log2(V+1)))
     total_weight = int(sum(graph.nodes[node]["weight"] for node in nodes) / 2)
     T = int(1.1 * total_weight)
-    return graph, n, N, T
+    return graph, n, V, T

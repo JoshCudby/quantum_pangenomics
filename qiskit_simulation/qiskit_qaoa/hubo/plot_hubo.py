@@ -14,32 +14,40 @@ from qiskit_qaoa.utils.logging import get_logger
 logger = get_logger(__name__)
 parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename')
-# parser.add_argument('-p', '--reps', type=int, default=4)
-# parser.add_argument('-d', '--swap-depth', type=int, default=0)
-# parser.add_argument('-m', '--memory', type=int, default=16000)
-# parser.add_argument('-n', '--shots', type=int, default=1000)
-# parser.add_argument('--init', choices=['ramp', 'random'], default='ramp')
-# parser.add_argument('-e', '--extra', type=int, default=0)
+parser.add_argument('-p', '--reps', type=int, default=4)
+parser.add_argument('-d', '--swap-depth', type=int, default=0)
+parser.add_argument('-m', '--memory', type=int, default=16000)
+parser.add_argument('-n', '--shots', type=int, default=1000)
+parser.add_argument('--init', choices=['ramp', 'random'], default='ramp')
+parser.add_argument('-e', '--extra', type=int, default=1)
+parser.add_argument('--fraction-four', type=float)
+parser.add_argument('--fraction-six', type=float)
+parser.add_argument('-a', '--alpha', type=float)
+parser.add_argument('-C', '--coupling-map', choices=['line', 'grid'])
 
 args = parser.parse_args()
 
 
 logger.info(args)
-
-filename = args.filename
-# p: int = args.reps
-# shots = args.shots
-# init_type = args.init
-# swap_depth = args.swap_depth
-alpha = 0.05
-
-
-
-with open(f'/lustre/scratch127/qpg/jc59/hubo/simulation.optimisation.{filename}.pkl', 'rb') as f:
+basepath='/lustre/scratch127/qpg/jc59/hubo/'
+filename='simulation.{}.optimisation.{}.extra{}.four{}.six{}.cvar{}.p{}.shots{}.init{}.d{}'.format(
+    args.coupling_map,
+    args.filename,
+    args.extra,
+    args.fraction_four,
+    args.fraction_six,
+    args.alpha,
+    args.reps,
+    args.shots,
+    args.init,
+    args.swap_depth
+)
+filepath = basepath + filename + '.pkl'
+with open(filepath, 'rb') as f:
     data = pickle.load(f)
     
 history = data["history"]
-hamiltonian: SparsePauliOp = data["hamiltonian"]
+remapped_full_hamiltonian: SparsePauliOp = data["remapped_full_hamiltonian"]
 
 fig, axs = plt.subplots(1, 1, figsize=(8,5))
 axs.plot([hist[1] for hist in history])
@@ -53,16 +61,16 @@ fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/
 min_val = 0
 # max_val = 100
 
-n: int = hamiltonian.num_qubits
+n: int = remapped_full_hamiltonian.num_qubits
 
 
 start = time()
-sample_vals = evaluate_sparse_pauli_samples(history[-1][3], hamiltonian)
+sample_vals = evaluate_sparse_pauli_samples(history[-1][3], remapped_full_hamiltonian)
 elapsed = time() - start
 logger.info(f'Time to compute energies {elapsed}')
 
 random_samples = np.random.choice(('0', '1'), (sum(history[-1][3].values()), n))
-rand_vals = evaluate_sparse_pauli_samples([''.join(sample) for sample in random_samples], hamiltonian)
+rand_vals = evaluate_sparse_pauli_samples([''.join(sample) for sample in random_samples], remapped_full_hamiltonian)
 
 
 # alpha_qaoa = (min(sample_vals) - max_val) / (min_val - max_val)

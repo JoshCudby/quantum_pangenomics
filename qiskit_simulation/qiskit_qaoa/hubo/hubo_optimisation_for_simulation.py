@@ -9,7 +9,7 @@ from scipy.optimize import minimize, OptimizeResult
 
 from qiskit import QuantumCircuit, transpile
 from qiskit.quantum_info import SparsePauliOp
-from qiskit.circuit.library import PauliEvolutionGate, CXGate, SwapGate, QAOAAnsatz
+from qiskit.circuit.library import PauliEvolutionGate, CXGate, SwapGate
 from qiskit.transpiler import PassManager
 from qiskit.converters import dag_to_circuit, circuit_to_dag
 from qiskit.transpiler.passes import (
@@ -25,7 +25,7 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
 from qiskit_aer.primitives import SamplerV2 as Sampler
 
-
+from qiskit_qaoa.utils.qaoa_circuit_utils import get_mixer_operator, state_prep
 from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, CommutingGateRouter, FindCommutingPauliEvolutionsMulti, DecomposePauliZEvolution
 from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
 from qiskit_qaoa.utils.logging import get_logger
@@ -51,8 +51,12 @@ parser.add_argument('-m', '--memory', type=int, default=16000)
 parser.add_argument('-n', '--shots', type=int, default=1000)
 parser.add_argument('--init', choices=['ramp', 'random'], default='ramp')
 parser.add_argument('-e', '--extra', type=int, default=1)
+parser.add_argument('--fraction-four', type=float)
+parser.add_argument('--fraction-six', type=float)
+parser.add_argument('--fraction-constraint', type=float)
 parser.add_argument('-N', '--nodes', type=int)
 parser.add_argument('-T', '--time', type=int)
+parser.add_argument('-C', '--coupling-map', choices=['line', 'grid'])
 
 
 args = parser.parse_args()
@@ -66,28 +70,46 @@ init_type: str = args.init
 swap_depth: int = args.swap_depth
 N: int = args.nodes
 T: int = args.time
-
+n = int(np.ceil(np.log2(2*N+1)))
 
 seed = 1
 rng = np.random.default_rng(seed=seed)
 
 basis_gates=["sx", "x", "rz", "rzz", "cz", "id"]
 
-results_file = f'/lustre/scratch127/qpg/jc59/hubo/simulation_results_{filename}.pkl'
+basepath = '/lustre/scratch127/qpg/jc59/hubo/'
+filename = 'simulation.{}.compilation.{}.extra{}.constraint{}.four{}.six{}'.format(
+    args.coupling_map,
+    args.filename,
+    args.extra,
+    args.fraction_constraint,
+    args.fraction_four,
+    args.fraction_six
+)
+results_file = basepath + filename + '.pkl'
+
 with open(results_file, 'rb') as f:
     data = pickle.load(f)
-    old_hamiltonian: SparsePauliOp = data['old_hamiltonian']
-    hamiltonian: SparsePauliOp = data[swap_depth]['hamiltonian']
-    edge_map = data[swap_depth]['layout']
-    
+    compiled_hamiltonian: SparsePauliOp = data['compiled_hamiltonian']
+    full_hamiltonian: SparsePauliOp = data['full_hamiltonian']
+    edge_map: dict[int, int] = data[swap_depth]
 
-num_qubits = hamiltonian.num_qubits
-extended_swap_strat = ExtendedSwapStrategy.from_line(range(num_qubits))
+num_qubits: int = full_hamiltonian.num_qubits if full_hamiltonian.num_qubits is not None else max(edge_map.keys())
+
+if args.coupling_map == 'line':
+    extended_swap_strat = ExtendedSwapStrategy.from_line(list(range(num_qubits)), num_swap_layers=1000)
+elif args.coupling_map == 'grid':
+    extended_swap_strat = ExtendedSwapStrategy.from_grid(n, T)
+else:
+    raise Exception('Invalid coupling map type')
+
 num_physical_qubits = extended_swap_strat._num_vertices
 coupling_map = extended_swap_strat._coupling_map
 
-basis_gates=["sx", "x", "rz", "rzz", "cz", "id"]
+remapped_full_hamiltonian = full_hamiltonian.apply_layout([edge_map[i] for i in range(num_qubits)], num_physical_qubits)
 
+
+basis_gates=["sx", "x", "rz", "rzz", "cz", "id"]
 
 
 logger.info(f'Physical qubits: {num_physical_qubits}')
@@ -123,8 +145,7 @@ pm = PassManager(
 )
 
 cost_qc = QuantumCircuit(num_physical_qubits)
-# cost_qc.append(PauliEvolutionGate(hamiltonian, time=Parameter("c")), range(num_physical_qubits))
-cost_qc.append(PauliEvolutionGate(old_hamiltonian, time=Parameter("c")), [edge_map[i] for i in range(len(edge_map))])
+cost_qc.append(PauliEvolutionGate(compiled_hamiltonian, time=Parameter("c")), [edge_map[i] for i in range(len(edge_map))])
 tcost_qc = pm.run(cost_qc, callback=get_permutation)
 
 print_circuit_info(tcost_qc, 'Transpiled cost hamiltonian circuit')
@@ -154,103 +175,16 @@ sampler = Sampler(seed=1).from_backend(backend)
 # Can't do different mappings since the qubit locations are now set.. but could do the next N layers of SWAP strat
 # Which would allow for a different subset of interactions to be used
 
-def uniform_over_range(num_qubits: int, M: int):
-    """
-    Returns a circuit that prepares a uniform superposition over |0>,|1>,...,|M-1> on num_qubits qubits.
-    Uses a Hadamard layer if M is a power of 2, else uses the method of Shukla and Vedula.
-    """
-    if M not in range(2 ** num_qubits +1):
-        print(M)
-        print(num_qubits)
-        raise Exception('Bad M: out of range')
-    for i in range(num_qubits+1):
-        if M == 2 ** i:
-            print(f'M={M} a power of 2. Use Hadamard circuit.')
-            circuit = QuantumCircuit(num_qubits)
-            for j in range(i):
-                circuit.h(j)
-                
-            return circuit
-    
-    circuit = QuantumCircuit(num_qubits)
-
-    try:
-        M_binary = np.binary_repr(M, num_qubits)
-    except Exception as e:
-        print(M)
-        print(num_qubits)
-        raise e
-    M_binary = M_binary[::-1]
-    ran = np.arange(len(M_binary))
-    mask = [M_binary[x] == '1' for x in range(len(M_binary))]
-    l = ran[mask]
-    
-    for i in range(1, len(l)):
-        circuit.x(l[i])
-    if l[0] > 0:
-        for i in range(l[0]):
-            circuit.h(i)
-
-    MM = 2 ** l[0]
-
-    circuit.ry(-2 * np.arccos(np.sqrt(MM/M)), l[1])
-
-    for i in range(l[0], l[1]):
-        circuit.ch(l[1], i, ctrl_state=0)
-
-    for m in range(1, len(l)-1):
-        circuit.cry(
-            -2 * np.arccos(np.sqrt(2 ** l[m] / (M - MM) )), 
-            l[m], l[m+1], ctrl_state=0
-        )
-        for i in range(l[m], l[m+1]):
-            circuit.ch(l[m+1], i, ctrl_state=0)
-        MM += 2 ** l[m]
-
-    return circuit
-
-
-def state_prep(N: int, T: int) -> QuantumCircuit:
-    n = int(np.ceil(np.log2(2*N+1)))
-    uni = uniform_over_range(n, N+1)
-    circuit = QuantumCircuit(n * T)
-    for t in range(T):
-        circuit.append(
-            uni,
-            list(range(t * n, (t+1) * n))   
-        )
-    return circuit
-
-
-def get_mixer_operator(N: int, T: int, parameter=Parameter('beta')) -> QuantumCircuit:
-    # TODO: use ancillas to reduce depth of mcp?
-    num_qubits = int(np.ceil(np.log2(2*N+1))) * T
-    state_prep_circuit = state_prep(N, T)
-    mixer = QuantumCircuit(num_qubits)
-    mixer.append(
-        state_prep_circuit.inverse(),
-        range(num_qubits)
-    )
-    # mixer.save_statevector('after_prep')
-    mixer.x(-1)
-    mixer.mcp(-parameter, list(range(num_qubits - 1)), -1, ctrl_state=0)
-    mixer.x(-1)
-    # mixer.save_statevector('after_phase')
-    mixer.append(
-        state_prep_circuit,
-        range(num_qubits)
-    )
-    # mixer.save_statevector('after_unprep')
-    return mixer
-
-
-if not N == 2**(int(np.log2(N))):
+if not 2*N+1 == 2**(int(np.log2(2*N+1))):
     sp = state_prep(N,T)
     mixer = get_mixer_operator(N,T)
-    logger.info(f'SP qubit: {sp.num_qubits}. Mixer qubit: {mixer.num_qubits}')
+    logger.info('Using Grover mixer and state prep')
 else:
     sp = None
     mixer = None
+    logger.info('Using X mixer and Hadamard state prep')
+    
+    
 construction_pass = QAOAConstructionPass(p, init_state=sp, mixer_layer=mixer)
 construction_pass.property_set = properties
 qaoa_circ = dag_to_circuit(construction_pass.run(circuit_to_dag(tcost_qc)))
@@ -295,7 +229,7 @@ def objective(x: np.ndarray):
     sampling_time = time() - start
     start = time()
     energies = []
-    evals = evaluate_sparse_pauli_samples(counts.keys(), hamiltonian)
+    evals = evaluate_sparse_pauli_samples(counts.keys(), remapped_full_hamiltonian)
     energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
     flat_energies = [x for xs in energies for x in xs]
     total_energy = cvar(flat_energies, alpha)
@@ -321,14 +255,18 @@ result = minimize(
     x0=init_params, 
     method=method, 
     bounds=tuple((0,1) for _ in range(2 * p)), 
-    options={"maxiter": 100, "maxfev": 10000, "rhobeg": 0.01},  # , "ftol": 1e-7
+    options={"maxiter": 100, "maxfev": 1000, "rhobeg": 0.05},  # , "ftol": 1e-7
     callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
 )
 logger.info(result)
 
 
 obj_to_dump = dict(
-    result=result, history=history, hamiltonian=hamiltonian, t_qaoa_circ=t_qaoa_circ, old_hamiltonian=old_hamiltonian
+    result=result, history=history, remapped_full_hamiltonian=remapped_full_hamiltonian, t_qaoa_circ=t_qaoa_circ, compiled_hamiltonian=compiled_hamiltonian
 )
-with open(f'/lustre/scratch127/qpg/jc59/hubo/simulation.optimisation_{filename}.cvar{alpha}.p{p}.shots{shots}.init{init_type}.d{swap_depth}.pkl', 'wb') as f:
+
+dump_file = basepath + filename + '.cvar{}.p{}.shots{}.init{}.d{}'.format(
+    alpha, p,shots, init_type, swap_depth
+) + '.pkl'
+with open(dump_file, 'wb') as f:
     pickle.dump(obj_to_dump, f)

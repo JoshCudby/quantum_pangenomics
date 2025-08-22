@@ -109,14 +109,14 @@ def hamiltonian_to_doubles_graph(hamiltonian: SparsePauliOp) -> nx.Graph:
 
 
 def hamiltonian_to_interactions(hamiltonian: SparsePauliOp, fraction_4=0.0, fraction_6=0.8) -> list[tuple]:
-    interactions = []
+    interactions: list[tuple] = []
     for t in hamiltonian:
         if np.sum(t.paulis[0].z) < 2 or np.sum(t.paulis[0].z) > 6:
             pass
         elif np.sum(t.paulis[0].z) <= 4 and rng.random() > fraction_4:
-            edge = np.nonzero(t.paulis[0].z)[0]
+            edge = tuple(np.nonzero(t.paulis[0].z)[0])
             interactions.append(edge)
         elif rng.random() > fraction_6:
-            edge = np.nonzero(t.paulis[0].z)[0]
+            edge = tuple(np.nonzero(t.paulis[0].z)[0])
             interactions.append(edge)
     return interactions

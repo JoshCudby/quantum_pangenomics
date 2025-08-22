@@ -5,6 +5,11 @@ qpg/
 /tmp
 build/**/*
 
+**/notebooks/*.out
+**/notebooks/*.var
+**/notebooks/*.wat
+**/notebooks/*.wcnf
+
 **/out/
 
 .vscode/

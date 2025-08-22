@@ -7,7 +7,8 @@ import numpy.typing as npt
 import math
 from typing import Tuple
 from collections.abc import Iterable
-from itertools import combinations, permutations
+from itertools import combinations, permutations, product
+from functools import reduce
 
 from qiskit import QuantumCircuit
 
@@ -30,6 +31,8 @@ from qiskit.exceptions import QiskitError
 from qiskit_qaoa.utils.logging import get_logger
 
 logger = get_logger(__name__)
+rng = np.random.default_rng(seed=1)
+
 
 
 class CommutingBlock(Gate):
@@ -155,7 +158,7 @@ class DecomposePauliZEvolution(TransformationPass):
                     applied = True
                     break
             if not applied:
-                logger.info('No single neighbour qubit found. Apply a random cx to break loops')
+                logger.warning('No single neighbour qubit found. Apply a random cx to break loops')
                 qubit = qubits_copy[0]
                 neighbours = [self._coupling_map.distance(qubit, qubit2) == 1 for qubit2 in qubits_copy]
                 neighbour = qubits_copy[neighbours.index(True)]
@@ -302,10 +305,11 @@ class FindCommutingPauliEvolutionsMulti(TransformationPass):
 
 class ExtendedSwapStrategy(SwapStrategy):
     def __init__(
-        self, coupling_map: CouplingMap, swap_layers: tuple[tuple[tuple[int, int], ...], ...]
+        self, coupling_map: CouplingMap, swap_layers: tuple[tuple[tuple[int, int], ...], ...], type: str="custom"
     ) -> None:
         self._distances = {}
         self._distance_tensors: dict[int, np.ndarray] = {}
+        self._type = type
         super().__init__(coupling_map, swap_layers)
       
       
@@ -322,18 +326,97 @@ class ExtendedSwapStrategy(SwapStrategy):
 
         swap_layer0 = tuple((line[i], line[i + 1]) for i in range(0, len(line) - 1, 2))
         swap_layer1 = tuple((line[i], line[i + 1]) for i in range(1, len(line) - 1, 2))
+        # Maybe we want even less structure to increase the mixing?
+        def random_shuffle():
+            num_swaps = rng.integers(len(line))
+            choices = rng.choice(range(len(line)-1), num_swaps, replace=False)
+            choices = sorted(list(choices))
+            to_delete = []
+            for i in range(len(choices) - 1):
+                if choices[i] in to_delete:
+                    continue
+                elif choices[i+1] == choices[i] + 1:
+                    to_delete.append(choices[i+1])
+            for i in to_delete:
+                choices.remove(i)
+            return tuple((line[i], line[i + 1]) for i in choices)
+
+        # reshuffle_layer = tuple((line[i], line[i + 1]) for i in range(0, len(line) - 1, 4))
 
         base_layers = [swap_layer0, swap_layer1]
 
-        swap_layers = tuple(base_layers[i % 2] for i in range(num_swap_layers))
+        rate_of_random = len(line) // 4
+        swap_layers = reduce(
+            list.__add__,
+            [[base_layers[(i+ j*rate_of_random) % 2] for i in range(rate_of_random)] + [random_shuffle()] for j in range(num_swap_layers // rate_of_random)],
+            []
+        ) + [base_layers[(i + (num_swap_layers // rate_of_random) * rate_of_random) % 2] for i in range(num_swap_layers % rate_of_random)]
+
 
         couplings = []
         for idx in range(len(line) - 1):
             couplings.append((line[idx], line[idx + 1]))
             couplings.append((line[idx + 1], line[idx]))
 
-        return cls(coupling_map=CouplingMap(couplings), swap_layers=tuple(swap_layers))
-    
+        return cls(coupling_map=CouplingMap(couplings), swap_layers=tuple(swap_layers), type="line")
+
+
+    @classmethod  
+    def from_grid(cls, rows: int, cols: int) -> ExtendedSwapStrategy:
+
+        qubits = [(row, col) for row in range(rows) for col in range(cols)]
+        mapping = {qubit: idx for idx, qubit in enumerate(qubits)}
+
+        swap_layer0 = tuple(
+            (mapping[(row, col)], mapping[(row, col+1)]) 
+            for row in range(rows)
+            for col in range(row % 2, cols - 1, 2)
+        )
+        swap_layer1 = tuple(
+            (mapping[(row, col)], mapping[(row, col+1)]) 
+            for row in range(rows)
+            for col in range((row+1) % 2, cols - 1, 2)
+        )
+        swap_layer2 = tuple(
+            (mapping[(row, col)], mapping[(row+1, col)]) 
+            for col in range(cols)
+            for row in range(0, rows - 1, 2)
+        )
+        swap_layer3 = tuple(
+            (mapping[(row, col)], mapping[(row+1, col)]) 
+            for col in range(cols)
+            for row in range(1, rows - 1, 2)
+        )
+
+        base_layers = [swap_layer0, swap_layer1]
+        swap_layers = reduce(
+            list.__add__,
+            [
+                [base_layers[i % 2] for i in range(cols-1)] + [swap_layer2, swap_layer3] for _ in range(int(np.ceil(rows/2)))
+            ],
+            []
+        )
+        
+        couplings = []
+        for row, col in product(range(rows-1), range(cols-1)):
+            new_couplings = [
+                (mapping[(row, col)], mapping[(row+1, col)]),
+                (mapping[(row, col)], mapping[(row, col+1)])
+            ]
+            couplings.extend(new_couplings + [c[::-1] for c in new_couplings])
+        for col in range(cols - 1):
+            new_couplings = [
+                (mapping[(rows-1, col)], mapping[(rows-1, col+1)])
+            ]
+            couplings.extend(new_couplings + [c[::-1] for c in new_couplings])
+        for row in range(rows - 1):
+            new_couplings = [
+                (mapping[(row, cols-1)], mapping[(row+1, cols-1)])
+            ]
+            couplings.extend(new_couplings + [c[::-1] for c in new_couplings])
+
+        return cls(coupling_map=CouplingMap(couplings), swap_layers=tuple(swap_layers), type="grid")
+
     
     @classmethod  
     def from_heavy_hex(cls, rows: int, cols: int) -> ExtendedSwapStrategy:
@@ -439,7 +522,7 @@ class ExtendedSwapStrategy(SwapStrategy):
 
         swap_layers = tuple(swap_layers * 5)
 
-        return cls(coupling_map=coupling_map, swap_layers=tuple(swap_layers))
+        return cls(coupling_map=coupling_map, swap_layers=tuple(swap_layers), type="heavy_hex")
     
     
     def distance_nodes(self, nodes: tuple) -> int | float:
@@ -495,8 +578,9 @@ class ExtendedSwapStrategy(SwapStrategy):
             return dt
         
         try:
-            with open(f'/lustre/scratch127/qpg/jc59/hubo/swap_strategy_distance_qubits_{self._num_vertices}_order_{order}.pkl', 'rb') as f:
+            with open(f'/lustre/scratch127/qpg/jc59/hubo/swap_strategy_{self._type}_distance_qubits_{self._num_vertices}_order_{order}.pkl', 'rb') as f:
                 dt = pickle.load(f)
+                logger.info("Loaded data")
                 return dt
         except FileNotFoundError:
             pass
@@ -515,7 +599,7 @@ class ExtendedSwapStrategy(SwapStrategy):
                     
         self._distance_tensors[order] = distance_tensor
         
-        with open(f'/lustre/scratch127/qpg/jc59/hubo/swap_strategy_distance_qubits_{self._num_vertices}_order_{order}.pkl', 'wb') as f:
+        with open(f'/lustre/scratch127/qpg/jc59/hubo/swap_strategy_{self._type}_distance_qubits_{self._num_vertices}_order_{order}.pkl', 'wb') as f:
             pickle.dump(distance_tensor, f)
         
         return distance_tensor

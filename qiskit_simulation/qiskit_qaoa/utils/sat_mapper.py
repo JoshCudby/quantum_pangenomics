@@ -4,6 +4,7 @@ from itertools import combinations, product
 from threading import Timer
 import numpy as np
 import subprocess
+import uuid
 
 from pysat.formula import CNF, IDPool, WCNF
 from pysat.solvers import Solver
@@ -17,11 +18,15 @@ from qiskit_qaoa.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def get_cnfs(program_interactions, swap_strategy, num_layers, variables):
+def get_cnfs(
+    num_nodes_g1, 
+    num_nodes_g2,
+    program_interactions, 
+    swap_strategy: ExtendedSwapStrategy, 
+    num_layers, 
+    variables
+):
     program_interactions = sorted(program_interactions,key=lambda e: len(e))
-    nodes = set([node for interaction in program_interactions for node in interaction])
-    num_nodes_g1 = len(nodes)
-    num_nodes_g2: int = swap_strategy.distance_matrix.shape[0]
         
     # Make a cnf for the one-to-one mapping constraint
     cnf1 = []
@@ -34,7 +39,7 @@ def get_cnfs(program_interactions, swap_strategy, num_layers, variables):
         clause = variables[:, j].tolist()
         for k, m in combinations(clause, 2):
             cnf1.append([-1 * k, -1 * m])
-
+            
     logger.info(f'Num layers: {num_layers}')
 
     # Make a cnf for the adjacency constraint
@@ -65,14 +70,6 @@ def get_cnfs(program_interactions, swap_strategy, num_layers, variables):
             ),
             axis=-1,
         ).reshape((num_nodes_g2**(num_qubits-1), num_qubits-1+num_nodes_g2))
-        # for c in clause:
-        #     to_add = c[c != 0].tolist()
-        #     if len(to_add) == 4 and np.allclose([-41, 76, 88, 94], to_add):
-        #         logger.info(interaction)
-        #     if len(to_add) == 1:
-        #         logger.info(interaction)
-        #         logger.info(to_add)
-        #     cnf2.append(to_add)
         cnf2.extend([c[c != 0].tolist() for c in clause])
 
     return cnf1, cnf2
@@ -82,12 +79,11 @@ class HigherOrderSatMapper(SATMapper):
 
     def hubo_max_sat(
         self,
+        num_nodes_g1: int,
         program_interactions: list[tuple], 
         swap_strategy: ExtendedSwapStrategy, 
         num_layers: int
     ) -> dict[int, tuple] | None:
-        nodes = set([node for interaction in program_interactions for node in interaction])
-        num_nodes_g1 = len(nodes)
         num_nodes_g2: int = swap_strategy.distance_matrix.shape[0]
         variable_pool = IDPool(start_from=1)
         variables = np.array(
@@ -99,27 +95,28 @@ class HigherOrderSatMapper(SATMapper):
         )
         vid2mapping = {v: idx for idx, v in np.ndenumerate(variables)}
 
-        cnf1, cnf2 = get_cnfs(program_interactions, swap_strategy, num_layers, variables)
+        cnf1, cnf2 = get_cnfs(num_nodes_g1, num_nodes_g2, program_interactions, swap_strategy, num_layers, variables)
         logger.info(f'Hard constraints: {len(cnf1)}')
         logger.info(f'Soft constraints: {len(cnf2)}')
         wcnf = WCNF()
         wcnf.extend(cnf1)
         wcnf.extend(cnf2, weights=[1]*len(cnf2))
         
-        wcnf.to_file(f'./{num_nodes_g1}.{num_nodes_g2}.{num_layers}.wcnf')
+        id = uuid.uuid1()
+        wcnf.to_file(f'./{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.wcnf')
                 
                 
         time_limit=str(self.timeout)
         mem_limit=str(2**20)
         subprocess.run(
             ["/nfs/users/nfs_j/jc59/quantumwork/pangenome/sat/run", "--timestamp", "-d", "15", 
-             "-o", f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.out", "-v", f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.var", 
-             "-w", f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.wat", "-C", time_limit, "-W", time_limit, "-M" , mem_limit, 
-                "/nfs/users/nfs_j/jc59/quantumwork/pangenome/sat/NuWLS-c_static", f'./{num_nodes_g1}.{num_nodes_g2}.{num_layers}.wcnf']
+             "-o", f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.out", "-v", f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.var", 
+             "-w", f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.wat", "-C", time_limit, "-W", time_limit, "-M" , mem_limit, 
+                "/nfs/users/nfs_j/jc59/quantumwork/pangenome/sat/NuWLS-c_static", f'./{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.wcnf']
         )
         
         try:
-            with open(f'output{num_layers}.out', 'r') as f:
+            with open(f'{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.out', 'r') as f:
                 out = f.readlines()
             out_data = [x.split() for x in out if len(x) > 0]
             sol, cost, satisfiable = None, None, None

@@ -33,9 +33,12 @@ parser.add_argument('-f', '--filename')
 parser.add_argument('-e', '--extra', type=int, default=1)
 parser.add_argument('--fraction-four', type=float)
 parser.add_argument('--fraction-six', type=float)
+parser.add_argument('--fraction-constraint', type=float)
 parser.add_argument('-t', '--timeout', type=int)
 parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
     type=lambda s: [float(item) for item in s.split(',') if len(item)])
+parser.add_argument('-C', '--coupling-map', choices=['line', 'grid'])
+
 args = parser.parse_args()
     
 
@@ -50,12 +53,18 @@ def print_circuit_info(qc: QuantumCircuit, circuit_name: str):
     
     
 filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{args.filename}.gfa'
-graph, n, N, T = gfa_file_to_graph(filepath, args.copy_numbers)
+graph, n, V, T = gfa_file_to_graph(filepath, args.copy_numbers)
 num_qubits = n*T
 logger.info(f'Virtual qubits: {num_qubits}')
 
 
-extended_swap_strat = ExtendedSwapStrategy.from_line(range(num_qubits))
+if args.coupling_map == 'line':
+    extended_swap_strat = ExtendedSwapStrategy.from_line(range(num_qubits), num_swap_layers=1000)
+elif args.coupling_map == 'grid':
+    extended_swap_strat = ExtendedSwapStrategy.from_grid(n, T)
+else:
+    raise Exception('Invalid coupling map type')
+
 num_physical_qubits = extended_swap_strat._num_vertices
 coupling_map = extended_swap_strat._coupling_map
     
@@ -90,7 +99,8 @@ config = AerBackendConfiguration.from_dict(config)
 backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map)
 logger.info(backend.configuration().to_dict()["n_qubits"])
 
-hamiltonian = graph_to_hubo_hamiltonian(graph, n, N, T, lamda=10)
+full_hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, fraction_terms=1.0)
+hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, fraction_terms=args.fraction_constraint)
 
 logger.info(f'Number of hamiltonian terms: {len(hamiltonian)}')
 
@@ -126,18 +136,29 @@ logger.info(f'Orders: {Counter([len(interaction) for interaction in program_inte
 
 mapper = HigherOrderSatMapper(timeout=args.timeout)
 results: dict[str | int, SparsePauliOp | dict] = {
-    'old_hamiltonian': hamiltonian,
+    'full_hamiltonian': full_hamiltonian,
+    'compiled_hamiltonian': hamiltonian
 }
-for num_layers in range(0, len(extended_swap_strat._swap_layers), 3):
+
+layers = set([int(x) for x in np.linspace(0, len(extended_swap_strat._swap_layers), 10)])
+for num_layers in layers:
+# for num_layers in range(0, len(extended_swap_strat._swap_layers), 100):
     logger.info('--------------------------------------------------')
     sat_results = mapper.hubo_max_sat(
-        program_interactions, extended_swap_strat, num_layers
+        num_qubits, program_interactions, extended_swap_strat, num_layers
     )
     if sat_results is None:
         logger.info('No results')
         continue
     mapping = sat_results[num_layers][1]
     edge_map = dict(mapping)
+    all_qubits = set(range(num_qubits))
+    keys = set(edge_map.keys())
+    vals = set(edge_map.values())
+    missing_keys, missing_vals = all_qubits.difference(keys), all_qubits.difference(vals)
+    for key, val in zip(missing_keys, missing_vals):
+        logger.info(f'Manually assigning: {key}:{val}')
+        edge_map[key] = val
     logger.info(f'Cost: {sat_results[num_layers][0]}')
     logger.info(edge_map)
 
@@ -172,12 +193,19 @@ for num_layers in range(0, len(extended_swap_strat._swap_layers), 3):
     
     print_circuit_info(backend_new_tcost, 'Remapped, commuting gate routed circuit on backend')
     print(backend_new_tcost.count_ops())
-    results[num_layers] = {
-        'layout': edge_map,
-        'hamiltonian': new_hamiltonian,
-    }
+    results[num_layers] = edge_map
     
     
-with open(f'/lustre/scratch127/qpg/jc59/hubo/simulation_results_{args.filename}_extra{args.extra}_four{args.fraction_four}_six{args.fraction_six}.pkl', 'wb') as f:
+basepath = '/lustre/scratch127/qpg/jc59/hubo/'
+filename = 'simulation.{}.compilation.{}.extra{}.constraint{}.four{}.six{}'.format(
+    args.coupling_map,
+    args.filename,
+    args.extra,
+    args.fraction_constraint,
+    args.fraction_four,
+    args.fraction_six
+)
+dump_file = basepath + filename + '.pkl'
+with open(dump_file, 'wb') as f:
     pickle.dump(results, f)
     
