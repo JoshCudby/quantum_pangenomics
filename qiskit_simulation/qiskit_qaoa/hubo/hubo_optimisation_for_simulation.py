@@ -265,7 +265,7 @@ obj_to_dump = dict(
     result=result, history=history, remapped_full_hamiltonian=remapped_full_hamiltonian, t_qaoa_circ=t_qaoa_circ, compiled_hamiltonian=compiled_hamiltonian
 )
 
-dump_file = basepath + filename + '.cvar{}.p{}.shots{}.init{}.d{}'.format(
+dump_file = basepath + filename.replace('compilation', 'optimisation') + '.cvar{}.p{}.shots{}.init{}.d{}'.format(
     alpha, p,shots, init_type, swap_depth
 ) + '.pkl'
 with open(dump_file, 'wb') as f:

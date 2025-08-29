@@ -102,6 +102,7 @@ class HigherOrderSatMapper(SATMapper):
         wcnf.extend(cnf1)
         wcnf.extend(cnf2, weights=[1]*len(cnf2))
         
+        
         id = uuid.uuid1()
         wcnf.to_file(f'./{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.wcnf')
                 

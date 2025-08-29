@@ -189,7 +189,7 @@ for num_layers in layers:
     print_circuit_info(new_tcost, 'Remapped, commuting gate routed circuit')
     print(new_tcost.count_ops())
     
-    backend_new_tcost = transpile(new_tcost, optimization_level=3, coupling_map=coupling_map, basis_gates=basis_gates) # 
+    backend_new_tcost = transpile(new_tcost, optimization_level=3, backend=backend, basis_gates=basis_gates) # 
     
     print_circuit_info(backend_new_tcost, 'Remapped, commuting gate routed circuit on backend')
     print(backend_new_tcost.count_ops())

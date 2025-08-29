@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import pickle
-import networkx as nx
 import numpy as np
-import numpy.typing as npt
-import math
 from typing import Tuple
 from collections.abc import Iterable
-from itertools import combinations, permutations, product
-from functools import reduce
+
 
 from qiskit import QuantumCircuit
 
@@ -16,23 +11,23 @@ from qiskit.circuit import Gate, Qubit, Clbit
 from qiskit.circuit.library import PauliEvolutionGate, CXGate, RZZGate
 from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
-from qiskit.transpiler import TransformationPass
-from qiskit.transpiler.passes.routing.commuting_2q_gate_routing import SwapStrategy
+from qiskit.transpiler import TransformationPass, generate_preset_pass_manager
 from qiskit.transpiler.coupling import CouplingMap
 from qiskit.transpiler.exceptions import TranspilerError
 from qiskit.transpiler.layout import Layout
 from collections import defaultdict
 
 from qiskit.quantum_info import SparsePauliOp, Pauli
-from qiskit.converters import circuit_to_dag
+from qiskit.converters import dag_to_circuit, circuit_to_dag
 
 from qiskit.exceptions import QiskitError
 
+from qiskit_qaoa.utils.swap_strategy import ExtendedSwapStrategy
 from qiskit_qaoa.utils.logging import get_logger
 
 logger = get_logger(__name__)
 rng = np.random.default_rng(seed=1)
-
+old_property_set = {}
 
 
 class CommutingBlock(Gate):
@@ -48,14 +43,11 @@ class CommutingBlock(Gate):
             node_block: A block of nodes that commute.
 
         Raises:
-            QiskitError: If the nodes in the node block do not apply to two-qubits.
+            QiskitError: If the nodes in the node block have classical bits.
         """
         qubits: set[Qubit] = set()
         cbits: set[Clbit] = set()
         for node in node_block:
-            # if len(node.qargs) != 2:
-            #     raise QiskitError(f"Node {node.name} does not apply to two-qubits.")
-
             qubits.update(node.qargs)
             cbits.update(node.cargs)
 
@@ -95,6 +87,8 @@ class DecomposePauliZEvolution(TransformationPass):
             if isinstance(node.op, PauliEvolutionGate) and self.valid_operator(node, dag):
                 sub_dag = self._decompose(dag, node)
                 new_dag.compose(sub_dag)
+            elif isinstance(node.op, PauliEvolutionGate) and len(node.qargs) == 1:
+                new_dag.apply_operation_front(node.op, node.qargs, node.cargs)
             else:
                 new_dag.apply_operation_back(node.op, node.qargs, node.cargs)
         return new_dag
@@ -111,7 +105,14 @@ class DecomposePauliZEvolution(TransformationPass):
             and False otherwise.
         """
         pauli_z = node.op.operator.paulis[0].z
-        qubits = [dag.find_bit(node.qargs[i]).index for i in range(len(node.qargs)) if i in np.nonzero(pauli_z)[0]] 
+        qubits = [dag.find_bit(node.qargs[i]).index for i in range(len(node.qargs)) if i in np.nonzero(pauli_z)[0]]
+        if sum(node.op.operator.paulis[0].z) > 2 and not any(
+                    np.all(np.linalg.matrix_power(
+                        np.array([[self._coupling_map.distance(qubit1, qubit2) <= 1 for qubit2 in qubits] for qubit1 in qubits]), 
+                        len(qubits)
+                    ), axis=0)
+                ):
+            print(qubits) 
         return len(node.op.operator.paulis) == 1 and sum(node.op.operator.paulis[0].x) == 0 and sum(node.op.operator.paulis[0].z) > 1 \
             and any(
                 np.all(np.linalg.matrix_power(
@@ -144,11 +145,11 @@ class DecomposePauliZEvolution(TransformationPass):
                 neighbours = [self._coupling_map.distance(qubit, qubit2) == 1 for qubit2 in qubits_copy]
                 num_neighbours = sum(neighbours)
                 if num_neighbours == 0:
-                    logger.info(node.label)
-                    logger.info(f'Initial qubits: {qubits}')
-                    logger.info(f'Current qubits: {qubits_copy}')
-                    logger.info(f'Qubit: {qubit}')
-                    logger.info(f'Neighbours: { [[self._coupling_map.distance(qubit1, qubit2) == 1 for qubit2 in qubits] for qubit1 in qubits]}')
+                    print(node.label)
+                    print(f'Initial qubits: {qubits}')
+                    print(f'Current qubits: {qubits_copy}')
+                    print(f'Qubit: {qubit}')
+                    print(f'Neighbours: { [[self._coupling_map.distance(qubit1, qubit2) == 1 for qubit2 in qubits] for qubit1 in qubits]}')
                     raise Exception('Disconnected qubit in decomposition')
                 if num_neighbours == 1:
                     neighbour = qubits_copy[neighbours.index(True)]
@@ -157,12 +158,12 @@ class DecomposePauliZEvolution(TransformationPass):
                     qubits_copy.remove(qubit)
                     applied = True
                     break
-            if not applied:
-                logger.warning('No single neighbour qubit found. Apply a random cx to break loops')
+            if not applied:     
                 qubit = qubits_copy[0]
                 neighbours = [self._coupling_map.distance(qubit, qubit2) == 1 for qubit2 in qubits_copy]
                 neighbour = qubits_copy[neighbours.index(True)]
                 sub_dag.apply_operation_back(CXGate(), [dag.qubits[qubit], dag.qubits[neighbour]])
+                # logger.warning(f'No single neighbour qubit found. Apply a random cx to break loops. Chosen: {qubit, neighbour}')
                 cx_gates.append((qubit, neighbour))
                 qubits_copy.remove(qubit)
             
@@ -208,11 +209,11 @@ class FindCommutingPauliEvolutionsMulti(TransformationPass):
                         dag.replace_block_with_op([node], block_op, wire_order)
                         # dag.replace_block_with_op([node], CommutingBlock([]), wire_order)
                     except Exception as e:
-                        logger.info(e)
-                        logger.info(node.num_qubits)
-                        logger.info(node.qargs)
-                        logger.info(node.op)
-                        logger.info(node.op.num_qubits)
+                        print(e)
+                        print(node.num_qubits)
+                        print(node.qargs)
+                        print(node.op)
+                        print(node.op.num_qubits)
                         raise e
 
         return dag
@@ -300,309 +301,6 @@ class FindCommutingPauliEvolutionsMulti(TransformationPass):
             sub_dag.apply_operation_back(pauli, qubits)
         
         return sub_dag
-
-
-
-class ExtendedSwapStrategy(SwapStrategy):
-    def __init__(
-        self, coupling_map: CouplingMap, swap_layers: tuple[tuple[tuple[int, int], ...], ...], type: str="custom"
-    ) -> None:
-        self._distances = {}
-        self._distance_tensors: dict[int, np.ndarray] = {}
-        self._type = type
-        super().__init__(coupling_map, swap_layers)
-      
-      
-    @classmethod  
-    def from_line(cls, line: list[int], num_swap_layers: int | None = None) -> ExtendedSwapStrategy:
-        if len(line) < 2:
-            raise ValueError(f"The line cannot have less than two elements, but is {line}")
-
-        if num_swap_layers is None:
-            num_swap_layers = len(line) - 2
-
-        elif num_swap_layers < 0:
-            raise ValueError(f"Negative number {num_swap_layers} passed for number of swap layers.")
-
-        swap_layer0 = tuple((line[i], line[i + 1]) for i in range(0, len(line) - 1, 2))
-        swap_layer1 = tuple((line[i], line[i + 1]) for i in range(1, len(line) - 1, 2))
-        # Maybe we want even less structure to increase the mixing?
-        def random_shuffle():
-            num_swaps = rng.integers(len(line))
-            choices = rng.choice(range(len(line)-1), num_swaps, replace=False)
-            choices = sorted(list(choices))
-            to_delete = []
-            for i in range(len(choices) - 1):
-                if choices[i] in to_delete:
-                    continue
-                elif choices[i+1] == choices[i] + 1:
-                    to_delete.append(choices[i+1])
-            for i in to_delete:
-                choices.remove(i)
-            return tuple((line[i], line[i + 1]) for i in choices)
-
-        # reshuffle_layer = tuple((line[i], line[i + 1]) for i in range(0, len(line) - 1, 4))
-
-        base_layers = [swap_layer0, swap_layer1]
-
-        rate_of_random = len(line) // 4
-        swap_layers = reduce(
-            list.__add__,
-            [[base_layers[(i+ j*rate_of_random) % 2] for i in range(rate_of_random)] + [random_shuffle()] for j in range(num_swap_layers // rate_of_random)],
-            []
-        ) + [base_layers[(i + (num_swap_layers // rate_of_random) * rate_of_random) % 2] for i in range(num_swap_layers % rate_of_random)]
-
-
-        couplings = []
-        for idx in range(len(line) - 1):
-            couplings.append((line[idx], line[idx + 1]))
-            couplings.append((line[idx + 1], line[idx]))
-
-        return cls(coupling_map=CouplingMap(couplings), swap_layers=tuple(swap_layers), type="line")
-
-
-    @classmethod  
-    def from_grid(cls, rows: int, cols: int) -> ExtendedSwapStrategy:
-
-        qubits = [(row, col) for row in range(rows) for col in range(cols)]
-        mapping = {qubit: idx for idx, qubit in enumerate(qubits)}
-
-        swap_layer0 = tuple(
-            (mapping[(row, col)], mapping[(row, col+1)]) 
-            for row in range(rows)
-            for col in range(row % 2, cols - 1, 2)
-        )
-        swap_layer1 = tuple(
-            (mapping[(row, col)], mapping[(row, col+1)]) 
-            for row in range(rows)
-            for col in range((row+1) % 2, cols - 1, 2)
-        )
-        swap_layer2 = tuple(
-            (mapping[(row, col)], mapping[(row+1, col)]) 
-            for col in range(cols)
-            for row in range(0, rows - 1, 2)
-        )
-        swap_layer3 = tuple(
-            (mapping[(row, col)], mapping[(row+1, col)]) 
-            for col in range(cols)
-            for row in range(1, rows - 1, 2)
-        )
-
-        base_layers = [swap_layer0, swap_layer1]
-        swap_layers = reduce(
-            list.__add__,
-            [
-                [base_layers[i % 2] for i in range(cols-1)] + [swap_layer2, swap_layer3] for _ in range(int(np.ceil(rows/2)))
-            ],
-            []
-        )
-        
-        couplings = []
-        for row, col in product(range(rows-1), range(cols-1)):
-            new_couplings = [
-                (mapping[(row, col)], mapping[(row+1, col)]),
-                (mapping[(row, col)], mapping[(row, col+1)])
-            ]
-            couplings.extend(new_couplings + [c[::-1] for c in new_couplings])
-        for col in range(cols - 1):
-            new_couplings = [
-                (mapping[(rows-1, col)], mapping[(rows-1, col+1)])
-            ]
-            couplings.extend(new_couplings + [c[::-1] for c in new_couplings])
-        for row in range(rows - 1):
-            new_couplings = [
-                (mapping[(row, cols-1)], mapping[(row+1, cols-1)])
-            ]
-            couplings.extend(new_couplings + [c[::-1] for c in new_couplings])
-
-        return cls(coupling_map=CouplingMap(couplings), swap_layers=tuple(swap_layers), type="grid")
-
-    
-    @classmethod  
-    def from_heavy_hex(cls, rows: int, cols: int) -> ExtendedSwapStrategy:
-        
-        hex = nx.hexagonal_lattice_graph(cols, rows)
-        coupling_graph = nx.Graph()
-        counter = 0
-        mapping = {}
-        index_to_name_mapping = {}
-
-        a_nodes = []
-        b_nodes = []
-
-        for node in hex.nodes:
-            coupling_graph.add_node(counter)
-            mapping[node] = counter
-            index_to_name_mapping[counter] = node
-            counter += 1
-        for edge in hex.edges:
-            coupling_graph.add_node(counter)
-            
-            if edge[0][0] != edge[1][0]:
-                if (edge[0][0] == 0 and edge[0][1] == 2*cols): # or (edge[0][0] == rows-1 and edge[0][1] == 2*cols) : leave the last one out
-                    pass
-                # Even row
-                elif edge[0][0] % 2 == 0 and edge[0][1] % 4 == 2 and not edge[0][1] == 0:
-                    a_nodes.append(edge)
-                # Even row
-                elif edge[0][0] % 2 == 0 and edge[0][1] % 4 == 0 and not edge[0][1] == 0:
-                    b_nodes.append(edge)
-                # Odd row
-                elif edge[0][0] % 2 == 1 and edge[0][1] % 4 == 1 and not edge[0][1] == 2*cols+1:
-                    a_nodes.append(edge)
-                # Odd row
-                elif edge[0][0] % 2 == 1 and edge[0][1] % 4 == 3 and not edge[0][1] == 2*cols+1:
-                    b_nodes.append(edge)
-                    
-            
-            mapping[edge] = counter
-            mapping[edge[::-1]] = counter
-            index_to_name_mapping[counter] = edge
-            counter += 1
-            
-            
-        for node in hex.nodes:
-            for edge in hex.edges(node):
-                coupling_graph.add_edge(mapping[node], mapping[edge])
-                
-        coupling_map = CouplingMap(
-            list(coupling_graph.edges) + [e[::-1] for e in coupling_graph.edges]
-        )
-
-
-        line_node_counters = [mapping[((0, 2*cols), (1, 2*cols))]]
-
-        for col_idx in range(2*cols,0,-1):
-            line_node_counters.append(mapping[(0, col_idx)])
-            line_node_counters.append(mapping[((0, col_idx),(0, col_idx-1))])
-        line_node_counters.append(mapping[(0, 0)])
-        line_node_counters.append(mapping[((0, 0), (1, 0))])
-
-        for row_idx in range(1, rows):
-            if row_idx % 2 == 1:
-                for col_idx in range(2*cols+1):
-                    line_node_counters.append(mapping[(row_idx, col_idx)])
-                    line_node_counters.append(mapping[((row_idx, col_idx), (row_idx, col_idx+1))])
-                line_node_counters.append(mapping[(row_idx, 2*cols+1)])
-                line_node_counters.append(mapping[((row_idx, 2*cols+1), (row_idx+1, 2*cols+1))])
-            else:
-                for col_idx in range(2*cols+1,0,-1):
-                    line_node_counters.append(mapping[(row_idx, col_idx)])
-                    line_node_counters.append(mapping[((row_idx, col_idx), (row_idx, col_idx-1))])
-                line_node_counters.append(mapping[(row_idx, 0)])
-                line_node_counters.append(mapping[((row_idx, 0), (row_idx+1, 0))])
-                
-        if rows % 2 == 0:
-            for col_idx in range(2*cols+1,1,-1):
-                line_node_counters.append(mapping[(rows, col_idx)])
-                line_node_counters.append(mapping[((rows, col_idx), (rows, col_idx-1))])
-            line_node_counters.append(mapping[(rows, 1)])
-            # line_node_counters.append(mapping[((rows, 1), (rows-1, 1))])  : leave the last one out   
-        else:
-            for col_idx in range(2*cols):
-                line_node_counters.append(mapping[(rows, col_idx)])
-                line_node_counters.append(mapping[((rows, col_idx), (rows, col_idx+1))])
-            line_node_counters.append(mapping[(rows, 2*cols)])
-            # line_node_counters.append(mapping[((rows, 2*rows), (rows-1, 2*rows))])      : leave the last one out      
-
-        swap_1 = tuple((line_node_counters[i], line_node_counters[i + 1]) for i in range(0, len(line_node_counters) - 1, 2))
-        swap_2 = tuple((line_node_counters[i], line_node_counters[i + 1]) for i in range(1, len(line_node_counters) - 1, 2))
-        swap_3 = tuple((mapping[a_node], mapping[a_node[0]]) for a_node in a_nodes)
-        swap_4 = tuple((mapping[b_node], mapping[b_node[0]]) for b_node in b_nodes)
-        l = len(line_node_counters)
-        k = int(l/4 - (l/4 % 8) + 10)
-        
-        swap_layers = []
-        for i in range(k - 7):
-            swap_layers.append(swap_1 if i % 2 == 0 else swap_2)
-        swap_layers.append(swap_4)
-        for i in range(7):
-            swap_layers.append(swap_2 if i % 2 == 0 else swap_1)
-        swap_layers.append(swap_3)
-
-        swap_layers = tuple(swap_layers * 5)
-
-        return cls(coupling_map=coupling_map, swap_layers=tuple(swap_layers), type="heavy_hex")
-    
-    
-    def distance_nodes(self, nodes: tuple) -> int | float:
-        nodes = tuple(sorted(nodes))
-        distance = self._distances.get(nodes, None)
-        if distance is not None:
-            return distance
-        
-        if len(nodes) < 2:
-            return 0
-        
-        for i in range(len(self._swap_layers) + 1):
-            cmap = self.swapped_coupling_map(i)
-            distance_matrix: npt.NDArray[np.float64] = cmap.distance_matrix
-            sub_distance = distance_matrix[nodes, :][:, nodes]
-            if (
-                np.max(sub_distance) <= len(nodes) - 1
-                and
-                np.any(
-                    np.all(np.linalg.matrix_power(sub_distance <= 1, len(nodes)) > 0, axis=1)
-                ) # If nodes form a connected subgraph
-            ):
-                self._distances[nodes] = i
-                return i
-        return math.inf
-    
-    
-    def all_connected_subgraphs(self, layer: int, order: int):
-        cmap = self.swapped_coupling_map(layer)
-        g = [set(cmap.neighbors(q)) for q in cmap.physical_qubits]
-        def _recurse(t: tuple, possible: set[int], excluded: set[int]):
-            if len(t) == order:
-                yield t
-            else:
-                excluded = set(excluded)
-                for i in possible.difference(excluded):
-                    new_t = (*t, i)
-                    new_possible = possible | g[i]
-                    excluded.add(i)
-                    yield from _recurse(new_t, new_possible, excluded)
-        excluded = set()
-        for (i, possible) in enumerate(g):
-            excluded.add(i)
-            yield from _recurse((i,), possible, excluded)
-    
-    
-    def distance_tensor(self, order) -> np.ndarray:
-        if order == 2:
-            return self.distance_matrix
-        
-        dt = self._distance_tensors.get(order, None)
-        if dt is not None:
-            return dt
-        
-        try:
-            with open(f'/lustre/scratch127/qpg/jc59/hubo/swap_strategy_{self._type}_distance_qubits_{self._num_vertices}_order_{order}.pkl', 'rb') as f:
-                dt = pickle.load(f)
-                logger.info("Loaded data")
-                return dt
-        except FileNotFoundError:
-            pass
-        
-        
-        distance_tensor = np.full([self._num_vertices]*order, -1)        
-        for i in range(len(self._swap_layers) + 1):
-            subgraphs = self.all_connected_subgraphs(i, order)
-            for subgraph in subgraphs:
-                subgraph = tuple(sorted(subgraph))
-                if distance_tensor[subgraph] == -1:
-                    self._distances[subgraph] = i
-                    for perm in permutations(subgraph, len(subgraph)):
-                        distance_tensor[perm] = i
-
-                    
-        self._distance_tensors[order] = distance_tensor
-        
-        with open(f'/lustre/scratch127/qpg/jc59/hubo/swap_strategy_{self._type}_distance_qubits_{self._num_vertices}_order_{order}.pkl', 'wb') as f:
-            pickle.dump(distance_tensor, f)
-        
-        return distance_tensor
                     
 
 
@@ -693,32 +391,33 @@ class CommutingGateRouter(TransformationPass):
                 cannot_implement.extend(self._check_edges(dag, node, swap_strategy))
 
                 # Compose any accumulated non-swap strategy gates to the dag
-                accumulator = self._compose_non_swap_nodes(accumulator, current_layout, new_dag)
+                if len(list(accumulator.topological_op_nodes())):
+                    accumulator = self._compose_non_swap_nodes(accumulator, current_layout, new_dag, swap_strategy)
 
                 # Decompose the swap-strategy node and add to the dag.
                 new_dag.compose(self.swap_decompose(dag, node, current_layout, swap_strategy))
             else:
-                logger.info('Not commuting block')
+                print('Not commuting block')
                 accumulator.apply_operation_back(node.op, node.qargs, node.cargs)
-
-        # TODO: find the best point to implement them, rather than dumping at the end i.e. the time when minimum distance for the ops
-        for sub_node in cannot_implement:
-            accumulator.apply_operation_back(sub_node.op, sub_node.qargs, sub_node.cargs)
         
-        logger.info(f'Gates we cannot directly implement: {len(cannot_implement)}')
-        logger.info([tuple([dag.find_bit(sub_node.qargs[i]).index for i in range(len(sub_node.qargs))]) for sub_node in cannot_implement])
+        print(f'Gates we cannot directly implement: {len(cannot_implement)}')
+        print([tuple(sorted([dag.find_bit(sub_node.qargs[i]).index for i in range(len(sub_node.qargs))])) for sub_node in cannot_implement])
         
         if self._perform_extra_swaps:
-            self._compose_non_swap_nodes(accumulator, current_layout, new_dag)
+            # TODO: find the best point to implement them, rather than dumping at the end i.e. the time when minimum distance for the ops
+            for sub_node in cannot_implement:
+                accumulator.apply_operation_back(sub_node.op, sub_node.qargs, sub_node.cargs)
+            self._compose_non_swap_nodes(accumulator, current_layout, new_dag, swap_strategy)
         else:
-            logger.info('Not implementing those gates')
+            print('Not implementing those gates')
 
         self.property_set["virtual_permutation_layout"] = current_layout
 
         return new_dag
 
+
     def _compose_non_swap_nodes(
-        self, accumulator: DAGCircuit, layout: Layout, new_dag: DAGCircuit
+        self, accumulator: DAGCircuit, layout: Layout, new_dag: DAGCircuit, swap_strategy: ExtendedSwapStrategy
     ) -> DAGCircuit:
         """Add all the non-swap strategy nodes that we have accumulated up to now.
 
@@ -739,7 +438,47 @@ class CommutingGateRouter(TransformationPass):
         for idx, val in enumerate(order):
             order_bits[val] = idx
 
-        new_dag.compose(accumulator, qubits=order_bits)
+        print(order)
+        print(order_bits)
+
+        temp_dag = new_dag.copy_empty_like()
+        temp_dag.compose(accumulator, qubits=order_bits)
+
+        
+        def callback_func(**kwargs):
+            global old_property_set
+            pass_ = kwargs['pass_']
+            dag = kwargs['dag']
+            time = kwargs['time']
+            new_property_set: dict = kwargs['property_set'].copy()
+            difference = set(new_property_set.keys()).difference(set(old_property_set.keys()))
+            modified = set([key for key in old_property_set.keys() if new_property_set.get(key, None) != old_property_set.get(key, None)])
+            to_print = {key: new_property_set.get(key, None) for key in difference.union(modified)}
+            
+            old_property_set = new_property_set
+
+            count = kwargs['count']
+            print(pass_.name(), dag.depth(), to_print, count)
+
+        cm = swap_strategy._coupling_map
+        layout_cm = CouplingMap(
+            [(order[edge[0]], order[edge[1]]) for edge in list(cm)]
+        )
+        pm = generate_preset_pass_manager(
+            optimization_level=3, 
+            coupling_map=layout_cm, 
+            basis_gates=['rz', 'rzz', 'cx', 'id', 'swap', 'u'],
+        )
+        init = pm.init
+        # init.remove(3)
+        pm.init = init
+        pm.layout = None
+        print('Transpiling accumulator')
+
+        # compiled_circuit = circuit_to_dag(pm.run(dag_to_circuit(accumulator), callback=callback_func))
+        compiled_circuit_dag = circuit_to_dag(pm.run(dag_to_circuit(temp_dag)))
+
+        new_dag.compose(compiled_circuit_dag, qubits=order_bits)
 
         # Re-initialize the node accumulator
         return new_dag.copy_empty_like()
@@ -784,6 +523,7 @@ class CommutingGateRouter(TransformationPass):
         else:
             return self._greedy_build_sub_layers_2(current_layer)
 
+
     def _edge_coloring_build_sub_layers(
         self, current_layer: dict[tuple[int, int], Gate]
     ) -> list[dict[tuple[int, int], Gate]]:
@@ -798,6 +538,9 @@ class CommutingGateRouter(TransformationPass):
                 sub_layers[color][edge] = gate
             else:
                 greedy_gates[edge] = gate
+                
+        # TODO: write the logic for the subset aware layer building
+        # Remove the Decompose pass as it will be handled here
         greed_sub_layers = self._greedy_build_sub_layers_2(greedy_gates)
         sub_layers.extend(greed_sub_layers)
         return sub_layers
@@ -811,13 +554,14 @@ class CommutingGateRouter(TransformationPass):
         We have multi-qubit Z rotations, which need to be decomposed into multiple layers, throughout all of which each qubit is blocked out.
         
         """
+        # TODO: strict subset interactions should be implemented at the same time as their superset interactions
         sub_layers = []
         current_sub_layer_index = 0
         while len(current_layer) > 0:
             current_sub_layer, remaining_gates = {}, {}
             blocked_vertices: dict[int, set[tuple]] = {}
 
-            for edge, evo_gate in sorted(current_layer.items(), key=lambda e: -len(e[0])):
+            for edge, evo_gate in current_layer.items():
                 if blocked_vertices.get(current_sub_layer_index, set()).isdisjoint(edge):
                     current_sub_layer[edge] = evo_gate
 
@@ -863,6 +607,7 @@ class CommutingGateRouter(TransformationPass):
 
         return sub_layers
 
+
     def swap_decompose(
         self, dag: DAGCircuit, node: DAGOpNode, current_layout: Layout, swap_strategy: ExtendedSwapStrategy
     ) -> DAGCircuit:
@@ -886,7 +631,7 @@ class CommutingGateRouter(TransformationPass):
 
         # Iterate over and apply gate layers
         max_distance = max(gate_layers.keys())
-        logger.info(f'Max layers needed to apply swap decompose: {max_distance}')
+        print(f'Max layers needed to apply swap decompose: {max_distance}')
 
         circuit_with_swap = QuantumCircuit(len(dag.qubits))
 
@@ -900,10 +645,10 @@ class CommutingGateRouter(TransformationPass):
 
             # Not all gates that are applied at the ith swap layer can be applied at the same
             # time. We therefore greedily build sub-layers.
-            # logger.info(f'Layer {i}. Gates in layer: {current_layer.keys()}')
-            # logger.info(f'Unmapped gates in layer: {[indices for indices, _ in gate_layers.get(i, {}).items()]}')
+            # print(f'Layer {i}. Gates in layer: {current_layer.keys()}')
+            # print(f'Unmapped gates in layer: {[indices for indices, _ in gate_layers.get(i, {}).items()]}')
             sub_layers = self._build_sub_layers(current_layer)
-            # logger.info(f'Layer {i}. Sub-layers: {len(sub_layers)}. Max interaction size: {max([len(key) for key in current_layer.keys()]) if len(current_layer.keys()) > 0 else 0}')
+            # print(f'Layer {i}. Sub-layers: {len(sub_layers)}. Max interaction size: {max([len(key) for key in current_layer.keys()]) if len(current_layer.keys()) > 0 else 0}')
 
             # Apply sub-layers
             for sublayer in sub_layers:
@@ -916,14 +661,15 @@ class CommutingGateRouter(TransformationPass):
                     try:
                         (j, k) = [trivial_layout.get_physical_bits()[vertex] for vertex in swap]
                     except KeyError:
-                        logger.info(swap)
-                        logger.info(trivial_layout.get_physical_bits())
+                        print(swap)
+                        print(trivial_layout.get_physical_bits())
                         raise KeyError()
 
                     circuit_with_swap.swap(j, k)
                     current_layout.swap(j, k)
 
         return circuit_to_dag(circuit_with_swap)
+
 
     def _make_op_layers(
         self, dag: DAGCircuit, op: CommutingBlock, layout: Layout, swap_strategy: ExtendedSwapStrategy
@@ -944,6 +690,7 @@ class CommutingGateRouter(TransformationPass):
                 gate_layers[distance][edge] = node.op
 
         return gate_layers
+
 
     def _check_edges(self, dag: DAGCircuit, node: DAGOpNode, swap_strategy: ExtendedSwapStrategy):
         """Check if the swap strategy can create the required connectivity.

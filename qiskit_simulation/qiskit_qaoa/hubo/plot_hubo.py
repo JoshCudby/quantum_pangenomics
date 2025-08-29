@@ -22,6 +22,7 @@ parser.add_argument('--init', choices=['ramp', 'random'], default='ramp')
 parser.add_argument('-e', '--extra', type=int, default=1)
 parser.add_argument('--fraction-four', type=float)
 parser.add_argument('--fraction-six', type=float)
+parser.add_argument('--fraction-constraint', type=float)
 parser.add_argument('-a', '--alpha', type=float)
 parser.add_argument('-C', '--coupling-map', choices=['line', 'grid'])
 
@@ -30,10 +31,11 @@ args = parser.parse_args()
 
 logger.info(args)
 basepath='/lustre/scratch127/qpg/jc59/hubo/'
-filename='simulation.{}.optimisation.{}.extra{}.four{}.six{}.cvar{}.p{}.shots{}.init{}.d{}'.format(
+filename='simulation.{}.optimisation.{}.extra{}.constraint{}.four{}.six{}.cvar{}.p{}.shots{}.init{}.d{}'.format(
     args.coupling_map,
     args.filename,
     args.extra,
+    args.fraction_constraint,
     args.fraction_four,
     args.fraction_six,
     args.alpha,
@@ -59,7 +61,7 @@ fig.tight_layout()
 fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/hubo/{filename}.convergence.png')
 
 min_val = 0
-# max_val = 100
+# max_val = 100 (T-1)*lambda_G + T^2 + sum(weight**2)
 
 n: int = remapped_full_hamiltonian.num_qubits
 
