@@ -36,7 +36,7 @@ def graph_to_hubo_hamiltonian(
                                     [0.5 * (SparsePauliOp('I' * n * T, np.array([1])) + (1 - 2 * bin_rep(j, n)[k]) * indices_to_pauli(t+1, k, n, T)) for k in range(n)],
                                     SparsePauliOp('I'*n*T, np.array([1]))
                                 )
-                                for j in [nodes.index(nbr) for nbr in graph.neighbors(nodes[i])] + [V]
+                                for j in [nodes.index(nbr) for nbr in graph.neighbors(nodes[i])] + list(range(V, 2**n))
                             ],
                             SparsePauliOp('I'*n*T, np.array([0]))
                         )
@@ -46,15 +46,23 @@ def graph_to_hubo_hamiltonian(
                     SparsePauliOp.compose(
                         reduce(
                             SparsePauliOp.compose,
-                            [0.5 * (SparsePauliOp('I' * n * T, np.array([1])) + (1 - 2 * bin_rep(V, n)[k]) * indices_to_pauli(t, k, n, T)) for k in range(n)],
+                            [0.5 * (SparsePauliOp('I' * n * T, np.array([1])) + (1 - 2 * bin_rep(ii, n)[k]) * indices_to_pauli(t, k, n, T)) for k in range(n)],
                             SparsePauliOp('I'*n*T, np.array([1]))
                         ),
                         reduce(
-                            SparsePauliOp.compose,
-                            [0.5 * (SparsePauliOp('I' * n * T, np.array([1])) + (1 - 2 * bin_rep(V, n)[k]) * indices_to_pauli(t+1, k, n, T)) for k in range(n)],
-                            SparsePauliOp('I'*n*T, np.array([1]))
+                            SparsePauliOp._add,
+                            [
+                                reduce(
+                                    SparsePauliOp.compose,
+                                    [0.5 * (SparsePauliOp('I' * n * T, np.array([1])) + (1 - 2 * bin_rep(jj, n)[k]) * indices_to_pauli(t+1, k, n, T)) for k in range(n)],
+                                    SparsePauliOp('I'*n*T, np.array([1]))
+                                )
+                                for jj in range(V, 2**n)
+                            ],
+                            SparsePauliOp('I'*n*T, np.array([0]))
                         )
                     )
+                    for ii in range(V, 2**n)
                 ],
                 SparsePauliOp('I'*n*T, np.array([0]))
             ) for t in terms_to_keep

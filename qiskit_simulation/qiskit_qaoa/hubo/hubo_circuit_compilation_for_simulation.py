@@ -5,8 +5,8 @@ import argparse
 from itertools import combinations
 from collections import Counter
 
-from qiskit import QuantumCircuit, transpile
-from qiskit.circuit.library import QAOAAnsatz,  PauliEvolutionGate, CXGate, SwapGate
+from qiskit import QuantumCircuit, transpile, generate_preset_pass_manager
+from qiskit.circuit.library import QAOAAnsatz,  PauliEvolutionGate, CXGate
 
 from qiskit_aer import AerSimulator
 from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
@@ -14,14 +14,15 @@ from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
 from qiskit.quantum_info import SparsePauliOp
 
 from qiskit.transpiler import PassManager
-from qiskit.transpiler.passes import HighLevelSynthesis, InverseCancellation
+from qiskit.transpiler.passes import InverseCancellation, CommutativeCancellation
 from qopt_best_practices.transpilation.swap_cancellation_pass import SwapToFinalMapping
 
 from qiskit_qaoa.hubo.graph_to_hubo_hamiltonian import graph_to_hubo_hamiltonian
 from qiskit_qaoa.utils.gfa_utils import gfa_file_to_graph
 from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
 from qiskit_qaoa.utils.hamiltonian_utils import hamiltonian_to_interactions
-from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, CommutingGateRouter, FindCommutingPauliEvolutionsMulti, DecomposePauliZEvolution
+from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, FindCommutingPauliEvolutionsMulti
+from qiskit_qaoa.utils.commuting_gate_router import CommutingGateRouter
 from qiskit_qaoa.utils.logging import get_logger
 
 
@@ -40,7 +41,7 @@ parser.add_argument('-c', '--copy-numbers', help='delimited list input',
 parser.add_argument('-C', '--coupling-map', choices=['line', 'grid'])
 
 args = parser.parse_args()
-    
+logger.info(args)
 
 def two_qubit_count(qc: QuantumCircuit):
     ops: dict[str, int] = qc.count_ops()
@@ -140,7 +141,7 @@ results: dict[str | int, SparsePauliOp | dict] = {
     'compiled_hamiltonian': hamiltonian
 }
 
-layers = set([int(x) for x in np.linspace(0, len(extended_swap_strat._swap_layers), 10)])
+layers = sorted(list(set([int(x) for x in np.linspace(0, len(extended_swap_strat._swap_layers), 10)])))
 for num_layers in layers:
 # for num_layers in range(0, len(extended_swap_strat._swap_layers), 100):
     logger.info('--------------------------------------------------')
@@ -164,20 +165,16 @@ for num_layers in layers:
 
     pm = PassManager(
         [
-            HighLevelSynthesis(basis_gates=["PauliEvolution"]), # Not needed if set up circuit as PauliEvolutionGate
             FindCommutingPauliEvolutionsMulti(), 
             CommutingGateRouter(
                 extended_swap_strat,
-                edge_colouring,
                 max_layers=num_layers,
-                perform_extra_swaps=bool(args.extra)
+                perform_extra_swaps=args.extra
             ),
             SwapToFinalMapping(),
-            DecomposePauliZEvolution(extended_swap_strat._coupling_map),
-            HighLevelSynthesis(
-                basis_gates=["sx", "x", "rz", "rzz", "cx", "id", "swap"], 
-            ),
-            InverseCancellation(gates_to_cancel=[CXGate(), SwapGate()]),
+            InverseCancellation(gates_to_cancel=[CXGate()]),
+            CommutativeCancellation(basis_gates=["cx", "swap", "rz"]),
+            InverseCancellation(gates_to_cancel=[CXGate()]),
         ]
     )
 
@@ -189,11 +186,19 @@ for num_layers in layers:
     print_circuit_info(new_tcost, 'Remapped, commuting gate routed circuit')
     print(new_tcost.count_ops())
     
-    backend_new_tcost = transpile(new_tcost, optimization_level=3, backend=backend, basis_gates=basis_gates) # 
+    
+    generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend, basis_gates=basis_gates)
+    init  = generic_pm.init
+    init.remove(3)
+    init.draw()
+    generic_pm.init = init
+    generic_pm.layout = None
+    backend_new_tcost = generic_pm.run(new_tcost)
     
     print_circuit_info(backend_new_tcost, 'Remapped, commuting gate routed circuit on backend')
     print(backend_new_tcost.count_ops())
     results[num_layers] = edge_map
+    
     
     
 basepath = '/lustre/scratch127/qpg/jc59/hubo/'

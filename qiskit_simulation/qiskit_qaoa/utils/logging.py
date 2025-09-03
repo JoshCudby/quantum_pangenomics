@@ -3,13 +3,13 @@ import sys
 
 
 class InfoFilter(logging.Filter):
-    def filter(self, rec):
-        return rec.levelno in [logging.INFO]
+    def filter(self, record):
+        return record.levelno in [logging.INFO]
     
 
 class WarnErrorFilter(logging.Filter):
-    def filter(self, rec):
-        return rec.levelno in [logging.WARN, logging.ERROR]
+    def filter(self, record):
+        return record.levelno in [logging.WARN, logging.ERROR]
 
 
 def get_logger(name: str):

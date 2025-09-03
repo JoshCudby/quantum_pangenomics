@@ -5,16 +5,16 @@ from itertools import combinations
 from time import time
 import pickle
 import argparse
-from scipy.optimize import minimize, OptimizeResult
+from scipy.optimize import minimize, OptimizeResult, basinhopping
 
-from qiskit import QuantumCircuit, transpile
+from qiskit import QuantumCircuit, generate_preset_pass_manager
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.circuit.library import PauliEvolutionGate, CXGate, SwapGate
 from qiskit.transpiler import PassManager
 from qiskit.converters import dag_to_circuit, circuit_to_dag
 from qiskit.transpiler.passes import (
-    HighLevelSynthesis, 
-    InverseCancellation
+    InverseCancellation,
+    CommutativeCancellation
 )
 from qiskit.circuit import Parameter
 
@@ -26,7 +26,8 @@ from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
 from qiskit_aer.primitives import SamplerV2 as Sampler
 
 from qiskit_qaoa.utils.qaoa_circuit_utils import get_mixer_operator, state_prep
-from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, CommutingGateRouter, FindCommutingPauliEvolutionsMulti, DecomposePauliZEvolution
+from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, FindCommutingPauliEvolutionsMulti, DecomposePauliZEvolution
+from qiskit_qaoa.utils.commuting_gate_router import CommutingGateRouter
 from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
 from qiskit_qaoa.utils.logging import get_logger
 
@@ -48,8 +49,9 @@ parser.add_argument('-f', '--filename')
 parser.add_argument('-p', '--reps', type=int, default=4)
 parser.add_argument('-d', '--swap-depth', type=int, default=0)
 parser.add_argument('-m', '--memory', type=int, default=16000)
+parser.add_argument('-M', '--method', type=str)
 parser.add_argument('-n', '--shots', type=int, default=1000)
-parser.add_argument('--init', choices=['ramp', 'random'], default='ramp')
+parser.add_argument('--init', choices=['ramp', 'random', 'warm'], default='ramp')
 parser.add_argument('-e', '--extra', type=int, default=1)
 parser.add_argument('--fraction-four', type=float)
 parser.add_argument('--fraction-six', type=float)
@@ -73,9 +75,10 @@ T: int = args.time
 n = int(np.ceil(np.log2(2*N+1)))
 
 seed = 1
-rng = np.random.default_rng(seed=seed)
+rng = np.random.default_rng()
 
-basis_gates=["sx", "x", "rz", "rzz", "cz", "id"]
+basis_gates=["sx", "x", "rz", "rzz", "cz", "id", "swap", "cx", "h"]
+
 
 basepath = '/lustre/scratch127/qpg/jc59/hubo/'
 filename = 'simulation.{}.compilation.{}.extra{}.constraint{}.four{}.six{}'.format(
@@ -106,10 +109,24 @@ else:
 num_physical_qubits = extended_swap_strat._num_vertices
 coupling_map = extended_swap_strat._coupling_map
 
+backend_options = dict(
+    method='statevector',
+    device='GPU',
+    precision='single',
+    basis_gates=basis_gates,
+)
+
+
+config = AerSimulator._DEFAULT_CONFIGURATION
+config["n_qubits"] = num_physical_qubits
+config["basis_gates"] = basis_gates
+config = AerBackendConfiguration.from_dict(config)
+backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map, **backend_options)
+backend.set_option("n_qubits", num_physical_qubits)
+logger.info(f'Num qubits in backend: {backend.configuration().to_dict()["n_qubits"]}')
+sampler = Sampler().from_backend(backend)
+
 remapped_full_hamiltonian = full_hamiltonian.apply_layout([edge_map[i] for i in range(num_qubits)], num_physical_qubits)
-
-
-basis_gates=["sx", "x", "rz", "rzz", "cz", "id"]
 
 
 logger.info(f'Physical qubits: {num_physical_qubits}')
@@ -127,20 +144,16 @@ edge_colouring = nx.greedy_color(dual_coupling_map, interchange=True)
 
 pm = PassManager(
     [
-        HighLevelSynthesis(basis_gates=["PauliEvolution"]), # Not needed if set up circuit as PauliEvolutionGate
         FindCommutingPauliEvolutionsMulti(), 
         CommutingGateRouter(
             extended_swap_strat,
-            edge_colouring,
             max_layers=swap_depth,
-            perform_extra_swaps=bool(args.extra)
+            perform_extra_swaps=args.extra
         ),
         SwapToFinalMapping(),
-        DecomposePauliZEvolution(extended_swap_strat._coupling_map),
-        HighLevelSynthesis(
-            basis_gates=["sx", "x", "rz", "rzz", "cx", "id", "swap"], 
-        ),
-        InverseCancellation(gates_to_cancel=[CXGate(), SwapGate()]),
+        InverseCancellation(gates_to_cancel=[CXGate()]),
+        CommutativeCancellation(basis_gates=["cx", "swap", "rz"]),
+        InverseCancellation(gates_to_cancel=[CXGate()]),
     ]
 )
 
@@ -149,26 +162,8 @@ cost_qc.append(PauliEvolutionGate(compiled_hamiltonian, time=Parameter("c")), [e
 tcost_qc = pm.run(cost_qc, callback=get_permutation)
 
 print_circuit_info(tcost_qc, 'Transpiled cost hamiltonian circuit')
-
 print(tcost_qc.count_ops())
 logger.info(f'Cost hamiltonian circuit has {tcost_qc.num_qubits} qubits')
-
-
-backend_options = dict(
-    method='statevector',
-    device='GPU',
-    precision='single',
-    basis_gates=basis_gates,
-)
-
-
-config = AerSimulator._DEFAULT_CONFIGURATION
-config["n_qubits"] = num_physical_qubits
-config["basis_gates"] = basis_gates
-config = AerBackendConfiguration.from_dict(config)
-backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map, **backend_options)
-logger.info(f'Num qubits in backend: {backend.configuration().to_dict()["n_qubits"]}')
-sampler = Sampler(seed=1).from_backend(backend)
 
 
 # TODO: instead of using construction pass, use p different cost hamiltonians with different mappings
@@ -176,9 +171,12 @@ sampler = Sampler(seed=1).from_backend(backend)
 # Which would allow for a different subset of interactions to be used
 
 if not 2*N+1 == 2**(int(np.log2(2*N+1))):
-    sp = state_prep(N,T)
-    mixer = get_mixer_operator(N,T)
-    logger.info('Using Grover mixer and state prep')
+    # sp = state_prep(N,T)
+    # mixer = get_mixer_operator(N,T)
+    # logger.info('Using Grover mixer and state prep')
+    sp = None
+    mixer = None
+    logger.info('Using X mixer and Hadamard state prep')
 else:
     sp = None
     mixer = None
@@ -190,9 +188,15 @@ construction_pass.property_set = properties
 qaoa_circ = dag_to_circuit(construction_pass.run(circuit_to_dag(tcost_qc)))
 
 # Now transpile to basis gates
-t_qaoa_circ = transpile(qaoa_circ, basis_gates=basis_gates)
+generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend, basis_gates=basis_gates)
+init  = generic_pm.init
+init.remove(3)
+generic_pm.init = init
+generic_pm.layout = None
+t_qaoa_circ = generic_pm.run(qaoa_circ)
 
 print_circuit_info(t_qaoa_circ, 'QAOA circuit')
+logger.info(t_qaoa_circ.count_ops())
 logger.info(f'QAOA circuit has {t_qaoa_circ.num_qubits} qubits')
 
 
@@ -204,8 +208,10 @@ if init_type == 'ramp':
     )
     gammas = betas[::-1]
     init_params = betas.tolist() + gammas.tolist()
+elif init_type == 'warm':
+    init_params = [0.56679859, 0.35556051, 0.4503177,  0.20867354, 0.48058088, 0.42463428, 0.40800271, 0.39104565]
 else:
-    init_params = rng.uniform(0, 0.9 * np.pi, qaoa_depth).tolist() + rng.uniform(0, 0.5 * np.pi, qaoa_depth).tolist()
+    init_params = rng.uniform(0, 1, qaoa_depth).tolist() + rng.uniform(0, 1, qaoa_depth).tolist()
 logger.info(f'Init: {init_params}')
 
 
@@ -248,25 +254,37 @@ def callback(intermediate_result: OptimizeResult):
 def callback_cobyla(xk: np.ndarray):
     logger.info(f'Current params: {xk}.')
     
-    
-method="COBYLA"
-result = minimize(
-    objective, 
-    x0=init_params, 
-    method=method, 
-    bounds=tuple((0,1) for _ in range(2 * p)), 
-    options={"maxiter": 100, "maxfev": 1000, "rhobeg": 0.05},  # , "ftol": 1e-7
-    callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
-)
-logger.info(result)
 
+def callback_basinhopping(x: np.ndarray, f: float, accept: bool):
+    logger.info(f'Current params: {x}. Current func value: {f}')
+    
+logger.info(f'Using method: {args.method}.')
+if args.method == 'basinhopping':
+    result = basinhopping(
+        objective, 
+        x0=init_params, 
+        niter=100,
+        minimizer_kwargs=dict(bounds=tuple((0,1) for _ in range(2 * p)),method="Powell",options={"maxiter":100, "maxfev":1000}),
+        callback=callback_basinhopping,
+        disp=True
+    )
+else:
+    result = minimize(
+        objective, 
+        x0=init_params, 
+        method=args.method, 
+        bounds=tuple((0,1) for _ in range(2 * p)), 
+        options={"maxiter": 100, "maxfev": 10000, "rhobeg": 0.05, "ftol": 1e-7},
+        callback=callback if args.method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
+    )
+    logger.info(result)
 
 obj_to_dump = dict(
-    result=result, history=history, remapped_full_hamiltonian=remapped_full_hamiltonian, t_qaoa_circ=t_qaoa_circ, compiled_hamiltonian=compiled_hamiltonian
+    result=result, history=history, remapped_full_hamiltonian=remapped_full_hamiltonian, t_qaoa_circ=t_qaoa_circ, compiled_hamiltonian=compiled_hamiltonian, edge_map=edge_map
 )
 
-dump_file = basepath + filename.replace('compilation', 'optimisation') + '.cvar{}.p{}.shots{}.init{}.d{}'.format(
-    alpha, p,shots, init_type, swap_depth
+dump_file = basepath + filename.replace('compilation', 'optimisation') + '.method{}.cvar{}.p{}.shots{}.init{}.d{}'.format(
+    args.method, alpha, p,shots, init_type, swap_depth
 ) + '.pkl'
 with open(dump_file, 'wb') as f:
     pickle.dump(obj_to_dump, f)

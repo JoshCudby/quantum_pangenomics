@@ -36,6 +36,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename')
 parser.add_argument('-p', '--reps', type=int, default=4)
 parser.add_argument('-m', '--memory', type=int, default=16000)
+parser.add_argument('-M', '--method', type=str)
 parser.add_argument('-n', '--shots', type=int, default=1000)
 parser.add_argument('--init', choices=['ramp', 'random'], default='ramp')
 parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
@@ -52,7 +53,7 @@ init_type: str = args.init
 
 
 seed = 1
-rng = np.random.default_rng(seed=seed)
+rng = np.random.default_rng()
 
 basis_gates=["sx", "x", "rz", "rzz", "cz", "id"]
 
@@ -66,7 +67,7 @@ backend_options = dict(
 filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{args.filename}.gfa'
 
 graph, n, N, T = gfa_file_to_graph(filepath, args.copy_numbers)
-hamiltonian = graph_to_hubo_hamiltonian(graph, n, N, T, lamda=10)
+hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10)
 
 
 config = AerSimulator._DEFAULT_CONFIGURATION
@@ -97,7 +98,7 @@ if init_type == 'ramp':
     gammas = betas[::-1]
     init_params = betas.tolist() + gammas.tolist()
 else:
-    init_params = rng.uniform(0, 0.9 * np.pi, qaoa_depth).tolist() + rng.uniform(0, 0.5 * np.pi, qaoa_depth).tolist()
+    init_params = rng.uniform(0, 1, qaoa_depth).tolist() + rng.uniform(0, 1, qaoa_depth).tolist()
 logger.info(f'Init: {init_params}')
 
 
@@ -141,14 +142,13 @@ def callback_cobyla(xk: np.ndarray):
     logger.info(f'Current params: {xk}.')
     
     
-method="Powell"
 result = minimize(
     objective, 
     x0=init_params, 
-    method=method, 
+    method=args.method, 
     bounds=tuple((0,1) for _ in range(2 * p)), 
     options={"maxiter": 100, "maxfev": 1000, "rhobeg": 0.01},  # , "ftol": 1e-7
-    callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
+    callback=callback if args.method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
 )
 logger.info(result)
 
@@ -156,5 +156,10 @@ logger.info(result)
 obj_to_dump = dict(
     result=result, history=history, hamiltonian=hamiltonian, t_qaoa_circ=t_qaoa_circ
 )
-with open(f'/lustre/scratch127/qpg/jc59/hubo/simulation.optimisation.default_{filename}.cvar{alpha}.p{p}.shots{shots}.init{init_type}.pkl', 'wb') as f:
+
+basepath = '/lustre/scratch127/qpg/jc59/hubo/'
+dump_file = basepath + filename + 'default.method{}.cvar{}.p{}.shots{}.init{}'.format(
+    args.method, alpha, p,shots, init_type
+) + '.pkl'
+with open(dump_file, 'wb') as f:
     pickle.dump(obj_to_dump, f)

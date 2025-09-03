@@ -4,7 +4,6 @@ import pickle
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
-import math
 from itertools import permutations, product
 from functools import reduce
 
@@ -102,10 +101,6 @@ class ExtendedSwapStrategy(SwapStrategy):
             for col in range(cols)
             for row in range((col+1) % 2, rows - 1, 2)
         )
-        print(swap_layer0)
-        print(swap_layer1)
-        print(swap_layer2)
-        print(swap_layer3)
 
         row_layers = [swap_layer0, swap_layer1]
         col_layers = [swap_layer2, swap_layer3]
@@ -257,7 +252,7 @@ class ExtendedSwapStrategy(SwapStrategy):
         return cls(coupling_map=coupling_map, swap_layers=tuple(swap_layers), type="heavy_hex")
     
     
-    def distance_nodes(self, nodes: tuple) -> int | float:
+    def distance_nodes(self, nodes: tuple) -> int:
         nodes = tuple(sorted(nodes))
         if np.any([nodes[i] == nodes[i+1] for i in range(len(nodes)-1)]):
             return -1
@@ -281,7 +276,7 @@ class ExtendedSwapStrategy(SwapStrategy):
             ):
                 self._distances[nodes] = i
                 return i
-        return math.inf
+        return -1
     
     
     def all_connected_subgraphs(self, layer: int, order: int):
@@ -289,7 +284,7 @@ class ExtendedSwapStrategy(SwapStrategy):
         g = [set(cmap.neighbors(q)) for q in cmap.physical_qubits]
         def _recurse(t: tuple, possible: set[int], excluded: set[int]):
             if len(t) == order:
-                yield t
+                yield tuple(sorted(list(t)))
             else:
                 excluded = set(excluded)
                 for i in possible.difference(excluded):
