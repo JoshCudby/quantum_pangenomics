@@ -6,23 +6,19 @@ from itertools import combinations
 from collections import Counter
 
 from qiskit import QuantumCircuit, transpile, generate_preset_pass_manager
-from qiskit.circuit.library import QAOAAnsatz,  PauliEvolutionGate, CXGate
+from qiskit.circuit.library import QAOAAnsatz,  PauliEvolutionGate
 
 from qiskit_aer import AerSimulator
 from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
 
 from qiskit.quantum_info import SparsePauliOp
 
-from qiskit.transpiler import PassManager
-from qiskit.transpiler.passes import InverseCancellation, CommutativeCancellation
-from qopt_best_practices.transpilation.swap_cancellation_pass import SwapToFinalMapping
-
 from qiskit_qaoa.hubo.graph_to_hubo_hamiltonian import graph_to_hubo_hamiltonian
 from qiskit_qaoa.utils.gfa_utils import gfa_file_to_graph
 from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
 from qiskit_qaoa.utils.hamiltonian_utils import hamiltonian_to_interactions
-from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, FindCommutingPauliEvolutionsMulti
-from qiskit_qaoa.utils.commuting_gate_router import CommutingGateRouter
+from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy
+from qiskit_qaoa.utils.pass_managers import get_hubo_pass_manager
 from qiskit_qaoa.utils.logging import get_logger
 
 
@@ -60,7 +56,7 @@ logger.info(f'Virtual qubits: {num_qubits}')
 
 
 if args.coupling_map == 'line':
-    extended_swap_strat = ExtendedSwapStrategy.from_line(range(num_qubits), num_swap_layers=1000)
+    extended_swap_strat = ExtendedSwapStrategy.from_line(list(range(num_qubits)), num_swap_layers=1000)
 elif args.coupling_map == 'grid':
     extended_swap_strat = ExtendedSwapStrategy.from_grid(n, T)
 else:
@@ -83,7 +79,7 @@ edge_colouring = nx.greedy_color(dual_coupling_map, interchange=True)
 
 logger.info(f'Physical qubits: {num_physical_qubits}')
 
-basis_gates=["sx", "x", "rz", "rzz", "cz", "id"]
+basis_gates=["sx", "x", "rz", "rzz", "cz", "id", "cx"]
 
 backend_options = dict(
     method='statevector',
@@ -163,24 +159,10 @@ for num_layers in layers:
     logger.info(f'Cost: {sat_results[num_layers][0]}')
     logger.info(edge_map)
 
-    pm = PassManager(
-        [
-            FindCommutingPauliEvolutionsMulti(), 
-            CommutingGateRouter(
-                extended_swap_strat,
-                max_layers=num_layers,
-                perform_extra_swaps=args.extra
-            ),
-            SwapToFinalMapping(),
-            InverseCancellation(gates_to_cancel=[CXGate()]),
-            CommutativeCancellation(basis_gates=["cx", "swap", "rz"]),
-            InverseCancellation(gates_to_cancel=[CXGate()]),
-        ]
-    )
+    pm = get_hubo_pass_manager(extended_swap_strat, num_layers, args.extra)
 
-    new_hamiltonian = hamiltonian.apply_layout([edge_map[i] for i in range(num_qubits)], num_physical_qubits)
     new_cost_circ = QuantumCircuit(num_physical_qubits)
-    new_cost_circ.append(PauliEvolutionGate(new_hamiltonian), range(num_physical_qubits))
+    new_cost_circ.append(PauliEvolutionGate(hamiltonian), [edge_map[i] for i in range(num_physical_qubits)])
     new_tcost = pm.run(new_cost_circ)
     
     print_circuit_info(new_tcost, 'Remapped, commuting gate routed circuit')
@@ -190,7 +172,6 @@ for num_layers in layers:
     generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend, basis_gates=basis_gates)
     init  = generic_pm.init
     init.remove(3)
-    init.draw()
     generic_pm.init = init
     generic_pm.layout = None
     backend_new_tcost = generic_pm.run(new_tcost)

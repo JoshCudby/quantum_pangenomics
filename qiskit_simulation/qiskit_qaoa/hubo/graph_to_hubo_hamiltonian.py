@@ -7,15 +7,18 @@ from qiskit_qaoa.utils.string_utils import bin_rep
 
 rng = np.random.default_rng(seed=1)
 
-# TODO: could map all binary values corresponding to >= V to the "end" node, eliminating the need for Grover mixers
-# at the cost of increasing the number of interactions
-
 def graph_to_hubo_hamiltonian(
-        graph: nx.Graph, n: int, T: int, lamda: float, fraction_terms: float=1.0
+        graph: nx.Graph, n: int, T: int, lamda: float, fraction_terms: float | tuple[float, float]=1.0
 ) -> SparsePauliOp:
     nodes = list(graph.nodes)
     V = len(nodes)
-    terms_to_keep = rng.choice(T-1, int(np.ceil((T-1) * fraction_terms)), replace=False)
+    if isinstance(fraction_terms, tuple):
+        terms_to_keep = np.arange(np.floor((T-1)*fraction_terms[0]), np.floor((T-1)*fraction_terms[1]))
+    elif isinstance(fraction_terms, float):
+        terms_to_keep = rng.choice(T-1, int(np.ceil((T-1) * fraction_terms)), replace=False)
+    else:
+        raise Exception(f'Expected float or 2-tuple of floats for fraction_terms, got {fraction_terms}')
+        
     cons_spo = reduce(
         SparsePauliOp._add,
         [
@@ -98,4 +101,5 @@ def graph_to_hubo_hamiltonian(
 
     hamiltonian = lamda * cons_spo + obj_spo
     hamiltonian = hamiltonian.simplify()
+    hamiltonian = hamiltonian.sort()
     return hamiltonian

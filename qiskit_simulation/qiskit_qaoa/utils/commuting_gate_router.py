@@ -1,23 +1,19 @@
 from __future__ import annotations
 
 import numpy as np
-from typing import Tuple
-from collections.abc import Iterable
 from functools import reduce
 
 from qiskit import QuantumCircuit
 
-from qiskit.circuit import Gate, Qubit, Clbit
-from qiskit.circuit.library import PauliEvolutionGate, CXGate, RZZGate
+from qiskit.circuit import Gate, Qubit
+from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.dagcircuit import DAGCircuit, DAGOpNode
 
 from qiskit.transpiler import TransformationPass, generate_preset_pass_manager
-from qiskit.transpiler.coupling import CouplingMap
 from qiskit.transpiler.exceptions import TranspilerError
 from qiskit.transpiler.layout import Layout
 from collections import defaultdict
 
-from qiskit.quantum_info import SparsePauliOp, Pauli
 from qiskit.converters import dag_to_circuit, circuit_to_dag
 
 from qiskit_qaoa.utils.transpiler_passes import CommutingBlock
@@ -163,11 +159,6 @@ class CommutingGateRouter(TransformationPass):
 
         
         cm = swap_strategy._coupling_map
-        layout_cm = CouplingMap(
-            [(order[edge[0]], order[edge[1]]) for edge in list(cm)]
-        )
-        print(order)
-        print(order_bits)
         pm = generate_preset_pass_manager(
             optimization_level=3, 
             coupling_map=cm, 
@@ -261,24 +252,38 @@ class CommutingGateRouter(TransformationPass):
         return self._swap_strategy.distance_nodes(tuple(nodes)) == 0
     
     
+    def _missing_info_is_connected(
+        self,
+        missing_info: set[int],
+        rotation_site: int,
+        currently_stored_info: dict[int, set[int]]
+    ):
+        nodes = reduce(
+            set.symmetric_difference,
+            [currently_stored_info[q] for q in missing_info],
+            set()
+        )
+        nodes.add(rotation_site)
+        if self._is_connected(nodes) and any([self._is_connected(set([missing, rotation_site])) for missing in missing_info]):
+            return True
+    
+    
     def _suitable_superset(
         self,
         next_site: tuple[int,...],
         rotation_site: int | None,
-        possible_sites: list[tuple[int,...]]
+        possible_sites: list[tuple[int,...]],
+        currently_stored_info: dict[int, set[int]]
     ) -> tuple[tuple[int,...] | None, int | None]:
         for site in possible_sites:
             if set(site).issuperset(set(next_site)):
+                missing_info = set(site).difference(set(next_site))
                 if rotation_site is not None:
-                    nodes = set(site).difference(set(next_site))
-                    nodes.add(rotation_site)
-                    if self._is_connected(nodes):
+                    if self._missing_info_is_connected(missing_info, rotation_site, currently_stored_info):
                         return site, rotation_site
                 else:
                     for x in next_site:
-                        nodes = set(site).difference(set(next_site))
-                        nodes.add(x)
-                        if self._is_connected(nodes):
+                        if self._missing_info_is_connected(missing_info, x, currently_stored_info):
                             return site, x
         return None, None
     
@@ -287,15 +292,14 @@ class CommutingGateRouter(TransformationPass):
         self,
         next_site: tuple[int,...],
         rotation_site: int,
-        possible_sites: list[tuple[int,...]]
+        possible_sites: list[tuple[int,...]],
+        currently_stored_info: dict[int, set[int]]
     ) -> tuple[tuple[int,...] | None, int | None]:
         for site in possible_sites[::-1]:
             if rotation_site in site and set(site).issubset(set(next_site)):
-                nodes = set(next_site).difference(set(site))
-                nodes.add(rotation_site)
-                if self._is_connected(nodes):
+                missing_info = set(site).difference(set(next_site))
+                if self._missing_info_is_connected(missing_info, rotation_site, currently_stored_info):
                     return site, rotation_site
-
         return None, None
     
    
@@ -305,7 +309,7 @@ class CommutingGateRouter(TransformationPass):
         rotation_site: int,
         gate: Gate,
         circuit: QuantumCircuit,
-        currently_stored_info_2: dict[int, set[int]]
+        currently_stored_info: dict[int, set[int]]
     ) -> tuple[QuantumCircuit, list[tuple[int, int]]]:
         """
         site: the set of qubits whose info should be stored in rotation_site 
@@ -316,37 +320,66 @@ class CommutingGateRouter(TransformationPass):
             raise Exception(f'Rotation site: {rotation_site} not in site: {site}')
         if not isinstance(gate, PauliEvolutionGate):
             raise Exception(f'Expected PauliEvolutionGate, got {gate}')
-        print(f'Computing site: {site} onto {rotation_site} with coeff: {2 * np.real_if_close(gate.params)[0]}')
         
-        missing_information = currently_stored_info_2[rotation_site].symmetric_difference(set(site))
+        missing_information = currently_stored_info[rotation_site].symmetric_difference(set(site))
+        initial_missing_information = currently_stored_info[rotation_site].symmetric_difference(set(site))
         cx_gates = []
         iter = 0
+        
+        # print(f'Computing site: {site} onto {rotation_site} with coeff: {2 * np.real_if_close(gate.params)[0]}. Missing info: {missing_information}')
         while len(missing_information) > 0 and iter <= 10:
             new_cx_gates = []
             candidates = [q for q in missing_information if self._is_connected(set([q, rotation_site]))]
             if len(candidates) == 0:
+                print()
+                print()
+                print('No candidates')
+                print(f'Site: {site}, rotation_site: {rotation_site}')
+                print(f'Missing info: {missing_information}')
+                print(f'initial_missing_information: {initial_missing_information}')
+                print(f'Stored info: {currently_stored_info}')
+                print(f'Applied CX gates: {cx_gates}')
                 raise Exception('No candidates to apply CX from')
             candidate = candidates[0]
             new_cx_gates.append((candidate, rotation_site))
-            stack = [([candidate], q) for q in missing_information.symmetric_difference(currently_stored_info_2[candidate]) if self._is_connected(set([q, candidate]))]
-            while len(stack):
-                path, qubit = stack.pop()
-                new_cx_gates.append((qubit, path[-1]))
+            stack = [(candidate, q) for q in missing_information.symmetric_difference(currently_stored_info[candidate]) if self._is_connected(set([q, candidate]))]
+            iiter = 0
+            # seen_qubits = set()
+            while len(stack):                   
+                previous, qubit = stack.pop()
                 qubit_neighbours = set(np.nonzero(self._swap_strategy.distance_matrix[qubit, :] == 0)[0])
                 info_missing_from_path = reduce(
                     set.symmetric_difference,
-                    [currently_stored_info_2[x] for x in path],
+                    [currently_stored_info[cx[0]] for cx in new_cx_gates],
                     missing_information
                 )
-                new_stack_entries = qubit_neighbours.intersection(info_missing_from_path).difference(set([cx[0] for cx in new_cx_gates]))
-                stack.extend([
-                    (path + [qubit], q)
-                for q in new_stack_entries])
+                
+                if qubit in info_missing_from_path:
+                    new_cx_gates.append((qubit, previous))
+                    # seen_qubits = seen_qubits.symmetric_difference(currently_stored_info[qubit])
+                    new_stack_entries = qubit_neighbours.intersection(info_missing_from_path.symmetric_difference(currently_stored_info[qubit])) # .difference(seen_qubits)
+                    stack.extend([(qubit, q) for q in new_stack_entries])
+                    # seen_qubits = seen_qubits.union(new_stack_entries)
+                # else:
+                #     print(f'Skipping qubit: {qubit}')
+                                   
+                    
+                if iiter == 10:
+                    print()
+                    print()
+                    print(f'Site: {site}, rotation_site: {rotation_site}')
+                    print(f'Missing info: {missing_information}')
+                    print(f'Stored info: {currently_stored_info}')
+                    print(f'Info missing from path: {info_missing_from_path}')
+                    print(f'Stack: {stack}')
+                    raise Exception('Could not clear stack.')
             fixed_qubits = reduce(
                 set.union,
-                [currently_stored_info_2[cx[0]] for cx in new_cx_gates],
+                [currently_stored_info[cx[0]] for cx in new_cx_gates],
                 set()
             )
+                            
+                
             missing_information = missing_information.difference(fixed_qubits)
             cx_gates.extend(new_cx_gates[::-1])
             iter += 1
@@ -355,54 +388,14 @@ class CommutingGateRouter(TransformationPass):
         if len(missing_information) > 0:
             print(site)
             print(missing_information)
-            print(currently_stored_info_2)
+            print(currently_stored_info)
             raise Exception('Failed to implement gate')
+        
+        
         for cx in cx_gates:
             circuit.cx(cx[0], cx[1])
-            currently_stored_info_2[cx[1]] = currently_stored_info_2[cx[1]].symmetric_difference(currently_stored_info_2[cx[0]])
+            currently_stored_info[cx[1]] = currently_stored_info[cx[1]].symmetric_difference(currently_stored_info[cx[0]])
         
-        
-        # site_copy = list(site).copy()
-        # cx_gates = []
-        # while len(site_copy) > 1:
-        #     applied = False
-        #     for qubit in site_copy:
-        #         if qubit == rotation_site:
-        #             continue
-        #         neighbours = [self._swap_strategy._coupling_map.distance(qubit, qubit2) == 1 for qubit2 in site_copy]
-        #         num_neighbours = sum(neighbours)
-        #         if num_neighbours == 0:
-        #             print(gate.label)
-        #             print(f'Initial qubits: {site}')
-        #             print(f'Current qubits: {site_copy}')
-        #             print(f'Qubit: {qubit}')
-        #             print(f'Rotation site: {rotation_site}')
-        #             print(f'Neighbours: { [[self._swap_strategy._coupling_map.distance(qubit1, qubit2) == 1 for qubit2 in site] for qubit1 in site]}')
-        #             raise Exception('Disconnected qubit in decomposition')
-        #         if num_neighbours == 1:
-        #             neighbour = site_copy[neighbours.index(True)]
-        #             circuit.cx(qubit, neighbour)
-        #             cx_gates.append((qubit, neighbour))
-        #             currently_stored_info_2[neighbour] = currently_stored_info_2[neighbour].symmetric_difference(currently_stored_info_2[qubit])
-        #             site_copy.remove(qubit)
-        #             applied = True
-        #             break
-        #     if not applied:
-        #         qubit = None
-        #         for q in site_copy:
-        #             if q is not rotation_site and tuple(sorted(list(set(site_copy).difference(set([q]))))) in self._swap_strategy.all_connected_subgraphs(0, len(site_copy) - 1):
-        #                 qubit = q
-        #                 break
-        #         if qubit is None:
-        #             raise Exception(f'Could not find qubit to break loops. Site: {site}. Current: {site_copy}. Rotation site: {rotation_site}.')
-        #         neighbours = [self._swap_strategy._coupling_map.distance(qubit, qubit2) == 1 for qubit2 in site_copy]
-        #         neighbour = site_copy[neighbours.index(True)]
-        #         # logger.warning(f'No single neighbour qubit found. Apply a random cx to break loops. Chosen: {qubit, neighbour}')
-        #         circuit.cx(qubit, neighbour)
-        #         cx_gates.append((qubit, neighbour))
-        #         currently_stored_info_2[neighbour] = currently_stored_info_2[neighbour].symmetric_difference(currently_stored_info_2[qubit])
-        #         site_copy.remove(qubit)
-
         coeff = 2 * np.real_if_close(gate.params)[0]
         circuit.rz(coeff, rotation_site)
         return circuit, cx_gates
@@ -416,7 +409,7 @@ class CommutingGateRouter(TransformationPass):
         # print(current_layer.keys())
         gate = current_layer.pop(tuple(), None)
         if gate is not None:
-            print(f'Applying phase: {gate}')
+            # print(f'Applying phase: {gate}')
             circuit.global_phase = circuit.global_phase - 0.5 * np.real_if_close(gate.params)[0]
             # print(f'Skipping phase: {gate}')
             # pass
@@ -429,7 +422,7 @@ class CommutingGateRouter(TransformationPass):
             
         current_sub_layer_index = 0
         blocked_vertices: set[int] = set()
-        currently_stored_info_2 = {x: set([x]) for x in range(circuit.num_qubits)}
+        currently_stored_info = {x: set([x]) for x in range(circuit.num_qubits)}
         all_vertices_in_chain: set[int] = set()
         next_site: tuple[int,...] | None = None
         next_gate = None
@@ -447,9 +440,10 @@ class CommutingGateRouter(TransformationPass):
             if rotation_site is None:
                 if next_gate is None:
                     raise Exception('Expected to have a gate.')
-                chain_next_site, rotation_site = self._suitable_superset(next_site, rotation_site, possible_sites)
+                chain_next_site, rotation_site = self._suitable_superset(next_site, rotation_site, possible_sites, currently_stored_info)
                 if chain_next_site is not None and rotation_site is not None:
-                    circuit, applied_cx_gates = self._compute_site(next_site, rotation_site, next_gate, circuit, currently_stored_info_2)
+                    circuit, applied_cx_gates = self._compute_site(next_site, rotation_site, next_gate, circuit, currently_stored_info)
+                    # print(f'Computed site: {next_site}, rotation: {rotation_site}, cx: {applied_cx_gates}, Stored: {currently_stored_info}')
                     cx_gates.extend(applied_cx_gates)
                     
                     possible_sites.remove(chain_next_site)
@@ -458,25 +452,27 @@ class CommutingGateRouter(TransformationPass):
                     next_gate = current_layer.pop(next_site)
                     
                 else:
-                    circuit, applied_cx_gates = self._compute_site(next_site, next_site[0], next_gate, circuit, currently_stored_info_2)
+                    circuit, applied_cx_gates = self._compute_site(next_site, next_site[0], next_gate, circuit, currently_stored_info)
                     blocked_vertices = blocked_vertices.union(all_vertices_in_chain)
                     for cx in applied_cx_gates[::-1]:
                         circuit.cx(cx[0], cx[1])
                     rotation_site = None
                     next_site = None
-                    circuit.barrier(label=str(all_vertices_in_chain))
+                    # circuit.barrier(label=str(all_vertices_in_chain))
                     all_vertices_in_chain = set()
+                    currently_stored_info = {x: set([x]) for x in range(circuit.num_qubits)}
                     
             else:
                 if next_gate is None:
                     raise Exception('Expected to have a gate.')
                 
-                circuit, applied_cx_gates = self._compute_site(next_site, rotation_site, next_gate, circuit, currently_stored_info_2)
+                circuit, applied_cx_gates = self._compute_site(next_site, rotation_site, next_gate, circuit, currently_stored_info)
+                # print(f'Computed site: {next_site}, rotation: {rotation_site}, cx: {applied_cx_gates}, Stored: {currently_stored_info}')
                 blocked_vertices = blocked_vertices.union(set(next_site))
                 cx_gates.extend(applied_cx_gates)
                 
                 
-                chain_next_site, _ = self._suitable_superset(next_site, rotation_site, possible_sites)
+                chain_next_site, _ = self._suitable_superset(next_site, rotation_site, possible_sites, currently_stored_info)
                 if chain_next_site is not None:
                     possible_sites.remove(chain_next_site)
                     next_site = chain_next_site
@@ -484,7 +480,7 @@ class CommutingGateRouter(TransformationPass):
                     next_gate = current_layer.pop(next_site)
                     continue
                 
-                chain_next_site, _ = self._suitable_subset(next_site, rotation_site, possible_sites)
+                chain_next_site, _ = self._suitable_subset(next_site, rotation_site, possible_sites, currently_stored_info)
                 if chain_next_site is not None:
                     possible_sites.remove(chain_next_site)
                     next_site = chain_next_site
@@ -495,11 +491,11 @@ class CommutingGateRouter(TransformationPass):
                 for cx in cx_gates[::-1]:
                     circuit.cx(cx[0], cx[1])
                 cx_gates = []
-                currently_stored_info_2 = {x: set([x]) for x in range(circuit.num_qubits)}
+                currently_stored_info = {x: set([x]) for x in range(circuit.num_qubits)}
                 rotation_site = None
                 next_site = None
                 next_gate = None
-                circuit.barrier(label=str(all_vertices_in_chain))
+                # circuit.barrier(label=str(all_vertices_in_chain))
                 all_vertices_in_chain = set()
             
             possible_sites = [site for site in possible_sites if set(site).isdisjoint(blocked_vertices)]
@@ -510,10 +506,14 @@ class CommutingGateRouter(TransformationPass):
                 current_sub_layer_index += 1
         
         if next_site is not None and rotation_site is not None and next_gate is not None:
-            circuit, applied_cx_gates = self._compute_site(next_site, rotation_site, next_gate, circuit,currently_stored_info_2)
+            circuit, applied_cx_gates = self._compute_site(next_site, rotation_site, next_gate, circuit,currently_stored_info)
+            # print(f'Computed site: {next_site}, rotation: {rotation_site}, cx: {applied_cx_gates}, Stored: {currently_stored_info}')
             cx_gates.extend(applied_cx_gates)
+             
             for cx in cx_gates[::-1]:
                 circuit.cx(cx[0], cx[1])
+            # circuit.barrier(label=str(all_vertices_in_chain))
+        
         # print(f'Number of sub layers: {current_sub_layer_index}')
         return
     
@@ -652,7 +652,7 @@ class CommutingGateRouter(TransformationPass):
                     current_layout.swap(j, k)
 
         self.property_set["final_layout"] = current_layout
-        circuit_with_swap.barrier()
+        # circuit_with_swap.barrier()
         return circuit_to_dag(circuit_with_swap)
 
 
@@ -670,7 +670,6 @@ class CommutingGateRouter(TransformationPass):
             bits = tuple([v_bits[dag.qubits[edge[i]]] for i in range(len(edge))])
 
             distance = swap_strategy.distance_nodes(bits)
-            
             if -1 < distance <= self._max_layers:
                 gate_layers[distance][edge] = node.op
 
@@ -692,7 +691,7 @@ class CommutingGateRouter(TransformationPass):
         for sub_node in node.op:
             bits = tuple([dag.find_bit(sub_node.qargs[i]).index for i in range(len(sub_node.qargs))])
             distance = swap_strategy.distance_nodes(bits)
-            if distance > self._max_layers:
+            if distance < 0 or distance > self._max_layers:
                 cannot_implement.append(sub_node)
                 # raise TranspilerError(
                 #     f"{swap_strategy} cannot implement operator on {bits}."

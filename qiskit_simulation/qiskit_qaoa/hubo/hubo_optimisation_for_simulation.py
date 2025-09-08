@@ -9,25 +9,20 @@ from scipy.optimize import minimize, OptimizeResult, basinhopping
 
 from qiskit import QuantumCircuit, generate_preset_pass_manager
 from qiskit.quantum_info import SparsePauliOp
-from qiskit.circuit.library import PauliEvolutionGate, CXGate, SwapGate
-from qiskit.transpiler import PassManager
+from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.converters import dag_to_circuit, circuit_to_dag
-from qiskit.transpiler.passes import (
-    InverseCancellation,
-    CommutativeCancellation
-)
+
 from qiskit.circuit import Parameter
 
 from qopt_best_practices.transpilation.qaoa_construction_pass import QAOAConstructionPass
-from qopt_best_practices.transpilation.swap_cancellation_pass import SwapToFinalMapping
 
 from qiskit_aer import AerSimulator
 from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
 from qiskit_aer.primitives import SamplerV2 as Sampler
 
-from qiskit_qaoa.utils.qaoa_circuit_utils import get_mixer_operator, state_prep
-from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, FindCommutingPauliEvolutionsMulti, DecomposePauliZEvolution
-from qiskit_qaoa.utils.commuting_gate_router import CommutingGateRouter
+# from qiskit_qaoa.utils.qaoa_circuit_utils import get_mixer_operator, state_prep
+from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy
+from qiskit_qaoa.utils.pass_managers import get_hubo_pass_manager
 from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
 from qiskit_qaoa.utils.logging import get_logger
 
@@ -142,20 +137,7 @@ for qubit in physical_qubits:
 edge_colouring = nx.greedy_color(dual_coupling_map, interchange=True)
 
 
-pm = PassManager(
-    [
-        FindCommutingPauliEvolutionsMulti(), 
-        CommutingGateRouter(
-            extended_swap_strat,
-            max_layers=swap_depth,
-            perform_extra_swaps=args.extra
-        ),
-        SwapToFinalMapping(),
-        InverseCancellation(gates_to_cancel=[CXGate()]),
-        CommutativeCancellation(basis_gates=["cx", "swap", "rz"]),
-        InverseCancellation(gates_to_cancel=[CXGate()]),
-    ]
-)
+pm = get_hubo_pass_manager(extended_swap_strat, swap_depth, args.extra)
 
 cost_qc = QuantumCircuit(num_physical_qubits)
 cost_qc.append(PauliEvolutionGate(compiled_hamiltonian, time=Parameter("c")), [edge_map[i] for i in range(len(edge_map))])
