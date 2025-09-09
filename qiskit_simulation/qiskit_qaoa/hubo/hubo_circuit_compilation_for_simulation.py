@@ -93,7 +93,7 @@ config = AerSimulator._DEFAULT_CONFIGURATION
 config["n_qubits"] = num_physical_qubits
 config["basis_gates"] = basis_gates
 config = AerBackendConfiguration.from_dict(config)
-backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map)
+backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map, **backend_options)
 logger.info(backend.configuration().to_dict()["n_qubits"])
 
 full_hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, fraction_terms=1.0)

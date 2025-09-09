@@ -15,7 +15,6 @@ logger = get_logger(__name__)
 parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename')
 parser.add_argument('-p', '--reps', type=int, default=4)
-parser.add_argument('-d', '--swap-depth', type=int, default=0)
 parser.add_argument('-m', '--memory', type=int, default=16000)
 parser.add_argument('-M', '--method', type=str)
 parser.add_argument('-n', '--shots', type=int, default=1000)
@@ -23,7 +22,6 @@ parser.add_argument('--init', choices=['ramp', 'random', 'warm'], default='ramp'
 parser.add_argument('-e', '--extra', type=int, default=1)
 parser.add_argument('--fraction-four', type=float)
 parser.add_argument('--fraction-six', type=float)
-parser.add_argument('--fraction-constraint', type=float)
 parser.add_argument('-a', '--alpha', type=float)
 parser.add_argument('-C', '--coupling-map', choices=['line', 'grid'])
 
@@ -34,11 +32,10 @@ logger.info(args)
 basepath='/lustre/scratch127/qpg/jc59/hubo/'
 
 
-filename='simulation.{}.optimisation.{}.extra{}.constraint{}.four{}.six{}.method{}.cvar{}.p{}.shots{}.init{}.d{}'.format(
+filename='simulation.{}.per_layer.{}.extra{}.four{}.six{}.method{}.cvar{}.p{}.shots{}.init{}'.format(
     args.coupling_map,
     args.filename,
     args.extra,
-    args.fraction_constraint,
     args.fraction_four,
     args.fraction_six,
     args.method,
@@ -46,18 +43,14 @@ filename='simulation.{}.optimisation.{}.extra{}.constraint{}.four{}.six{}.method
     args.reps,
     args.shots,
     args.init,
-    args.swap_depth
 )
-
 
 filepath = basepath + filename + '.pkl'
 with open(filepath, 'rb') as f:
     data = pickle.load(f)
     
 history = data["history"]
-remapped_full_hamiltonian: SparsePauliOp = data["remapped_full_hamiltonian"]
-compiled_hamiltonian: SparsePauliOp = data['compiled_hamiltonian']
-edge_map = data["edge_map"]
+full_hamiltonian: SparsePauliOp = data["full_hamiltonian"]
 
 fig, axs = plt.subplots(1, 1, figsize=(8,5))
 axs.plot([hist[1] for hist in history])
@@ -71,11 +64,11 @@ fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/
 min_val = 0
 # max_val = 100 (T-1)*lambda_G + T^2 + sum(weight**2)
 
-n: int = remapped_full_hamiltonian.num_qubits
+n: int = full_hamiltonian.num_qubits
 
 start = time()
 counts = history[-1][3]
-evals = evaluate_sparse_pauli_samples(list(counts.keys()), remapped_full_hamiltonian)
+evals = evaluate_sparse_pauli_samples(list(counts.keys()), full_hamiltonian)
 energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
 sample_vals = [x for xs in energies for x in xs]
 elapsed = time() - start
@@ -93,7 +86,7 @@ def cvar(energies, alpha=1.0):
 print(cvar(sample_vals, 0.25))
 
 random_samples = np.random.choice(('0', '1'), (sum(history[-1][3].values()), n))
-rand_vals = evaluate_sparse_pauli_samples([''.join(sample) for sample in random_samples], remapped_full_hamiltonian)
+rand_vals = evaluate_sparse_pauli_samples([''.join(sample) for sample in random_samples], full_hamiltonian)
 
 
 # alpha_qaoa = (min(sample_vals) - max_val) / (min_val - max_val)

@@ -83,7 +83,7 @@ class HigherOrderSatMapper(SATMapper):
         program_interactions: list[tuple], 
         swap_strategy: ExtendedSwapStrategy, 
         num_layers: int
-    ) -> dict[int, tuple] | None:
+    ) -> dict[int, tuple[int, list]] | None:
         num_nodes_g2: int = swap_strategy.distance_matrix.shape[0]
         variable_pool = IDPool(start_from=1)
         variables = np.array(
@@ -136,7 +136,7 @@ class HigherOrderSatMapper(SATMapper):
                     #         sol[np.abs(x) - 1] if np.sign(x) == 1 else 1 - sol[np.abs(x) - 1] for x in clause
                     #     ]):
                     #         logger.info(clause)
-                    return {num_layers: (cost, [vid2mapping[idx+1] for idx in range(len(sol)) if sol[idx] > 0])}
+                    return {num_layers: (int(cost), [vid2mapping[idx+1] for idx in range(len(sol)) if sol[idx] > 0])}
                 
         except Exception as e:
             logger.error('Could not parse SAT data')
