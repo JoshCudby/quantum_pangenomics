@@ -162,7 +162,7 @@ class CommutingGateRouter(TransformationPass):
         pm = generate_preset_pass_manager(
             optimization_level=3, 
             coupling_map=cm, 
-            basis_gates=['rz', 'rzz', 'cx', 'id', 'swap', 'u'],
+            basis_gates=['rz', 'cx', 'id', 'swap', 'u'],
             initial_layout=layout
         )
         init = pm.init

@@ -77,26 +77,12 @@ counter = Counter(sample_vals)
 print(counter.most_common(10))
     
 
-# (n = 4, T = 5. 16**5 paths. 2 optimal. 1/ 2**19 ~ 2e-06 )
-
-def cvar(energies, alpha=1.0):
-    sorted_energies = sorted(energies)
-    end_idx = int(alpha * len(energies))
-    return np.sum(sorted_energies[0:end_idx]) / end_idx
-print(cvar(sample_vals, 0.25))
-
 random_samples = np.random.choice(('0', '1'), (sum(history[-1][3].values()), n))
 rand_vals = evaluate_sparse_pauli_samples([''.join(sample) for sample in random_samples], full_hamiltonian)
 
-
-# alpha_qaoa = (min(sample_vals) - max_val) / (min_val - max_val)
-# alpha_rand = (min(rand_vals) - max_val) / (min_val - max_val)
-
 fig, axs = plt.subplots(1,1,figsize=(8, 5))
-axs.hist(sample_vals, bins=np.arange(0, np.max(list(counter.keys()))+2)-0.5, label='QAOA samples at last iter', density=True) # , approx. ratio {alpha_qaoa*100:.2f}%
-axs.hist(rand_vals, bins=np.arange(0, np.max(list(counter.keys()))+2)-0.5, label='Random samples', density=True, alpha=0.5) # , approx. ratio {alpha_rand*100:.2f}%
-# axs.hist(sample_vals_2, bins=100, label=f'Old ham sample', density=True)
-# axs.hist(rand_vals_2, bins=100, label=f'Old ham rand', density=True, alpha=0.5)
+axs.hist(sample_vals, bins=np.arange(0, np.max(list(counter.keys()))+2)-0.5, label='QAOA samples at last iter', density=True) 
+axs.hist(rand_vals, bins=np.arange(0, np.max(list(counter.keys()))+2)-0.5, label='Random samples', density=True, alpha=0.5) 
 ylims = axs.get_ylim()
 axs.vlines(min_val, ylims[0], ylims[1], ls='--', color='k', label='Optimal solution')
 axs.vlines(min(sample_vals), ylims[0], ylims[1], ls=':', color='C0', label='Best QAOA sample')
@@ -112,3 +98,37 @@ axs.xaxis.set_minor_locator(MultipleLocator(1))
 
 fig.tight_layout()
 fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/hubo/{filename}.histogram.png')
+
+
+start = time()
+counts = history[0][3]
+evals = evaluate_sparse_pauli_samples(list(counts.keys()), full_hamiltonian)
+energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
+sample_vals = [x for xs in energies for x in xs]
+elapsed = time() - start
+logger.info(f'Time to compute energies {elapsed}')
+counter = Counter(sample_vals)
+print(counter.most_common(10))
+    
+
+random_samples = np.random.choice(('0', '1'), (sum(history[-1][3].values()), n))
+rand_vals = evaluate_sparse_pauli_samples([''.join(sample) for sample in random_samples], full_hamiltonian)
+
+fig, axs = plt.subplots(1,1,figsize=(8, 5))
+axs.hist(sample_vals, bins=np.arange(0, np.max(list(counter.keys()))+2)-0.5, label='QAOA samples at last iter', density=True) 
+axs.hist(rand_vals, bins=np.arange(0, np.max(list(counter.keys()))+2)-0.5, label='Random samples', density=True, alpha=0.5) 
+ylims = axs.get_ylim()
+axs.vlines(min_val, ylims[0], ylims[1], ls='--', color='k', label='Optimal solution')
+axs.vlines(min(sample_vals), ylims[0], ylims[1], ls=':', color='C0', label='Best QAOA sample')
+axs.vlines(min(rand_vals), ylims[0], ylims[1], ls='-.', color='C1', label='Best random sample')
+
+logger.info(f"QAOA gap: {min(sample_vals) - min_val}")
+logger.info(f"Random gap: {min(rand_vals) - min_val}")
+
+axs.legend()
+axs.set_xlabel("Quadratic program objective value")
+axs.set_ylabel("Sample density")
+axs.xaxis.set_minor_locator(MultipleLocator(1))
+
+fig.tight_layout()
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/hubo/{filename}.pre_qaoa.histogram.png')

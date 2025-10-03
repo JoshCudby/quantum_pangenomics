@@ -12,6 +12,8 @@ from qiskit import QuantumCircuit, generate_preset_pass_manager
 from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.circuit import Parameter, ParameterVector
 from qiskit.transpiler import Layout
+from qiskit.transpiler.passes import LayoutTransformation
+from qiskit.converters import dag_to_circuit, circuit_to_dag
 
 from qiskit_aer import AerSimulator
 from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
@@ -106,72 +108,95 @@ config["n_qubits"] = num_physical_qubits
 config["basis_gates"] = basis_gates
 config = AerBackendConfiguration.from_dict(config)
 backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map, **backend_options)
+backend.set_option("n_qubits", num_physical_qubits)
 sampler = Sampler().from_backend(backend)
 logger.info(backend.configuration().to_dict()["n_qubits"])
 
-full_hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, fraction_terms=1.0)
+# full_hamiltonian = args.reps * graph_to_hubo_hamiltonian(graph, n, T, lamda=10/args.reps, constraint_terms=1.0)
+full_hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=1.0)
+terms_to_keep = [tuple(x) for x in np.array_split(np.arange(T-1), p)]
 
-hamiltonians, swap_depths, edge_maps, compiled_circuits = {}, {}, {}, {}
-for layer in range(args.reps):
-    logger.info(f'Getting hamiltonian for layer {layer}')
-    hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, fraction_terms=(layer/args.reps, (layer+1)/args.reps))
-    hamiltonians[layer] = hamiltonian
-    
-    all_pauli_z = np.array(
-        [i.paulis[0].z for i in hamiltonian]
-    )
-    logger.info(f'Hamiltonian: {len(hamiltonian)}')
-    logger.info(f'Orders: {Counter(np.sum(all_pauli_z, axis=1))}')
-    
-    program_interactions = hamiltonian_to_interactions(hamiltonian, args.fraction_four, args.fraction_six)
-    lengths = Counter([len(interaction) for interaction in program_interactions])
 
-    logger.info(f'Program interactions: {len(program_interactions)}')
-    logger.info(f'Orders: {Counter([len(interaction) for interaction in program_interactions])}')
-    
-    mapper = HigherOrderSatMapper(timeout=args.timeout)
-
-    best_circuit_depth, best_swap_depth, best_edge_map, best_circuit = np.inf, 0, {x: x for x in range(num_physical_qubits)}, QuantumCircuit(num_physical_qubits)
-    depths = sorted(list(set([int(x) for x in np.linspace(0, len(extended_swap_strat._swap_layers), 10)])))
-    for depth in depths:
-        logger.info('--------------------------------------------------')
-        sat_results = mapper.hubo_max_sat(
-            num_qubits, program_interactions, extended_swap_strat, depth
+try:
+    with open(f'/lustre/scratch127/qpg/jc59/hubo/per_layer_results.{args.filename}.reps{args.reps}.pkl', 'rb') as f:
+        data = pickle.load(f) 
+        
+    hamiltonians = data["hamiltonians"]
+    swap_depths = data["swap_depths"]
+    layouts = data["layouts"]
+    compiled_circuits = data["compiled_circuits"]
+except FileNotFoundError:
+    hamiltonians, swap_depths, layouts, compiled_circuits = {}, {}, {}, {}
+    for layer in range(args.reps):
+        logger.info(f'Getting hamiltonian for layer {layer}')
+        hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=terms_to_keep[layer])
+        hamiltonians[layer] = hamiltonian
+        
+        all_pauli_z = np.array(
+            [i.paulis[0].z for i in hamiltonian]
         )
-        if sat_results is None:
-            logger.info('No results')
-            continue
-        mapping = sat_results[depth][1]
-        edge_map = dict(mapping)
-
-        logger.info(f'Cost: {sat_results[depth][0]}')
-        logger.info(edge_map)
-
-        pm = get_hubo_pass_manager(extended_swap_strat, depth, args.extra)
-
-        new_cost_circ = QuantumCircuit(num_physical_qubits)
-        new_cost_circ.append(PauliEvolutionGate(hamiltonian, time=Parameter("γ")), [edge_map[i] for i in range(num_physical_qubits)])
-        new_tcost = pm.run(new_cost_circ)
+        logger.info(f'Hamiltonian: {len(hamiltonian)}')
+        logger.info(f'Orders: {Counter(np.sum(all_pauli_z, axis=1))}')
         
-        print_circuit_info(new_tcost, 'Remapped, commuting gate routed circuit')
-        print(new_tcost.count_ops())
+        program_interactions = hamiltonian_to_interactions(hamiltonian, args.fraction_four, args.fraction_six)
+        lengths = Counter([len(interaction) for interaction in program_interactions])
+
+        logger.info(f'Program interactions: {len(program_interactions)}')
+        logger.info(f'Orders: {Counter([len(interaction) for interaction in program_interactions])}')
         
-        circuit_depth = new_tcost.depth(lambda instr: len(instr.qubits) > 1)
-        if circuit_depth < best_circuit_depth:
-            best_circuit_depth = circuit_depth
-            best_swap_depth = depth
-            best_edge_map = edge_map
-            best_circuit = new_tcost
+        mapper = HigherOrderSatMapper(timeout=args.timeout)
+
+        best_circuit_depth, best_swap_depth, best_layout, best_circuit = np.inf, 0, Layout(), QuantumCircuit(num_physical_qubits)
+        depths = sorted(list(set([int(x) for x in np.linspace(0, len(extended_swap_strat._swap_layers), 10)])))
+        for depth in depths:
+            logger.info('--------------------------------------------------')
+            sat_results = mapper.hubo_max_sat(
+                num_qubits, program_interactions, extended_swap_strat, depth
+            )
+            if sat_results is None:
+                logger.info('No results')
+                continue
+            mapping = sat_results[depth][1]
+            edge_map = dict(mapping)
+            donor_qc = QuantumCircuit(num_qubits)
+            layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
             
-        if sat_results[depth][0] == 0:
-            break
-    
-    swap_depths[layer] = best_swap_depth
-    edge_maps[layer] = best_edge_map
-    compiled_circuits[layer] = best_circuit
+            logger.info(f'Cost: {sat_results[depth][0]}')
+            logger.info(layout)
+
+            pm = get_hubo_pass_manager(extended_swap_strat, depth, args.extra)
+
+            new_cost_circ = QuantumCircuit(num_physical_qubits)
+            new_cost_circ.append(PauliEvolutionGate(hamiltonian, time=Parameter("γ")), [layout.get_virtual_bits()[donor_qc.qubits[i]] for i in range(num_physical_qubits)])
+            new_tcost = pm.run(new_cost_circ)
+            
+            print_circuit_info(new_tcost, 'Remapped, commuting gate routed circuit')
+            print(new_tcost.count_ops())
+            
+            circuit_depth = new_tcost.depth(lambda instr: len(instr.qubits) > 1)
+            if circuit_depth < best_circuit_depth:
+                best_circuit_depth = circuit_depth
+                best_swap_depth = depth
+                best_layout = layout
+                best_circuit = new_tcost
+                
+            if sat_results[depth][0] == 0:
+                break
+        
+        swap_depths[layer] = best_swap_depth
+        layouts[layer] = best_layout
+        compiled_circuits[layer] = best_circuit
+        
+    to_save = dict(
+        hamiltonians=hamiltonians, swap_depths=swap_depths, layouts=layouts, compiled_circuits=compiled_circuits
+    )
+    with open(f'/lustre/scratch127/qpg/jc59/hubo/per_layer_results.{args.filename}.reps{args.reps}.pkl', 'wb') as f:
+        pickle.dump(to_save, f)
 
 
-qaoa_circuit = QuantumCircuit(num_qubits, num_qubits)
+donor_qc = QuantumCircuit(num_qubits)
+qaoa_circuit = QuantumCircuit(0, num_qubits)
+qaoa_circuit.add_register([layouts[0].get_physical_bits()[i] for i in range(num_qubits)])
 
 mixer_layer = QuantumCircuit(num_qubits)
 beta = Parameter("β")
@@ -185,7 +210,7 @@ for i in range(num_qubits):
 
 
 for layer in range(0, args.reps):
-    swap_circuit = swap_between_circuit_layouts(layer-1, compiled_circuits, edge_maps, extended_swap_strat._coupling_map)
+    swap_circuit = swap_between_circuit_layouts(layer-1, compiled_circuits, layouts, extended_swap_strat._coupling_map)
     qaoa_circuit.compose(swap_circuit, range(num_qubits), inplace=True)
 
     bind_dict = {compiled_circuits[layer].parameters[0]: gammas[layer]}
@@ -198,34 +223,46 @@ for layer in range(0, args.reps):
 
 
 layer = args.reps - 1
-final_layout = Layout({i: compiled_circuits[layer].qubits[edge_maps[layer][i]] for i in range(num_qubits)})
+final_layout = layouts[layer].copy()
 for instruction in compiled_circuits[layer].data:
     if instruction.operation.name == 'swap':
         qubits_str = str(instruction.qubits)
         matches = re.findall('index=([0-9]+)', qubits_str)
         if len(matches) == 2:
-            final_layout.swap(compiled_circuits[0].qubits[int(matches[0])], compiled_circuits[0].qubits[int(matches[1])])
+            final_layout.swap(int(matches[0]), int(matches[1]))
         else:
             raise Exception('Did not find 2 swap indices')
 
-for cidx, qidx in (
+
+for physical, virtual in (
     final_layout.get_physical_bits().items()
 ):
-    qaoa_circuit.measure(qidx, cidx)
-    
+    qaoa_circuit.measure(physical, donor_qc.find_bit(virtual).index)
+
+# TODO: temporary hack to check that measurements work as expected
+# to_layout = Layout({i: donor_qc.qubits[i] for i in range(num_qubits)})
+# transformation_pass = LayoutTransformation(coupling_map, final_layout, to_layout)
+# swap_qc = QuantumCircuit(num_qubits)
+# swap_qc = dag_to_circuit(transformation_pass.run(circuit_to_dag(swap_qc)))
+# qaoa_circuit.compose(swap_qc, range(num_qubits), inplace=True)
+# for physical, virtual in (
+#     to_layout.get_physical_bits().items()
+# ):
+#     print(physical, virtual, donor_qc.find_bit(virtual).index)
+#     qaoa_circuit.measure(physical, donor_qc.find_bit(virtual).index)  
     
 # Now transpile to basis gates
-generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend, basis_gates=basis_gates)
-init  = generic_pm.init
-init.remove(3)
-generic_pm.init = init
-generic_pm.layout = None
-t_qaoa_circ = generic_pm.run(qaoa_circuit)
+# generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend, basis_gates=basis_gates)
+# init  = generic_pm.init
+# init.remove(3)
+# generic_pm.init = init
+# generic_pm.layout = None
+# t_qaoa_circ = generic_pm.run(qaoa_circuit)
 
-print_circuit_info(t_qaoa_circ, 'QAOA circuit')
-print(t_qaoa_circ.count_ops())
+print_circuit_info(qaoa_circuit, 'QAOA circuit')
+print(qaoa_circuit.count_ops())
 
-qaoa_depth = len(t_qaoa_circ.parameters) // 2
+qaoa_depth = len(qaoa_circuit.parameters) // 2
 if args.init == 'ramp':
     t = 0.7 * p
     betas = np.linspace(
@@ -250,7 +287,7 @@ def cvar(energies, alpha=1.0):
 
 def objective(x: np.ndarray):
     start = time()
-    assigned_circuit = t_qaoa_circ.assign_parameters(x, inplace=False)
+    assigned_circuit = qaoa_circuit.assign_parameters(x, inplace=False)
     sampler_job = sampler.run([assigned_circuit], shots=args.shots)
     sampler_result = sampler_job.result()
     counts = sampler_result[0].data.c.get_counts()
@@ -303,8 +340,8 @@ else:
 
 
 obj_to_dump = dict(
-    result=result, history=history, full_hamiltonian=full_hamiltonian, t_qaoa_circ=t_qaoa_circ, 
-    hamiltonians=hamiltonians, swap_depths=swap_depths, edge_maps=edge_maps, compiled_circuits=compiled_circuits
+    result=result, history=history, full_hamiltonian=full_hamiltonian, qaoa_circuit=qaoa_circuit, 
+    hamiltonians=hamiltonians, swap_depths=swap_depths, layouts=layouts, compiled_circuits=compiled_circuits
 )
 
 basepath = '/lustre/scratch127/qpg/jc59/hubo/'

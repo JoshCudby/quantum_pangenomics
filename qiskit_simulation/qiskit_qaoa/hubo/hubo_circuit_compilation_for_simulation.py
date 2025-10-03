@@ -7,6 +7,7 @@ from collections import Counter
 
 from qiskit import QuantumCircuit, transpile, generate_preset_pass_manager
 from qiskit.circuit.library import QAOAAnsatz,  PauliEvolutionGate
+from qiskit.transpiler import Layout
 
 from qiskit_aer import AerSimulator
 from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
@@ -30,7 +31,8 @@ parser.add_argument('-f', '--filename')
 parser.add_argument('-e', '--extra', type=int, default=1)
 parser.add_argument('--fraction-four', type=float)
 parser.add_argument('--fraction-six', type=float)
-parser.add_argument('--fraction-constraint', type=float)
+parser.add_argument('--times-to-keep', help='delimited list input', 
+    type=lambda s: tuple([int(item) for item in s.split(',') if len(item)]))
 parser.add_argument('-t', '--timeout', type=int)
 parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
     type=lambda s: [float(item) for item in s.split(',') if len(item)])
@@ -94,10 +96,11 @@ config["n_qubits"] = num_physical_qubits
 config["basis_gates"] = basis_gates
 config = AerBackendConfiguration.from_dict(config)
 backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map, **backend_options)
+backend.set_option("n_qubits", num_physical_qubits)
 logger.info(backend.configuration().to_dict()["n_qubits"])
 
-full_hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, fraction_terms=1.0)
-hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, fraction_terms=args.fraction_constraint)
+full_hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=1.0)
+hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=args.times_to_keep)
 
 logger.info(f'Number of hamiltonian terms: {len(hamiltonian)}')
 
@@ -149,20 +152,15 @@ for num_layers in layers:
         continue
     mapping = sat_results[num_layers][1]
     edge_map = dict(mapping)
-    all_qubits = set(range(num_qubits))
-    keys = set(edge_map.keys())
-    vals = set(edge_map.values())
-    missing_keys, missing_vals = all_qubits.difference(keys), all_qubits.difference(vals)
-    for key, val in zip(missing_keys, missing_vals):
-        logger.info(f'Manually assigning: {key}:{val}')
-        edge_map[key] = val
+    donor_qc = QuantumCircuit(num_qubits)
+    layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
     logger.info(f'Cost: {sat_results[num_layers][0]}')
     logger.info(edge_map)
 
     pm = get_hubo_pass_manager(extended_swap_strat, num_layers, args.extra)
 
     new_cost_circ = QuantumCircuit(num_physical_qubits)
-    new_cost_circ.append(PauliEvolutionGate(hamiltonian), [edge_map[i] for i in range(num_physical_qubits)])
+    new_cost_circ.append(PauliEvolutionGate(hamiltonian), [layout.get_virtual_bits()[donor_qc.qubits[i]] for i in range(num_physical_qubits)])
     new_tcost = pm.run(new_cost_circ)
     
     print_circuit_info(new_tcost, 'Remapped, commuting gate routed circuit')
@@ -178,16 +176,16 @@ for num_layers in layers:
     
     print_circuit_info(backend_new_tcost, 'Remapped, commuting gate routed circuit on backend')
     print(backend_new_tcost.count_ops())
-    results[num_layers] = edge_map
+    results[num_layers] = layout
     
     
     
 basepath = '/lustre/scratch127/qpg/jc59/hubo/'
-filename = 'simulation.{}.compilation.{}.extra{}.constraint{}.four{}.six{}'.format(
+filename = 'simulation.{}.compilation.{}.extra{}.times{}.four{}.six{}'.format(
     args.coupling_map,
     args.filename,
     args.extra,
-    args.fraction_constraint,
+    ''.join([str(t) for t in args.times_to_keep]),
     args.fraction_four,
     args.fraction_six
 )

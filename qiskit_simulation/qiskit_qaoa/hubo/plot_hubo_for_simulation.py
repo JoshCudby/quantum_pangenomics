@@ -26,15 +26,17 @@ parser.add_argument('--fraction-six', type=float)
 parser.add_argument('--times-to-keep', help='delimited list input', 
     type=lambda s: tuple([int(item) for item in s.split(',') if len(item)]))
 parser.add_argument('-a', '--alpha', type=float)
+parser.add_argument('-C', '--coupling-map', choices=['line', 'grid'])
 
 args = parser.parse_args()
 
 
 logger.info(args)
-basepath='/lustre/scratch127/qpg/jc59/hubo_hardware/'
+basepath='/lustre/scratch127/qpg/jc59/hubo/'
 
 
-filename='optimisation.{}.extra{}.times{}.four{}.six{}.method{}.cvar{}.p{}.shots{}.init{}.d{}'.format(
+filename='simulation.{}.optimisation.{}.extra{}.times{}.four{}.six{}.method{}.cvar{}.p{}.shots{}.init{}.d{}'.format(
+    args.coupling_map,
     args.filename,
     args.extra,
     ''.join([str(t) for t in args.times_to_keep]),
@@ -64,7 +66,7 @@ axs.set_ylabel('Objective value')
 
 
 fig.tight_layout()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/hubo/hardware/{filename}.times{"".join([str(t) for t in args.times_to_keep])}.convergence.png')
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/hubo/{filename}.times{"".join([str(t) for t in args.times_to_keep])}.convergence.png')
 
 min_val = 0
 # max_val = 100 (T-1)*lambda_G + T^2 + sum(weight**2)
@@ -116,4 +118,4 @@ axs.set_ylabel("Sample density")
 axs.xaxis.set_minor_locator(MultipleLocator(1))
 
 fig.tight_layout()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/hubo/hardware/{filename}.times{"".join([str(t) for t in args.times_to_keep])}.histogram.png')
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/hubo/{filename}.times{"".join([str(t) for t in args.times_to_keep])}.histogram.png')

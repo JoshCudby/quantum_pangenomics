@@ -11,7 +11,7 @@ from qiskit import QuantumCircuit, generate_preset_pass_manager
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.converters import dag_to_circuit, circuit_to_dag
-
+from qiskit.transpiler import Layout
 from qiskit.circuit import Parameter
 
 from qopt_best_practices.transpilation.qaoa_construction_pass import QAOAConstructionPass
@@ -31,11 +31,6 @@ def print_circuit_info(qc, circuit_name):
     logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
     
-    
-properties = {}
-def get_permutation(pass_, dag, time, property_set, count):
-    properties["virtual_permutation_layout"] = property_set["virtual_permutation_layout"]
-    
 
 logger = get_logger(__name__)
 
@@ -50,10 +45,12 @@ parser.add_argument('--init', choices=['ramp', 'random', 'warm'], default='ramp'
 parser.add_argument('-e', '--extra', type=int, default=1)
 parser.add_argument('--fraction-four', type=float)
 parser.add_argument('--fraction-six', type=float)
-parser.add_argument('--fraction-constraint', type=float)
+parser.add_argument('--times-to-keep', help='delimited list input', 
+    type=lambda s: tuple([int(item) for item in s.split(',') if len(item)]))
 parser.add_argument('-N', '--nodes', type=int)
 parser.add_argument('-T', '--time', type=int)
 parser.add_argument('-C', '--coupling-map', choices=['line', 'grid'])
+parser.add_argument('-a', '--alpha', type=float, default=0.25)
 
 
 args = parser.parse_args()
@@ -76,11 +73,11 @@ basis_gates=["sx", "x", "rz", "rzz", "cz", "id", "swap", "cx", "h"]
 
 
 basepath = '/lustre/scratch127/qpg/jc59/hubo/'
-filename = 'simulation.{}.compilation.{}.extra{}.constraint{}.four{}.six{}'.format(
+filename = 'simulation.{}.compilation.{}.extra{}.times{}.four{}.six{}'.format(
     args.coupling_map,
     args.filename,
     args.extra,
-    args.fraction_constraint,
+    ''.join([str(t) for t in args.times_to_keep]),
     args.fraction_four,
     args.fraction_six
 )
@@ -88,11 +85,11 @@ results_file = basepath + filename + '.pkl'
 
 with open(results_file, 'rb') as f:
     data = pickle.load(f)
-    compiled_hamiltonian: SparsePauliOp = data['compiled_hamiltonian']
-    full_hamiltonian: SparsePauliOp = data['full_hamiltonian']
-    edge_map: dict[int, int] = data[swap_depth]
+compiled_hamiltonian: SparsePauliOp = data['compiled_hamiltonian']
+full_hamiltonian: SparsePauliOp = data['full_hamiltonian']
+layout: Layout = data[swap_depth]
 
-num_qubits: int = full_hamiltonian.num_qubits if full_hamiltonian.num_qubits is not None else max(edge_map.keys())
+num_qubits: int = full_hamiltonian.num_qubits if full_hamiltonian.num_qubits is not None else max(layout.get_physical_bits().keys())
 
 if args.coupling_map == 'line':
     extended_swap_strat = ExtendedSwapStrategy.from_line(list(range(num_qubits)), num_swap_layers=1000)
@@ -111,7 +108,6 @@ backend_options = dict(
     basis_gates=basis_gates,
 )
 
-
 config = AerSimulator._DEFAULT_CONFIGURATION
 config["n_qubits"] = num_physical_qubits
 config["basis_gates"] = basis_gates
@@ -121,7 +117,8 @@ backend.set_option("n_qubits", num_physical_qubits)
 logger.info(f'Num qubits in backend: {backend.configuration().to_dict()["n_qubits"]}')
 sampler = Sampler().from_backend(backend)
 
-remapped_full_hamiltonian = full_hamiltonian.apply_layout([edge_map[i] for i in range(num_qubits)], num_physical_qubits)
+donor_qc = QuantumCircuit(num_qubits)
+remapped_full_hamiltonian = full_hamiltonian.apply_layout([layout.get_virtual_bits()[donor_qc.qubits[i]] for i in range(num_qubits)], num_physical_qubits)
 
 
 logger.info(f'Physical qubits: {num_physical_qubits}')
@@ -140,8 +137,8 @@ edge_colouring = nx.greedy_color(dual_coupling_map, interchange=True)
 pm = get_hubo_pass_manager(extended_swap_strat, swap_depth, args.extra)
 
 cost_qc = QuantumCircuit(num_physical_qubits)
-cost_qc.append(PauliEvolutionGate(compiled_hamiltonian, time=Parameter("c")), [edge_map[i] for i in range(len(edge_map))])
-tcost_qc = pm.run(cost_qc, callback=get_permutation)
+cost_qc.append(PauliEvolutionGate(compiled_hamiltonian, time=Parameter("c")), [layout.get_virtual_bits()[donor_qc.qubits[i]] for i in range(num_physical_qubits)])
+tcost_qc = pm.run(cost_qc)
 
 print_circuit_info(tcost_qc, 'Transpiled cost hamiltonian circuit')
 print(tcost_qc.count_ops())
@@ -166,7 +163,6 @@ else:
     
     
 construction_pass = QAOAConstructionPass(p, init_state=sp, mixer_layer=mixer)
-construction_pass.property_set = properties
 qaoa_circ = dag_to_circuit(construction_pass.run(circuit_to_dag(tcost_qc)))
 
 # Now transpile to basis gates
@@ -191,7 +187,7 @@ if init_type == 'ramp':
     gammas = betas[::-1]
     init_params = betas.tolist() + gammas.tolist()
 elif init_type == 'warm':
-    init_params = [0.56679859, 0.35556051, 0.4503177,  0.20867354, 0.48058088, 0.42463428, 0.40800271, 0.39104565]
+    init_params = [9.631e-01,  3.329e-01,  2.646e-01,  8.151e-02,  5.572e-01, 5.224e-01,  3.846e-01,  7.679e-01]
 else:
     init_params = rng.uniform(0, 1, qaoa_depth).tolist() + rng.uniform(0, 1, qaoa_depth).tolist()
 logger.info(f'Init: {init_params}')
@@ -200,7 +196,7 @@ logger.info(f'Init: {init_params}')
 logger.info(f'Noise model: {getattr(sampler._backend.options, "noise_model", "Ideal noise")}')
 
 history = []
-alpha = 0.25
+alpha = args.alpha
 
 def cvar(energies, alpha=1.0):
     sorted_energies = sorted(energies)
@@ -262,7 +258,7 @@ else:
     logger.info(result)
 
 obj_to_dump = dict(
-    result=result, history=history, remapped_full_hamiltonian=remapped_full_hamiltonian, t_qaoa_circ=t_qaoa_circ, compiled_hamiltonian=compiled_hamiltonian, edge_map=edge_map
+    result=result, history=history, remapped_full_hamiltonian=remapped_full_hamiltonian, t_qaoa_circ=t_qaoa_circ, compiled_hamiltonian=compiled_hamiltonian, layout=layout
 )
 
 dump_file = basepath + filename.replace('compilation', 'optimisation') + '.method{}.cvar{}.p{}.shots{}.init{}.d{}'.format(

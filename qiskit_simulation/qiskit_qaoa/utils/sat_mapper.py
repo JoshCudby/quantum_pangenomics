@@ -19,12 +19,12 @@ logger = get_logger(__name__)
 
 
 def get_cnfs(
-    num_nodes_g1, 
-    num_nodes_g2,
-    program_interactions, 
+    num_nodes_g1: int, 
+    num_nodes_g2: int,
+    program_interactions: list[tuple[int,...]], 
     swap_strategy: ExtendedSwapStrategy, 
-    num_layers, 
-    variables
+    num_layers: int, 
+    variables: np.ndarray
 ):
     program_interactions = sorted(program_interactions,key=lambda e: len(e))
         
@@ -80,7 +80,7 @@ class HigherOrderSatMapper(SATMapper):
     def hubo_max_sat(
         self,
         num_nodes_g1: int,
-        program_interactions: list[tuple], 
+        program_interactions: list[tuple[int,...]], 
         swap_strategy: ExtendedSwapStrategy, 
         num_layers: int
     ) -> dict[int, tuple[int, list]] | None:
