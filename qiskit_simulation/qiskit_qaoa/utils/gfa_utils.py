@@ -7,6 +7,8 @@ def gfa_file_to_graph(filepath: str, copy_numbers: list[float]):
     gfa = gfapy.Gfa.from_file(filepath, vlevel=0)
 
     graph = nx.DiGraph()
+    if not len(gfa.segments) == len(copy_numbers):
+        raise Exception(f'Got {len(copy_numbers)} copy numbers but .gfa has {len(gfa.segments)} segments.')
     for index, segment_line in enumerate(gfa.segments):
         graph.add_node(f'{segment_line.name}_+', weight=copy_numbers[index], start=segment_line.st)
         graph.add_node(f'{segment_line.name}_-', weight=copy_numbers[index], start=segment_line.st)
