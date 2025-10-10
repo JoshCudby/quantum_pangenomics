@@ -271,14 +271,15 @@ class CommutingGateRouterRzz(TransformationPass):
                  for chain in possible_cx_chains
             ]
             subsets_can_fix[idx] = any([info[1] == subset and self._is_connected(info[0]) for info in possible_infos])
-                    
-        if (
-            self._is_connected(nodes) 
-            and all([self._is_connected(subset.union(rotation_site)) for subset in missing_connected_subsets]) 
-            and not all(subsets_can_fix)
-        ):
-            print('Next in chain failed due to subsets_can_fix')
         
+        print(
+            missing_info,
+            currently_stored_info,
+            self._is_connected(nodes) ,
+            all([self._is_connected(subset.union(rotation_site)) for subset in missing_connected_subsets]), 
+            all(subsets_can_fix) 
+        )
+                            
         if (
             self._is_connected(nodes) 
             and all([self._is_connected(subset.union(rotation_site)) for subset in missing_connected_subsets]) 
@@ -300,6 +301,7 @@ class CommutingGateRouterRzz(TransformationPass):
         for interaction in possible_interactions:
             if set(interaction).issuperset(set(next_interaction)):
                 missing_info = set(interaction).difference(set(next_interaction))
+                print(next_interaction, interaction)
                 if rotation_site is not None:
                     if self._missing_info_is_connected(missing_info, rotation_site, currently_stored_info):
                         return interaction, rotation_site
@@ -317,9 +319,11 @@ class CommutingGateRouterRzz(TransformationPass):
         possible_interactions: list[tuple[int,...]],
         currently_stored_info: dict[int, set[int]]
     ) -> tuple[tuple[int,...] | None, tuple[int, int] | None]:
+        print(f'Testing subsets for {next_interaction}')
         for interaction in possible_interactions[::-1]:
             if set(rotation_site).issubset(set(interaction)) and set(interaction).issubset(set(next_interaction)):
                 missing_info = set(next_interaction).difference(set(interaction))
+                print(next_interaction, interaction)
                 if self._missing_info_is_connected(missing_info, rotation_site, currently_stored_info):
                     return interaction, rotation_site
         return None, None
@@ -412,6 +416,7 @@ class CommutingGateRouterRzz(TransformationPass):
         
         coeff = 2 * np.real_if_close(gate.params)[0]
         circuit.rzz(coeff, *rotation_site)
+        # circuit.barrier(label=f'{interaction}')
         return circuit, cx_gates
     
 
@@ -433,7 +438,7 @@ class CommutingGateRouterRzz(TransformationPass):
         # e.g. if a vertex is added then later removed
         for cx in cx_gates[::-1]:
             circuit.cx(cx[0], cx[1])
-        # circuit.barrier(label=str(all_vertices_in_chain))
+        # circuit.barrier(label=f'End of chain: {str(all_vertices_in_chain)}')
         cx_gates = []
         currently_stored_info = {x: set([x]) for x in range(circuit.num_qubits)}
         rotation_site = None
