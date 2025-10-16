@@ -122,6 +122,18 @@ class ExtendedSwapStrategy(SwapStrategy):
         self._distance_tensors: dict[int, np.ndarray] = {}
         self._type = type
         super().__init__(coupling_map, swap_layers)
+        
+    
+    @classmethod
+    def from_all_to_all(cls, num_qubits: int) -> ExtendedSwapStrategy:
+        couplings = []
+        for i in range(num_qubits - 1):
+            for j in range(i+1, num_qubits):
+                couplings.append((i, j))
+                couplings.append((j, i))
+
+        return cls(coupling_map=CouplingMap(couplings), swap_layers=tuple(), type="all_to_all")
+        
       
       
     @classmethod  
@@ -278,7 +290,7 @@ class ExtendedSwapStrategy(SwapStrategy):
         return cls(coupling_map=coupling_map, swap_layers=tuple(swap_layers), type="heavy_hex")
     
     
-    def distance_nodes(self, nodes: tuple) -> int:
+    def distance_nodes(self, nodes: tuple[int,...]) -> int:
         nodes = tuple(sorted(nodes))
         if np.any([nodes[i] == nodes[i+1] for i in range(len(nodes)-1)]):
             return -1
@@ -342,6 +354,16 @@ class ExtendedSwapStrategy(SwapStrategy):
             pass
         except Exception as e:
             raise Exception(f'Other than file not found: {e}')
+        
+        
+        if self._type == 'all_to_all':
+            distance_tensor = np.full([self._num_vertices]*order, -1)
+            np.put(
+                distance_tensor, 
+                [np.ravel_multi_index(x, distance_tensor.shape) for x in permutations(range(self._num_vertices), order)], 
+                0
+            )
+            return distance_tensor
         
         
         distance_tensor = np.full([self._num_vertices]*order, -1)        

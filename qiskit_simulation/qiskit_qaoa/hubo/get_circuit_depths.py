@@ -20,7 +20,9 @@ from qiskit_qaoa.hubo.graph_to_hubo_hamiltonian import graph_to_hubo_hamiltonian
 from qiskit_qaoa.utils.gfa_utils import gfa_file_to_graph
 from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
 from qiskit_qaoa.utils.hamiltonian_utils import hamiltonian_to_interactions
+from qiskit_qaoa.utils.logging import get_logger
 
+logger = get_logger(__name__)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-t', '--timeout', type=int)
@@ -38,34 +40,37 @@ mapper = HigherOrderSatMapper(timeout=args.timeout)
 
 for filename, copy_numbers in zip(
     [
-        # 'test_N2_W2', 'trivial', 'test_N3_W4', 'test_N4_W5', 
-        # 'test_N4_W6', 
-        # 'test_N5_W6', 'test_N7_W2', 'test_N7_W3','test_N7_W4', 
-        # 'test_N7_W5', 
-        # 'test_N8_W2', 'test_N8_W3','test_N8_W4', 
-        'test_N8_W5', 'test_N8_W6',
+        'test_N2_W2', 'trivial', 'test_N3_W4', 'test_N4_W5', 
+        'test_N4_W6', 
+        'test_N5_W6', 'test_N7_W2', 'test_N7_W3','test_N7_W4', 
+        'test_N7_W5', 
+        'test_N8_W2', 'test_N8_W3','test_N8_W4', 
+        'test_N8_W5', 
+        'test_N8_W6',
         'test_N9_W6', 'test_N10_W6','test_N14_W7'
     ], 
     [
-        # [1,1], [1,1,1], [2,1,1], [2,1,1,1],
-        # [2,2,1,1],
-        # [1,2,1,1,1], [1,0,0,0,0,0,1], [1,1,0,0,0,0,1], [1,1,1,0,0,0,1], 
-        # [1,1,1,0,1,0,1],
-        # [1,0,0,0,0,0,0,1],[1,1,0,0,0,0,0,1],[1,1,1,0,0,0,0,1],
-        [1,1,1,1,0,0,0,1],[1,1,0,1,1,1,0,1],
+        [1,1], [1,1,1], [2,1,1], [2,1,1,1],
+        [2,2,1,1],
+        [1,2,1,1,1], [1,0,0,0,0,0,1], [1,1,0,0,0,0,1], [1,1,1,0,0,0,1], 
+        [1,1,1,0,1,0,1],
+        [1,0,0,0,0,0,0,1],[1,1,0,0,0,0,0,1],[1,1,1,0,0,0,0,1],
+        [1,1,1,1,0,0,0,1],
+        [1,1,0,1,1,1,0,1],
         [1,1,0,0,1,0,1,1,1], [1,1,0,0,1,0,1,1,0,1], [1,1,0,0,1,0,1,0,0,1,0,0,1,1]
     ]
 ):
-    print('-------------------------------------')
-    print(filename)
-    print('\n\n')
+    logger.info('-------------------------------------')
+    logger.info(filename)
+    logger.info('\n\n')
     filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{filename}.gfa'
     graph, n, V, T = gfa_file_to_graph(filepath, copy_numbers)
     hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=1.0)
     ess = ExtendedSwapStrategy.from_grid(n, T)
     num_physical_qubits = ess._num_vertices
+    donor_qc = QuantumCircuit(num_physical_qubits)
 
-    program_interactions = hamiltonian_to_interactions(hamiltonian, 0.0, 1.0)
+    program_interactions = hamiltonian_to_interactions(hamiltonian, 0, 1.0)
 
     config = AerSimulator._DEFAULT_CONFIGURATION
     config["n_qubits"] = num_physical_qubits
@@ -115,25 +120,28 @@ for filename, copy_numbers in zip(
             ]
         )
 
+        if args.timeout == 0:
+            logger.info('Using trivial layout')
+            layout = Layout({donor_qc.qubits[i]: i for i in range(num_physical_qubits)})
+        else:
+            sat_results = mapper.hubo_max_sat(
+                num_physical_qubits, program_interactions, ess, layer
+            )
+            if sat_results is None:
+                logger.info('No results')
+                continue
 
-        sat_results = mapper.hubo_max_sat(
-            num_physical_qubits, program_interactions, ess, layer
-        )
-        if sat_results is None:
-            print('No results')
-            continue
-
-        mapping = sat_results[layer][1]
-        edge_map = dict(mapping)
-        donor_qc = QuantumCircuit(num_physical_qubits)
-        layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
+            mapping = sat_results[layer][1]
+            edge_map = dict(mapping)
+            
+            layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
 
         qc = QuantumCircuit(num_physical_qubits)
         qc.append(PauliEvolutionGate(hamiltonian), range(num_physical_qubits))
 
-        print('Compiling with Rzz')
+        logger.info('Compiling with Rzz')
         tqc = pm.run(qc)
-        print('Compiling with Rz')
+        logger.info('Compiling with Rz')
         tqc_rz = pm_rz.run(qc)
 
         rzz_depth = tqc.depth(lambda instr: len(instr.qubits) > 1)
@@ -150,8 +158,8 @@ for filename, copy_numbers in zip(
 
 
     best_rzz_index = layers.index(best_rzz_layers)
-    rzz_fine_layers = sorted(list(set([int(x) for x in np.linspace(layers[best_rzz_index - 1]+1, layers[best_rzz_index + 1]-1, 10)])))
-    print(f'Fine Rzz search. Best rzz layers: {best_rzz_layers}. Searching: {rzz_fine_layers}')
+    rzz_fine_layers = sorted(list(set([int(x) for x in np.linspace(layers[max(best_rzz_index - 1, 0)]+1, layers[min(best_rzz_index + 1, len(layers)-1)]-1, 10)])))
+    logger.info(f'Fine Rzz search. Best rzz layers: {best_rzz_layers}. Searching: {rzz_fine_layers}')
     for layer in rzz_fine_layers:
         pm = PassManager(
             [
@@ -168,22 +176,24 @@ for filename, copy_numbers in zip(
             ]
         )
 
-        sat_results = mapper.hubo_max_sat(
-            num_physical_qubits, program_interactions, ess, layer
-        )
-        if sat_results is None:
-            print('No results')
-            continue
+        if args.timeout == 0:
+            layout = Layout({donor_qc.qubits[i]: i for i in range(num_physical_qubits)})
+        else:
+            sat_results = mapper.hubo_max_sat(
+                num_physical_qubits, program_interactions, ess, layer
+            )
+            if sat_results is None:
+                logger.info('No results')
+                continue
 
-        mapping = sat_results[layer][1]
-        edge_map = dict(mapping)
-        donor_qc = QuantumCircuit(num_physical_qubits)
-        layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
+            mapping = sat_results[layer][1]
+            edge_map = dict(mapping)
+            layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
 
         qc = QuantumCircuit(num_physical_qubits)
         qc.append(PauliEvolutionGate(hamiltonian), range(num_physical_qubits))
 
-        print('Compiling with Rzz')
+        logger.info('Compiling with Rzz')
         tqc = pm.run(qc)
 
         rzz_depth = tqc.depth(lambda instr: len(instr.qubits) > 1)
@@ -195,7 +205,7 @@ for filename, copy_numbers in zip(
     
     best_rz_index = layers.index(best_rz_layers)
     rz_fine_layers = sorted(list(set([int(x) for x in np.linspace(layers[best_rz_index - 1]+1, layers[best_rz_index + 1]-1, 10)])))
-    print(f'Fine Rz search. Best rz layers: {best_rz_layers}. Searching: {rz_fine_layers}')
+    logger.info(f'Fine Rz search. Best rz layers: {best_rz_layers}. Searching: {rz_fine_layers}')
 
     for layer in rz_fine_layers:
         pm_rz = PassManager(
@@ -213,23 +223,24 @@ for filename, copy_numbers in zip(
             ]
         )
 
+        if args.timeout == 0:
+            layout = Layout({donor_qc.qubits[i]: i for i in range(num_physical_qubits)})
+        else:
+            sat_results = mapper.hubo_max_sat(
+                num_physical_qubits, program_interactions, ess, layer
+            )
+            if sat_results is None:
+                logger.info('No results')
+                continue
 
-        sat_results = mapper.hubo_max_sat(
-            num_physical_qubits, program_interactions, ess, layer
-        )
-        if sat_results is None:
-            print('No results')
-            continue
-
-        mapping = sat_results[layer][1]
-        edge_map = dict(mapping)
-        donor_qc = QuantumCircuit(num_physical_qubits)
-        layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
+            mapping = sat_results[layer][1]
+            edge_map = dict(mapping)
+            layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
 
         qc = QuantumCircuit(num_physical_qubits)
         qc.append(PauliEvolutionGate(hamiltonian), range(num_physical_qubits))
 
-        print('Compiling with Rz')
+        logger.info('Compiling with Rz')
         tqc_rz = pm_rz.run(qc)
 
 

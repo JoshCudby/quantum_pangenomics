@@ -5,6 +5,7 @@ from threading import Timer
 import numpy as np
 import subprocess
 import uuid
+import os
 
 from pysat.formula import CNF, IDPool, WCNF
 from pysat.solvers import Solver
@@ -116,9 +117,15 @@ class HigherOrderSatMapper(SATMapper):
                 "/nfs/users/nfs_j/jc59/quantumwork/pangenome/sat/NuWLS-c_static", f'./{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.wcnf']
         )
         
+        os.remove(f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.var")
+        os.remove(f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.wat")
+        os.remove(f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.wcnf")
+        
         try:
             with open(f'{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.out', 'r') as f:
                 out = f.readlines()
+                
+            os.remove(f"{num_nodes_g1}.{num_nodes_g2}.{num_layers}.{id}.out")
             out_data = [x.split() for x in out if len(x) > 0]
             sol, cost, satisfiable = None, None, None
             for line in out_data[::-1]:

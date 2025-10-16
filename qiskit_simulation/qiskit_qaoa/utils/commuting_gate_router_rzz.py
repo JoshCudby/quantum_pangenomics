@@ -59,7 +59,7 @@ class CommutingGateRouterRzz(TransformationPass):
             max_layers = len(swap_strategy)
         self._max_layers: int = max_layers
         self._perform_extra_swaps = perform_extra_swaps
-        self._cannot_implement = {}
+        self._cannot_implement = []
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
         """Run the pass by decomposing the nodes it applies on.
@@ -225,6 +225,7 @@ class CommutingGateRouterRzz(TransformationPass):
         missing_copy = missing_info.copy()
         missing_connected_subsets: list[set[int]] = []
         subset: set[int] = set()
+        iter = 0
         while len(missing_copy):
             added = False
             if len(subset) == 0:
@@ -240,6 +241,10 @@ class CommutingGateRouterRzz(TransformationPass):
             if not added:
                 missing_connected_subsets.append(subset)
                 subset = set()
+            iter += 1
+            if iter == 20:
+                print(missing_copy, missing_connected_subsets)
+                raise Exception(f'Could not clear missing_copy: {missing_copy}')
                 
         if len(subset):
             missing_connected_subsets.append(subset)
@@ -249,10 +254,15 @@ class CommutingGateRouterRzz(TransformationPass):
             stack = [s for s in subset]
             
             all_stored_info = set()
+            iter = 0
             while len(stack) > 0:
                 s = stack.pop()
                 all_stored_info.add(s)
-                stack.extend([x for x in currently_stored_info[s] if x not in all_stored_info])
+                stack.extend([x for x in currently_stored_info[s] if x not in all_stored_info and x not in stack])
+                iter += 1
+                if iter == 20:
+                    print(stack)
+                    raise Exception(f'Could not clear stack: {stack}')
                 
             possible_cx_chains = reduce(
                 list.__add__,
@@ -271,15 +281,7 @@ class CommutingGateRouterRzz(TransformationPass):
                  for chain in possible_cx_chains
             ]
             subsets_can_fix[idx] = any([info[1] == subset and self._is_connected(info[0]) for info in possible_infos])
-        
-        print(
-            missing_info,
-            currently_stored_info,
-            self._is_connected(nodes) ,
-            all([self._is_connected(subset.union(rotation_site)) for subset in missing_connected_subsets]), 
-            all(subsets_can_fix) 
-        )
-                            
+                                    
         if (
             self._is_connected(nodes) 
             and all([self._is_connected(subset.union(rotation_site)) for subset in missing_connected_subsets]) 
@@ -301,7 +303,6 @@ class CommutingGateRouterRzz(TransformationPass):
         for interaction in possible_interactions:
             if set(interaction).issuperset(set(next_interaction)):
                 missing_info = set(interaction).difference(set(next_interaction))
-                print(next_interaction, interaction)
                 if rotation_site is not None:
                     if self._missing_info_is_connected(missing_info, rotation_site, currently_stored_info):
                         return interaction, rotation_site
@@ -319,11 +320,9 @@ class CommutingGateRouterRzz(TransformationPass):
         possible_interactions: list[tuple[int,...]],
         currently_stored_info: dict[int, set[int]]
     ) -> tuple[tuple[int,...] | None, tuple[int, int] | None]:
-        print(f'Testing subsets for {next_interaction}: {possible_interactions}')
         for interaction in possible_interactions[::-1]:
             if set(rotation_site).issubset(set(interaction)) and set(interaction).issubset(set(next_interaction)):
                 missing_info = set(next_interaction).difference(set(interaction))
-                print(next_interaction, interaction)
                 if self._missing_info_is_connected(missing_info, rotation_site, currently_stored_info):
                     return interaction, rotation_site
         return None, None
@@ -373,13 +372,13 @@ class CommutingGateRouterRzz(TransformationPass):
                     missing_information
                 )
                 
-                if qubit in info_missing_from_path:
+                if qubit in info_missing_from_path or qubit in [y for x in info_missing_from_path for y in currently_stored_info[x]]:
                     new_cx_gates.append((qubit, previous))
                     # new_stack_entries = qubit_neighbours.intersection(info_missing_from_path.symmetric_difference(currently_stored_info[qubit]))
                     # stack.extend([(qubit, q) for q in info_missing_from_path.symmetric_difference(currently_stored_info[qubit]) if self._is_connected(set([qubit, q]))])
-                    stack.extend([(qubit, q) for q in currently_stored_info.keys() if self._is_connected(set([q, qubit]))])
+                    stack.extend([(qubit, q) for q in currently_stored_info.keys() if self._is_connected((q, qubit))])
                     
-                if iiter == 100:
+                if iiter == 20:
                     print_error_and_raise(interaction, rotation_site, missing_information, currently_stored_info, None, info_missing_from_path, stack, 'Could not clear stack.')
            
             
@@ -430,7 +429,6 @@ class CommutingGateRouterRzz(TransformationPass):
     ):
         if chain_len is not None:
             print(f'Len of chain: {chain_len}')
-        # print(f'Ending chain: {all_vertices_in_chain}')
         
         blocked_vertices = blocked_vertices.union(all_vertices_in_chain)
         
@@ -461,14 +459,12 @@ class CommutingGateRouterRzz(TransformationPass):
 
             
         one_qubit_gate_sites = [key for key in current_layer.keys() if len(key) == 1]
-        # print(f'One qubit gate sites: {one_qubit_gate_sites}')
         for site in one_qubit_gate_sites:
             gate = current_layer.pop(site)
             coeff = 2 * np.real_if_close(gate.params)[0]
             circuit.rz(coeff, site)
 
         two_qubit_gate_sites = [key for key in current_layer.keys() if len(key) == 2]
-        # print(f'Two qubit gate sites: {two_qubit_gate_sites}')
         for site in two_qubit_gate_sites:
             gate = current_layer.pop(site)
             coeff = 2 * np.real_if_close(gate.params)[0]
@@ -487,11 +483,10 @@ class CommutingGateRouterRzz(TransformationPass):
         applied_extra_interactions = []
         # chain_len = 0
 
-        while len(current_layer) > 0:        
+        while len(current_layer) > 0: 
             if next_interaction is None:
                 # chain_len += 1
                 next_interaction = possible_interactions.pop(0)
-                # print(f'First interaction in chain: {next_interaction}, rotation: {rotation_site}')
                 all_vertices_in_chain = all_vertices_in_chain.union(next_interaction)
                 next_gate = current_layer.pop(next_interaction)  
                            
@@ -503,9 +498,7 @@ class CommutingGateRouterRzz(TransformationPass):
                 chain_next_interaction, rotation_site = self._suitable_superset(next_interaction, rotation_site, possible_interactions, currently_stored_info)
                 if chain_next_interaction is not None and rotation_site is not None:
                     # chain_len += 1
-                    # print(f'Next site: {chain_next_interaction}, rotation: {rotation_site}')
                     circuit, applied_cx_gates = self._compute_interaction(next_interaction, rotation_site, next_gate, circuit, currently_stored_info)
-                    # print(f'Computed site: {next_interaction}, rotation: {rotation_site}, cx: {applied_cx_gates}, Stored: {currently_stored_info}')
                     cx_gates.extend(applied_cx_gates)
                     
                     possible_interactions.remove(chain_next_interaction)
@@ -516,10 +509,7 @@ class CommutingGateRouterRzz(TransformationPass):
                 
                 chain_next_interaction, rotation_site = self._suitable_superset(next_interaction, rotation_site, extra_interactions, currently_stored_info)
                 if chain_next_interaction is not None and rotation_site is not None:
-                    # chain_len += 1
-                    print('Got interaction from extra interactions')
                     circuit, applied_cx_gates = self._compute_interaction(next_interaction, rotation_site, next_gate, circuit, currently_stored_info)
-                    # print(f'Computed site: {next_interaction}, rotation: {rotation_site}, cx: {applied_cx_gates}, Stored: {currently_stored_info}')
                     cx_gates.extend(applied_cx_gates)
                     
                     extra_interactions.remove(chain_next_interaction)
@@ -539,21 +529,16 @@ class CommutingGateRouterRzz(TransformationPass):
                 (blocked_vertices, all_vertices_in_chain, cx_gates, 
                     circuit, currently_stored_info, rotation_site, 
                     next_interaction, next_gate) = self._end_chain(blocked_vertices, all_vertices_in_chain, cx_gates, circuit)
-                # chain_len = 0
                     
             else:
                 if next_gate is None:
                     raise Exception('Expected to have a gate.')
                 
                 circuit, applied_cx_gates = self._compute_interaction(next_interaction, rotation_site, next_gate, circuit, currently_stored_info)
-                # print(f'Computed site: {next_interaction}, rotation: {rotation_site}, cx: {applied_cx_gates}, Stored: {currently_stored_info}')
                 cx_gates.extend(applied_cx_gates)
-                
                 
                 chain_next_interaction, _ = self._suitable_superset(next_interaction, rotation_site, possible_interactions, currently_stored_info)
                 if chain_next_interaction is not None:
-                    # chain_len += 1
-                    # print(f'Next site: {chain_next_interaction}, rotation: {rotation_site}')
                     possible_interactions.remove(chain_next_interaction)
                     next_interaction = chain_next_interaction
                     all_vertices_in_chain = all_vertices_in_chain.union(next_interaction)
@@ -562,19 +547,15 @@ class CommutingGateRouterRzz(TransformationPass):
                 
                 chain_next_interaction, _ = self._suitable_subset(next_interaction, rotation_site, possible_interactions, currently_stored_info)
                 if chain_next_interaction is not None:
-                    # chain_len += 1
-                    # print(f'Next site: {chain_next_interaction}, rotation: {rotation_site}')
                     possible_interactions.remove(chain_next_interaction)
                     next_interaction = chain_next_interaction
                     next_gate = current_layer.pop(next_interaction)
                     continue
                 
                 
-                
                 chain_next_interaction, _ = self._suitable_superset(next_interaction, rotation_site, extra_interactions, currently_stored_info)
                 if chain_next_interaction is not None:
                     # chain_len += 1
-                    print('Got interaction from impossible gates')
                     extra_interactions.remove(chain_next_interaction)
                     next_interaction = chain_next_interaction
                     all_vertices_in_chain = all_vertices_in_chain.union(next_interaction)
@@ -582,11 +563,9 @@ class CommutingGateRouterRzz(TransformationPass):
                     applied_extra_interactions.append(next_interaction)
                     continue
                 
-                
                 chain_next_interaction, _ = self._suitable_subset(next_interaction, rotation_site, extra_interactions, currently_stored_info)
                 if chain_next_interaction is not None:
                     # chain_len += 1
-                    print('Got interaction from impossible gates')
                     extra_interactions.remove(chain_next_interaction)
                     next_interaction = chain_next_interaction
                     next_gate = impossible_gates.pop(next_interaction)
@@ -615,7 +594,6 @@ class CommutingGateRouterRzz(TransformationPass):
             cx_gates.extend(applied_cx_gates)
             
             chain_next_interaction = None
-            print('Starting end of layer seek for impossible gates')
             while(len(extra_interactions) > 0):
                 if chain_next_interaction is not None:
                     # Only happens after the first loop
@@ -625,7 +603,6 @@ class CommutingGateRouterRzz(TransformationPass):
                 chain_next_interaction, _ = self._suitable_superset(next_interaction, rotation_site, extra_interactions, currently_stored_info)
                 if chain_next_interaction is not None:
                     # chain_len += 1
-                    print('Got interaction from impossible gates')
                     extra_interactions.remove(chain_next_interaction)
                     next_interaction = chain_next_interaction
                     all_vertices_in_chain = all_vertices_in_chain.union(next_interaction)
@@ -637,7 +614,6 @@ class CommutingGateRouterRzz(TransformationPass):
                 chain_next_interaction, _ = self._suitable_subset(next_interaction, rotation_site, extra_interactions, currently_stored_info)
                 if chain_next_interaction is not None:
                     # chain_len += 1
-                    print('Got interaction from impossible gates')
                     extra_interactions.remove(chain_next_interaction)
                     next_interaction = chain_next_interaction
                     next_gate = impossible_gates.pop(next_interaction)
@@ -675,16 +651,14 @@ class CommutingGateRouterRzz(TransformationPass):
             to map the gates in the :class:`.Commuting2qBlock` to the hardware.
         """
         trivial_layout = Layout.generate_trivial_layout(*dag.qregs.values())
-        gate_layers = self._make_op_layers(dag, node.op, current_layout, swap_strategy)
+        gate_layers, impossible_nodes = self._make_op_layers(dag, node.op, current_layout, swap_strategy)
 
         # Iterate over and apply gate layers
-        max_distance = max([x for x in gate_layers.keys() if x < np.inf])
+        max_distance: int = int(max([x for x in gate_layers.keys() if x < np.inf]))
         print(f'Max layers needed to apply swap decompose: {max_distance}')
 
         circuit_with_swap = QuantumCircuit(len(dag.qubits))
 
-
-            
         for i in range(max_distance + 1):
             # Get current layer and replace the problem indices j,k by the corresponding
             # positions in the coupling map. The current layer corresponds
@@ -692,10 +666,11 @@ class CommutingGateRouterRzz(TransformationPass):
             current_layer = {}
             for indices, local_gate in gate_layers.get(i, {}).items():
                 current_layer[self._position_in_cmap(dag, indices, current_layout)] = local_gate
+                
             impossible_gates = {}
-            for indices, local_gate in gate_layers.get(np.inf, {}).items():
-                impossible_gates[self._position_in_cmap(dag, indices, current_layout)] = local_gate
-       
+            for indices, node in impossible_nodes.items():
+                impossible_gates[self._position_in_cmap(dag, indices, current_layout)] = node.op
+
             applied_impossible_interactions = self._build_chain_sub_layers(
                 current_layer,
                 circuit_with_swap,
@@ -703,7 +678,7 @@ class CommutingGateRouterRzz(TransformationPass):
             )
             for interaction in applied_impossible_interactions:
                 physical_indices = tuple(current_layout.get_virtual_bits()[dag.qubits[i]] for i in interaction)
-                gate_layers.get(np.inf, {}).pop(physical_indices)
+                impossible_nodes.pop(physical_indices)
             
             
             # Apply SWAP gates
@@ -720,17 +695,18 @@ class CommutingGateRouterRzz(TransformationPass):
                     current_layout.swap(j, k)
 
         self.property_set["final_layout"] = current_layout
-        self._cannot_implement = gate_layers.get(np.inf, {}).values()
-        # circuit_with_swap.barrier()
+                
+        self._cannot_implement = list(impossible_nodes.values())
         return circuit_to_dag(circuit_with_swap)
 
 
     def _make_op_layers(
         self, dag: DAGCircuit, op: CommutingBlock, layout: Layout, swap_strategy: ExtendedSwapStrategy
-    ) -> dict[int, dict[tuple[int,...], Gate]]:
+    ) -> tuple[dict[int, dict[tuple[int,...], Gate]], dict[tuple, DAGOpNode]]:
         """Creates layers of two-qubit gates based on the distance in the swap strategy."""
 
         gate_layers: dict[int, dict[tuple, Gate]] = defaultdict(dict)
+        impossible_gates: dict[tuple, DAGOpNode] = {}
 
         for node in op.node_block:
             edge = tuple([dag.find_bit(node.qargs[i]).index for i in range(len(node.qargs))])
@@ -742,9 +718,9 @@ class CommutingGateRouterRzz(TransformationPass):
             if -1 < distance <= self._max_layers:
                 gate_layers[distance][edge] = node.op
             else:
-                gate_layers[np.inf][edge] = node.op
+                impossible_gates[edge] = node
 
-        return gate_layers
+        return gate_layers, impossible_gates
 
 
     def _check_edges(self, dag: DAGCircuit, node: DAGOpNode, swap_strategy: ExtendedSwapStrategy):
