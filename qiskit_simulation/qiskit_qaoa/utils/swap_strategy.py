@@ -290,7 +290,9 @@ class ExtendedSwapStrategy(SwapStrategy):
         return cls(coupling_map=coupling_map, swap_layers=tuple(swap_layers), type="heavy_hex")
     
     
-    def distance_nodes(self, nodes: tuple[int,...]) -> int:
+    def distance_nodes(self, nodes: tuple[int,...], cutoff: int | None = None) -> int:
+        if cutoff is None:
+            cutoff = len(self._swap_layers) + 1
         nodes = tuple(sorted(nodes))
         if np.any([nodes[i] == nodes[i+1] for i in range(len(nodes)-1)]):
             return -1
@@ -301,7 +303,7 @@ class ExtendedSwapStrategy(SwapStrategy):
         if len(nodes) < 2:
             return 0
         
-        for i in range(len(self._swap_layers) + 1):
+        for i in range(cutoff):
             cmap = self.swapped_coupling_map(i)
             distance_matrix: npt.NDArray[np.float64] = cmap.distance_matrix
             sub_distance = distance_matrix[nodes, :][:, nodes]

@@ -1,5 +1,155 @@
 from collections import deque
-from typing import Dict, List, Set, Tuple, Iterable, Optional
+from typing import overload, Dict, Set, Iterable, List, Generator, Optional, Tuple
+
+
+@overload
+def sort_by_length(items: list[set[int]], max_val: int, ascending: bool = True) -> list[set[int]]:
+    pass
+
+@overload
+def sort_by_length(items: list[tuple[int,...]], max_val: int, ascending: bool = True) -> list[tuple[int,...]]:
+    pass
+
+def sort_by_length(items, max_val: int, ascending: bool = True):
+    return sorted(items, key=lambda e: (1 if ascending else -1) * sum(max_val**i * list(e)[-i] for i in range(len(e))))
+
+
+def _bfs_connected(remaining: Set[int], adj: Dict[int, Set[int]]) -> bool:
+    """Return True if the induced subgraph on 'remaining' is connected.
+       Uses BFS/DFS restricted to 'remaining'."""
+    if not remaining:
+        return True  # define empty graph as connected for convenience
+    start = next(iter(remaining))
+    q = deque([start])
+    seen = {start}
+    while q:
+        u = q.popleft()
+        # only traverse neighbors inside remaining
+        for w in adj[u]:
+            if w in remaining and w not in seen:
+                seen.add(w)
+                q.append(w)
+    return len(seen) == len(remaining)
+
+
+def enumerate_removal_pair_sequences(
+    vertices: Iterable[int],
+    edges: Iterable[Iterable[int]],
+    stop_at: int = 1,
+    order: Optional[Iterable[int]] = None,
+    neighbor_order: Optional[Dict[int, Iterable[int]]] = None,
+    max_solutions: Optional[int] = None,
+) -> Generator[List[Tuple[int, int]], None, None]:
+    """
+    Enumerate sequences of vertex-removal pairs (v, u) where v is removed and u is
+    a neighbour of v that remains after removal (u in remaining \\ {v}).
+    At each step the remaining induced subgraph must be connected.
+
+    Parameters
+    ----------
+    vertices : iterable of vertex ids
+    edges : iterable of (u, v) pairs (undirected)
+    stop_at : int
+        Stop when 'stop_at' vertices remain (default 1).
+    order : optional iterable specifying the order to try candidate removals at each step.
+    neighbor_order : optional dict mapping a vertex -> iterable of neighbors order to try for pairing.
+    max_solutions : optional int, stop after this many sequences.
+
+    Yields
+    ------
+    lists of (removed_vertex, neighbor) pairs, length = n - stop_at.
+    """
+    V = list(vertices)
+    n = len(V)
+    if stop_at < 0 or stop_at > n:
+        raise ValueError("stop_at must be between 0 and number of vertices")
+
+    adjacency: Dict[int, Set[int]] = {v: set() for v in V}
+    for a, b in edges:
+        if a not in adjacency or b not in adjacency:
+            raise KeyError("edge references unknown vertex")
+        adjacency[a].add(b)
+        adjacency[b].add(a)
+
+    if not _bfs_connected(set(V), adjacency):
+        print('Initial graph not connected in pair removal')
+        return  # yield nothing if initial graph isn't connected
+
+    connectivity_cache: Dict[frozenset, bool] = {}
+    def is_connected(remaining: Set[int]) -> bool:
+        key = frozenset(remaining)
+        v = connectivity_cache.get(key)
+        if v is None:
+            v = _bfs_connected(remaining, adjacency)
+            connectivity_cache[key] = v
+        return v
+
+    candidate_order = list(order) if order is not None else list(V)
+    neighbor_order_map: Dict[int, List[int]] = {}
+    if neighbor_order is not None:
+        for k, seq in neighbor_order.items():
+            neighbor_order_map[k] = list(seq)
+
+    remaining = set(V)
+    current_pairs: List[Tuple[int, int]] = []
+    solutions_found = 0
+
+    def backtrack(remaining: Set[int], current_pairs: List[Tuple[int, int]]):
+        nonlocal solutions_found
+        if max_solutions is not None and solutions_found >= max_solutions:
+            return
+        if len(remaining) == stop_at:
+            yield list(current_pairs)
+            solutions_found += 1
+            return
+
+        for v in candidate_order:
+            if v not in remaining:
+                continue
+            remaining2 = remaining - {v}
+            # if rem2 is empty, treat as connected; but neighbor will be None
+            if not is_connected(remaining2):
+                continue
+
+            neighbours = neighbor_order_map.get(v, None)
+            if neighbours is None:
+                neighbours_iter = [u for u in adjacency[v] if u in remaining2]
+            else:
+                neighbours_iter = [u for u in neighbours if u in remaining2]
+
+            # If rem2 is non-empty, there must be at least one neighbour in rem2 (since remaining is connected
+            # before removal and size >= 2)
+            if not remaining2:
+                raise Exception('No nodes remaining in graph')
+                # no remaining nodes after removal; pair neighbor = None
+                # current_pairs.append((v, None))
+                # yield from backtrack(rem2, current_pairs)
+                # current_pairs.pop()
+            else:
+                for u in neighbours_iter:
+                    current_pairs.append((v, u))
+                    yield from backtrack(remaining2, current_pairs)
+                    current_pairs.pop()
+                    if max_solutions is not None and solutions_found >= max_solutions:
+                        return
+
+    yield from backtrack(remaining, current_pairs)
+    
+    
+    
+def labels_to_bitrows(vertices: List, labels: Dict) -> List[int]:
+    """Map labels (sets of vertices) to bitmask rows in same vertex index order."""
+    index = {v: i for i, v in enumerate(vertices)}
+    rows = []
+    for v in vertices:
+        mask = 0
+        for u in labels[v]:
+            if u not in index:
+                raise KeyError(f"Label contains unknown vertex {u}")
+            mask |= (1 << index[u])
+        rows.append(mask)
+    return rows
+
 
 # -----------------------
 # GF(2) helpers
@@ -330,14 +480,15 @@ def heuristic_spanning_tree_solver(vertices: List, edges: Iterable[Tuple], label
             path = path_in_tree(tree_adj, a, b)
             if not path:
                 return None
-            P = path
-            for t in range(len(P)-1):
-                u = P[t]; v = P[t+1]
+            for t in range(len(path)-1):
+                u = path[t]
+                v = path[t+1]
                 apply_adj_op(u, v)
                 apply_adj_op(v, u)
                 apply_adj_op(u, v)
-            for t in range(len(P)-2, -1, -1):
-                u = P[t]; v = P[t+1]
+            for t in range(len(path)-2, -1, -1):
+                u = path[t]
+                v = path[t+1]
                 apply_adj_op(u, v)
                 apply_adj_op(v, u)
                 apply_adj_op(u, v)
@@ -362,9 +513,7 @@ def heuristic_spanning_tree_solver(vertices: List, edges: Iterable[Tuple], label
     # Final target: row i == e_i where bit i is set
     target_rows = [1 << i for i in range(n)]
     if cur_rows == target_rows:
-        # convert simulated_ops (indices) to vertex objects and return
         vertex_ops = [(vertices[v], vertices[u]) for (u,v) in simulated_ops]
-        # optional small cleanup: remove immediate double-op cancellations (u,v) followed by (u,v)
         i = 0
         while i < len(vertex_ops) - 1:
             if vertex_ops[i] == vertex_ops[i+1]:
@@ -374,6 +523,7 @@ def heuristic_spanning_tree_solver(vertices: List, edges: Iterable[Tuple], label
                 i += 1
         return vertex_ops
     else:
+        print('Failed to reach identity in heurstic tree solver')
         print(cur_rows)
         print(target_rows)
         # failed to reach identity
