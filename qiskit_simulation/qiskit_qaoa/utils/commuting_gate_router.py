@@ -370,6 +370,19 @@ class CommutingGateRouter(TransformationPass):
                 if self._missing_info_is_connected(missing_info, rotation_site, currently_stored_info):
                     return site, rotation_site
         return None, None
+
+
+    def _compute_site_abstract(
+        self,
+        site: tuple[int,...],
+        rotation_site: int,
+        gate: Gate,
+        circuit: QuantumCircuit,
+        currently_stored_info: dict[int, set[int]]
+    ) -> tuple[QuantumCircuit, list[tuple[int, int]]]:
+        donor_qc = QuantumCircuit(circuit.num_qubits)
+        circuit._append(gate, [donor_qc.qubits[i] for i in site], [])
+        return circuit, []
     
    
     def _compute_site(

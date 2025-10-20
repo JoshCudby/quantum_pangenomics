@@ -47,7 +47,7 @@ for filename, copy_numbers in zip(
         'test_N8_W2', 'test_N8_W3','test_N8_W4', 
         'test_N8_W5', 
         'test_N8_W6',
-        'test_N9_W6', 'test_N10_W6','test_N14_W7'
+        # 'test_N9_W6', 'test_N10_W6','test_N14_W7'
     ], 
     [
         [1,1], [1,1,1], [2,1,1], [2,1,1,1],
@@ -57,7 +57,7 @@ for filename, copy_numbers in zip(
         [1,0,0,0,0,0,0,1],[1,1,0,0,0,0,0,1],[1,1,1,0,0,0,0,1],
         [1,1,1,1,0,0,0,1],
         [1,1,0,1,1,1,0,1],
-        [1,1,0,0,1,0,1,1,1], [1,1,0,0,1,0,1,1,0,1], [1,1,0,0,1,0,1,0,0,1,0,0,1,1]
+        # [1,1,0,0,1,0,1,1,1], [1,1,0,0,1,0,1,1,0,1], [1,1,0,0,1,0,1,0,0,1,0,0,1,1]
     ]
 ):
     logger.info('-------------------------------------')
@@ -137,7 +137,7 @@ for filename, copy_numbers in zip(
             layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
 
         qc = QuantumCircuit(num_physical_qubits)
-        qc.append(PauliEvolutionGate(hamiltonian), range(num_physical_qubits))
+        qc.append(PauliEvolutionGate(hamiltonian), [layout.get_virtual_bits()[donor_qc.qubits[i]] for i in range(num_physical_qubits)])
 
         logger.info('Compiling with Rzz')
         tqc = pm.run(qc)
@@ -191,7 +191,7 @@ for filename, copy_numbers in zip(
             layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
 
         qc = QuantumCircuit(num_physical_qubits)
-        qc.append(PauliEvolutionGate(hamiltonian), range(num_physical_qubits))
+        qc.append(PauliEvolutionGate(hamiltonian), [layout.get_virtual_bits()[donor_qc.qubits[i]] for i in range(num_physical_qubits)])
 
         logger.info('Compiling with Rzz')
         tqc = pm.run(qc)
@@ -238,7 +238,7 @@ for filename, copy_numbers in zip(
             layout = Layout({donor_qc.qubits[key]: val for key, val in edge_map.items()})
 
         qc = QuantumCircuit(num_physical_qubits)
-        qc.append(PauliEvolutionGate(hamiltonian), range(num_physical_qubits))
+        qc.append(PauliEvolutionGate(hamiltonian), [layout.get_virtual_bits()[donor_qc.qubits[i]] for i in range(num_physical_qubits)])
 
         logger.info('Compiling with Rz')
         tqc_rz = pm_rz.run(qc)
