@@ -205,18 +205,18 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         edges = [c for c in combinations(all_vertices_in_chain, 2) if self._is_connected(c)]
 
         seq = bfs_shortest_sequence(list(all_vertices_in_chain), edges, currently_stored_info, max_states=1_000_000)
-        if seq is not None:
+        if seq is not None and len(seq) < len(cx_gates):
             for gate in seq:
                 circuit.cx(gate[0], gate[1])
             return
         
-        print('Could not find shortest sequence by BFS, try heuristic')
+        # print('Could not find shortest sequence by BFS, try heuristic')
         seq = heuristic_spanning_tree_solver(list(all_vertices_in_chain), edges, currently_stored_info, max_local_bfs_states=20000)
-        if seq is not None:
+        if seq is not None and len(seq) < len(cx_gates):
             for gate in seq:
                 circuit.cx(gate[0], gate[1])
             return
-        print('Could not find shortest sequence by heuristic')
+        # print('Could not find shortest sequence by heuristic')
         
         for gate in cx_gates[::-1]:
             circuit.cx(gate[0], gate[1])
@@ -238,11 +238,11 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
             coeff = 2 * np.real_if_close(gate.params)[0]
             circuit.rz(coeff, site)
             
-        two_qubit_gate_sites = [key for key in current_layer.keys() if len(key) == 2]
-        for site in two_qubit_gate_sites:
-            gate = current_layer.pop(site)
-            coeff = 2 * np.real_if_close(gate.params)[0]
-            circuit.rzz(coeff, site[0], site[1])
+        # two_qubit_gate_sites = [key for key in current_layer.keys() if len(key) == 2]
+        # for site in two_qubit_gate_sites:
+        #     gate = current_layer.pop(site)
+        #     coeff = 2 * np.real_if_close(gate.params)[0]
+        #     circuit.rzz(coeff, site[0], site[1])
             
         blocked_vertices: set[int] = set()
         
@@ -261,7 +261,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
             final_interaction = None
             index = 0
             
-            while have_chain and index < 30:
+            while have_chain and index < 100:
                 if not all([interaction in current_layer.keys() for interaction in possible_interactions]):
                     raise Exception(f'Bad interaction in: {possible_interactions}. Keys: {current_layer.keys()}')
                 have_chain, applied_cx_gates, final_interaction, applied_extra_interactions = self._precompute_chain(
@@ -279,7 +279,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
                 all_vertices_in_chain = all_vertices_in_chain.union(final_interaction) 
                 index += 1    
                 
-            if index == 30:
+            if index == 100:
                 print(f'{possible_interactions}, {currently_stored_info}')
                 raise Exception('Stuck in while loop?')  
             
@@ -353,6 +353,13 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
             gate = gate_dict.pop(interaction)
             coeff = 2 * np.real_if_close(gate.params)[0]
             circuit.rzz(coeff, qubit1, qubit2)
+            
+            
+        def apply_rz_interaction(qubit: int, interaction: tuple[int,...], interactions_list: list[tuple[int,...]], gate_dict: dict[tuple[int,...], Gate]):
+            interactions_list.remove(interaction)
+            gate = gate_dict.pop(interaction)
+            coeff = 2 * np.real_if_close(gate.params)[0]
+            circuit.rz(coeff, qubit)
 
 
         if ascending and previous_final_interaction is None:
@@ -361,6 +368,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         
         cx_gates = []
         final_interaction = ()
+        applied_extra_interactions = []
         
         # Start by finding the endpoint of the chain
         cx_qubits, final_interaction = find_final_interaction(available_interactions)
@@ -370,7 +378,16 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         if cx_qubits is None or final_interaction is None:
             # No chain
             return False, cx_gates, (), []
-                        
+        
+        if len(cx_qubits) == 2:
+            if final_interaction in available_interactions: 
+                apply_interaction(cx_qubits[0], cx_qubits[1], final_interaction, available_interactions, current_layer)
+            elif final_interaction in extra_interactions: 
+                apply_interaction(cx_qubits[0], cx_qubits[1], final_interaction, extra_interactions, impossible_gates)
+                applied_extra_interactions.append(final_interaction)
+            else:
+                raise Exception(f'Bad CX qubits: {cx_qubits}')
+            return True, [], final_interaction, applied_extra_interactions           
         
         # Find the best set of interactions to fill in the chain
         # ie find the CX network to build final_interaction from first_interaction
@@ -396,7 +413,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
                         list(currently_stored_info_copy[cx[1]].symmetric_difference(currently_stored_info_copy[neighbour]))
                     ))
                     for neighbour in neighbours
-                ]
+                ] + [tuple(sorted(currently_stored_info_copy[cx[1]]))]
                 for interaction in possible_interactions:
                     if interaction in all_interactions: 
                         num_interactions += 1
@@ -405,17 +422,31 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
                 best_num_interactions = num_interactions
         
         if best_sequence is None:
+            print(cx_qubits, list(possible_cx_sequences))
             raise Exception('Failed to find best sequence of CX gates')
         
         
         # Apply that sequence
-        applied_extra_interactions = []
-        for cx in best_sequence:
+        
+        for idx, cx in enumerate(best_sequence):
             circuit.cx(cx[0], cx[1])
             currently_stored_info[cx[1]] = currently_stored_info[cx[1]].symmetric_difference(currently_stored_info[cx[0]])
             
+            if (interaction := tuple(sorted(currently_stored_info[cx[1]]))) in available_interactions:
+                print(f'Rz interaction: {interaction}')
+                apply_rz_interaction(cx[1], interaction, available_interactions, current_layer)
+            elif interaction in extra_interactions:
+                print(f'Rz interaction: {interaction}')
+                apply_rz_interaction(cx[1], interaction, extra_interactions, impossible_gates)
+            
+            # Don't include the neighbour we just CX'd from, or the one we are about to CX to
+            next_pair = best_sequence[idx+1] if idx < len(best_sequence) - 1 else (None, None)
+            neighbours = [
+                x for x in range(circuit.num_qubits) 
+                if (not (x == cx[0] or (cx[1], x) == next_pair)) 
+                and self._is_connected((x, cx[1]))
+            ]
             # Need to sort these tuples!
-            neighbours = [x for x in range(circuit.num_qubits) if self._is_connected((x, cx[1]))]
             possible_interactions = [
                 (
                     neighbour, 

@@ -10,8 +10,15 @@ def sort_by_length(items: list[set[int]], max_val: int, ascending: bool = True) 
 def sort_by_length(items: list[tuple[int,...]], max_val: int, ascending: bool = True) -> list[tuple[int,...]]:
     pass
 
+
 def sort_by_length(items, max_val: int, ascending: bool = True):
-    return sorted(items, key=lambda e: (1 if ascending else -1) * sum(max_val**i * list(e)[-i] for i in range(len(e))))
+    def key(e):
+        le = list(e)
+        acc = 0
+        for i in range(len(le)):
+            acc += (max_val ** i) * le[-i-1]
+        return acc if ascending else -acc
+    return sorted(items, key=key)
 
 
 def _bfs_connected(remaining: Set[int], adj: Dict[int, Set[int]]) -> bool:
@@ -61,8 +68,8 @@ def enumerate_removal_pair_sequences(
     """
     V = list(vertices)
     n = len(V)
-    if stop_at < 0 or stop_at > n:
-        raise ValueError("stop_at must be between 0 and number of vertices")
+    if stop_at < 1 or stop_at > n:
+        raise ValueError("stop_at must be between 1 and number of vertices")
 
     adjacency: Dict[int, Set[int]] = {v: set() for v in V}
     for a, b in edges:
@@ -254,19 +261,6 @@ def bfs_shortest_sequence(
 # -----------------------
 # GF(2) / matrix & elimination helpers
 # -----------------------
-def labels_to_bitrows(vertices: List, labels: Dict) -> List[int]:
-    """Map labels (sets of vertices) to bitmask rows in same vertex index order.
-    Convention: bit i corresponds to vertices[i] (LSB=index 0)."""
-    index = {v: i for i, v in enumerate(vertices)}
-    rows = []
-    for v in vertices:
-        mask = 0
-        for u in labels[v]:
-            if u not in index:
-                raise KeyError(f"Label contains unknown vertex {u}")
-            mask |= (1 << index[u])
-        rows.append(mask)
-    return rows
 
 def bitrows_to_labels(vertices: List, rows: List[int]) -> Dict:
     idx_to_v = {i: v for i, v in enumerate(vertices)}
@@ -324,10 +318,12 @@ def gaussian_elimination_record_ops(rows: List[int]) -> Tuple[Optional[List[Tupl
         return None, rows
     # A should now be the identity matrix with row i == (1 << i)
     return ops, A
+
+
 # -----------------------
 # Graph helpers 
 # -----------------------
-def build_adjacency(vertices: List, edges: Iterable[Tuple]) -> Dict[int, Set[int]]:
+def build_adjacency(vertices: List[int], edges: Iterable[Tuple[int,int]]) -> Dict[int, Set[int]]:
     idx = {v:i for i,v in enumerate(vertices)}
     n = len(vertices)
     adj = {i:set() for i in range(n)}
@@ -338,6 +334,7 @@ def build_adjacency(vertices: List, edges: Iterable[Tuple]) -> Dict[int, Set[int
         adj[ia].add(ib)
         adj[ib].add(ia)
     return adj
+
 
 def spanning_tree_bfs(adj: Dict[int, Set[int]], root: int = 0) -> List[Tuple[int,int]]:
     parent = {root: None}
@@ -353,6 +350,7 @@ def spanning_tree_bfs(adj: Dict[int, Set[int]], root: int = 0) -> List[Tuple[int
     if len(parent) != len(adj):
         raise ValueError(f"graph not connected: {adj}")
     return tree_edges
+
 
 def path_in_tree(tree_adj: Dict[int, Set[int]], a: int, b: int) -> List[int]:
     q = deque([a])
@@ -435,10 +433,13 @@ def synthesize_op_on_path(
 # -----------------------
 # Heuristic spanning-tree solver
 # -----------------------
-def heuristic_spanning_tree_solver(vertices: List, edges: Iterable[Tuple], labels: Dict,
-                                   max_local_bfs_states: int = 50000,
-                                   spanning_tree_edges: Optional[List[Tuple[int,int]]] = None
-                                  ) -> Optional[List[Tuple[int,int]]]:
+def heuristic_spanning_tree_solver(
+    vertices: List[int],
+    edges: Iterable[Tuple[int, int]], 
+    labels: Dict[int, set[int]],
+    max_local_bfs_states: int = 50000,
+    spanning_tree_edges: Optional[List[Tuple[int,int]]] = None
+) -> Optional[List[Tuple[int,int]]]:
     n = len(vertices)
     adj = build_adjacency(vertices, edges)
     rows = labels_to_bitrows(vertices, labels)
@@ -451,7 +452,7 @@ def heuristic_spanning_tree_solver(vertices: List, edges: Iterable[Tuple], label
 
     if spanning_tree_edges is None:
         try:
-            tree_edges = spanning_tree_bfs(adj, root=0)
+            tree_edges = spanning_tree_bfs(adj, root=vertices[0])
         except ValueError:
             print('Could not find spanning tree')
             return None
@@ -500,9 +501,12 @@ def heuristic_spanning_tree_solver(vertices: List, edges: Iterable[Tuple], label
                 continue
             path = path_in_tree(tree_adj, a, b)
             if not path:
+                print('No path')
                 return None
+            # acts = iddfs_synthesize_op_on_path(path, cur_rows, (a, b), max_states=max_local_bfs_states)
             acts = synthesize_op_on_path(path, cur_rows, (a,b), max_states=max_local_bfs_states)
             if acts is None:
+                print('No acts')
                 return None
             for (u,v) in acts:
                 apply_adj_op(u,v)
@@ -523,10 +527,185 @@ def heuristic_spanning_tree_solver(vertices: List, edges: Iterable[Tuple], label
                 i += 1
         return vertex_ops
     else:
-        print('Failed to reach identity in heurstic tree solver')
+        print('Failed to reach identity in heuristic tree solver')
         print(cur_rows)
         print(target_rows)
         # failed to reach identity
         return None
 
 
+def iddfs_synthesize_op_on_path(
+    path: List[int],
+    full_rows: List[int],
+    goal_delta: Tuple[int,int],
+    max_states: int = 50000,
+    max_depth_limit: Optional[int] = None
+) -> Optional[List[Tuple[int,int]]]:
+    """
+    IDDFS-based synthesis of a single row XOR (target := target ^ source) confined to operations
+    between neighbors along `path`. Returns a list of adjacency ops (u,v) where each op means
+    row[u] ^= row[v]. If no sequence is found within `max_states` or depth limits, returns None.
+    """
+    index_in_path = {node:i for i,node in enumerate(path)}
+    orig = tuple(full_rows[node] for node in path)
+    # compute desired state on the path (only the target index changes)
+    target_idx_in_path = index_in_path[goal_delta[0]]
+    source_idx_in_path = index_in_path[goal_delta[1]]
+    desired = list(orig)
+    desired[target_idx_in_path] = orig[target_idx_in_path] ^ orig[source_idx_in_path]
+    desired = tuple(desired)
+
+    # Tight check: if already equal, return empty sequence immediately
+    if orig == desired:
+        return []
+
+    # Build local actions: directional adjacency along the path
+    actions = []
+    for t in range(len(path)-1):
+        u = path[t]; v = path[t+1]
+        actions.append((u,v))
+        actions.append((v,u))
+
+    # default max depth if not provided: scale with path length
+    if max_depth_limit is None:
+        max_depth_limit = max(6, len(path) * 4)
+
+    states_seen = 0
+
+    def dfs(state: Tuple[int,...], depth: int, limit: int,
+            path_actions: List[Tuple[int,int]], seen: Set[Tuple[int,...]]) -> Optional[List[Tuple[int,int]]]:
+        nonlocal states_seen
+        if states_seen >= max_states:
+            return None
+        if state == desired:
+            return list(path_actions)
+        if depth == limit:
+            return None
+
+        # simple ordering: prefer actions that make the affected row equal to its target single-bit row
+        def score_act(act):
+            u,v = act
+            iu = index_in_path[u]; iv = index_in_path[v]
+            new_row = state[iu] ^ state[iv]
+            # prefer if new_row equals the desired row at iu
+            return 1 if new_row == desired[iu] else 0
+
+        ordered = sorted(actions, key=lambda a: -score_act(a))
+        for (u,v) in ordered:
+            iu = index_in_path[u]; iv = index_in_path[v]
+            new_list = list(state)
+            new_list[iu] = new_list[iu] ^ new_list[iv]
+            new_state = tuple(new_list)
+            states_seen += 1
+            if new_state in seen:
+                continue
+            seen.add(new_state)
+            path_actions.append((u,v))
+            res = dfs(new_state, depth+1, limit, path_actions, seen)
+            if res is not None:
+                return res
+            path_actions.pop()
+            seen.remove(new_state)
+            if states_seen >= max_states:
+                return None
+        return None
+
+    # Iterative deepening
+    for limit in range(1, max_depth_limit + 1):
+        res = dfs(orig, 0, limit, [], {orig})
+        if res is not None:
+            return res
+        if states_seen >= max_states:
+            return None
+    return None
+
+
+def iddfs_shortest_sequence(
+    vertices: List,
+    edges: Iterable[Tuple],
+    labels: Dict,
+    max_states: Optional[int] = 5_000_000,
+    max_depth_limit: Optional[int] = None
+) -> Optional[List[Tuple]]:
+    """
+    IDDFS-based replacement.
+    Attempts depth-limited DFS (iterative deepening) over the global state space of rows.
+    Returns a sequence of (v,u) in terms of vertex objects from `vertices`, or None if not found
+    within the given max_states or max depth.
+    """
+    index = {v: i for i, v in enumerate(vertices)}
+    n = len(vertices)
+    adj = {i: set() for i in range(n)}
+    for a, b in edges:
+        if a not in index or b not in index:
+            raise KeyError("edge references unknown vertex")
+        ia, ib = index[a], index[b]
+        adj[ia].add(ib)
+        adj[ib].add(ia)
+
+    # convert labels to rows (bitmasks)
+    rows = labels_to_bitrows(vertices, labels)
+    # quick rank check
+    if gf2_rank(rows, n) < n:
+        return None  # impossible
+
+    start = tuple(rows)
+    goal = tuple(1 << i for i in range(n))
+
+    # trivial case
+    if start == goal:
+        return []
+
+    # actions are all directed adjacency operations (i,j) meaning row_i ^= row_j
+    actions = [(i, j) for i in range(n) for j in adj[i]]
+
+    # default max depth limit if not provided
+    if max_depth_limit is None:
+        max_depth_limit = max(8, n * 4)
+
+    states_seen = 0
+
+    def dfs(state: Tuple[int,...], depth: int, limit: int,
+            path_actions: List[Tuple[int,int]], seen: Set[Tuple[int,...]]) -> Optional[List[Tuple[int,int]]]:
+        nonlocal states_seen
+        if states_seen >= (max_states if max_states is not None else 10**12):
+            return None
+        if state == goal:
+            return list(path_actions)
+        if depth == limit:
+            return None
+
+        # heuristic ordering: prefer ops that make the affected row equal to its target identity row
+        def score_op(op):
+            i,j = op
+            new_row = state[i] ^ state[j]
+            return 1 if new_row == (1 << i) else 0
+
+        ordered = sorted(actions, key=lambda op: -score_op(op))
+        for (i,j) in ordered:
+            new_list = list(state)
+            new_list[i] = new_list[i] ^ new_list[j]
+            new_state = tuple(new_list)
+            states_seen += 1
+            if new_state in seen:
+                continue
+            seen.add(new_state)
+            path_actions.append((i,j))
+            res = dfs(new_state, depth+1, limit, path_actions, seen)
+            if res is not None:
+                return res
+            path_actions.pop()
+            seen.remove(new_state)
+            if states_seen >= (max_states if max_states is not None else 10**12):
+                return None
+        return None
+
+    for limit in range(1, max_depth_limit + 1):
+        res = dfs(start, 0, limit, [], {start})
+        if res is not None:
+            # translate to original API: (i,j) -> (vertices[j], vertices[i])
+            return [(vertices[j], vertices[i]) for (i,j) in res]
+        if states_seen >= (max_states if max_states is not None else 10**12):
+            return None
+
+    return None
