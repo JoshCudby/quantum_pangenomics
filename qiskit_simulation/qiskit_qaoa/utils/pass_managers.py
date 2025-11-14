@@ -7,6 +7,7 @@ from qopt_best_practices.transpilation.swap_cancellation_pass import SwapToFinal
 
 from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, FindCommutingPauliEvolutionsMulti
 from qiskit_qaoa.utils.commuting_gate_router import CommutingGateRouter
+from qiskit_qaoa.utils.commuting_gate_router_precompute_rzz import CommutingGateRouterPrecomputeRzz
 
 
 def get_hubo_pass_manager(
@@ -17,10 +18,10 @@ def get_hubo_pass_manager(
     return PassManager(
         [
             FindCommutingPauliEvolutionsMulti(), 
-            CommutingGateRouter(
+            CommutingGateRouterPrecomputeRzz(
                 extended_swap_strat,
                 max_layers=max_layers,
-                perform_extra_swaps=perform_extra_swaps
+                perform_extra_swaps=perform_extra_swaps                
             ),
             SwapToFinalMapping(),
             InverseCancellation(gates_to_cancel=[CXGate()]),

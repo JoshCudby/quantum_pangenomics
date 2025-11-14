@@ -187,7 +187,7 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None, penaltie
             if (nodes[2 * i + bi], nodes[2 * j + bj]) not in graph.edges:
                 qubo_matrix[t, i, bi, t+1, j, bj] += lambda_g
         for i, bi in product(range(V), range(2)):
-            qubo_matrix[t, V, 0, t+1, i, bi] += 5 * lambda_g
+            qubo_matrix[t, V, 0, t+1, i, bi] += lambda_g
             if exist_end_nodes:
                 if i not in end_nodes:
                     qubo_matrix[t, i, bi, t+1, V, 0] += lambda_g

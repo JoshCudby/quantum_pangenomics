@@ -199,19 +199,22 @@ class CommutingGateRouterPrecompute(TransformationPass):
     ):
         edges = [c for c in combinations(all_vertices_in_chain, 2) if self._is_connected(c)]
 
-        seq = bfs_shortest_sequence(list(all_vertices_in_chain), edges, currently_stored_info, max_states=1_000_000)
-        if seq is not None:
-            for gate in seq:
-                circuit.cx(gate[0], gate[1])
-            return
+        try:
+            seq = bfs_shortest_sequence(list(all_vertices_in_chain), edges, currently_stored_info, max_states=100000)
+            if seq is not None:
+                for gate in seq:
+                    circuit.cx(gate[0], gate[1])
+                return
         
-        # print('Could not find shortest sequence by BFS, try heuristic')
-        seq = heuristic_spanning_tree_solver(list(all_vertices_in_chain), edges, currently_stored_info, max_local_bfs_states=20000)
-        if seq is not None:
-            for gate in seq:
-                circuit.cx(gate[0], gate[1])
-            return
-        # print('Could not find shortest sequence by heuristic')
+            # print('Could not find shortest sequence by BFS, try heuristic')
+            seq = heuristic_spanning_tree_solver(list(all_vertices_in_chain), edges, currently_stored_info, max_local_bfs_states=2000)
+            if seq is not None:
+                for gate in seq:
+                    circuit.cx(gate[0], gate[1])
+                return
+            # print('Could not find shortest sequence by heuristic')
+        except Exception:
+            pass   
         
         for gate in cx_gates[::-1]:
             circuit.cx(gate[0], gate[1])

@@ -16,7 +16,6 @@ logger = get_logger(__name__)
 
 def circuit_to_graph(qc: QuantumCircuit, parameter) -> nx.Graph:
     """"QAOA Cost operator as a circuit to a graph"""
-    logger.info(parameter)
     qreg = qc.qregs[0]
     graph, edges = nx.Graph(), []
     graph.add_nodes_from(range(len(qreg)))

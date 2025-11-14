@@ -58,7 +58,7 @@ outdir="$SCRATCH/hubo/order4"
 echo "HUBO Testing"
 bsub -J "optimize_hubo" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no" -M "$memory"\
  -o "$outdir/$filename.%J" -e "$outdir/error.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/hubo_optimisation.py -f $filename -p $reps -m $memory -n $shots --init $init -d $swap_depth -R $rows -C $cols -e 0"
+ "python3 $WORKING_DIR/hubo_optimisation.py -f $filename -p $reps -m $memory -n $shots --init $init -d $swap_depth -R $rows -C $cols -e 1"
 
 exit 0
 

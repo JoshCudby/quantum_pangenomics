@@ -403,10 +403,13 @@ class CommutingGateRouter(TransformationPass):
         if not isinstance(gate, PauliEvolutionGate):
             raise Exception(f'Expected PauliEvolutionGate, got {gate}')
         
+        # circuit.append(gate, site)
+        # return circuit, []
+        
         missing_information = currently_stored_info[rotation_site].symmetric_difference(set(site))
         initial_missing_information = currently_stored_info[rotation_site].symmetric_difference(set(site))
         cx_gates = []
-        iter = 0
+        iter = 0        
         
         # print(f'Computing site: {site} onto {rotation_site} with coeff: {2 * np.real_if_close(gate.params)[0]}. Missing info: {missing_information}. Stored info: {currently_stored_info}')
         while len(missing_information) > 0 and iter <= 10:

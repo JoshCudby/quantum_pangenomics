@@ -3,55 +3,42 @@ import numpy as np
 import matplotlib.pyplot as plt
 from time import time
 from collections import Counter
+import argparse
 
-from qiskit_qaoa.utils.argparser import get_parser
 from qiskit_qaoa.utils.logging import get_logger
 from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
 
 
-"""
-TODO:
-
-was trying to get sensible parameters for hardware runs. using trivial .gfa.
-Histograms look weird when plotted with 'real' QUBO energy values rather than normalised Hamiltonian energy samples
-optimized params, singles and doubles are stored in /lustre/scratch127/qpg/jc59/out/qiskit/cvar/test_N3_W4_cvar.p2.shots1000.hardwareFalse.noisyFalse.initramp.pkl 
-to recreate the plot from the paper.
-so could undo all changes to the plotting and just run that experiment on hardware.
-
-
-Or use the new results from trivial runs. 
-"""
-
-
 logger = get_logger(__name__)
-parser = get_parser()
-args = parser.parse_args()
+parser = argparse.ArgumentParser()
 
-logger.info(args)
+parser.add_argument('-f', '--filename')
+parser.add_argument('-p', '--reps', type=int)
+parser.add_argument('-M', '--method', type=str, default='COBYLA')
+parser.add_argument('-n', '--shots', type=int)
+parser.add_argument('-i', '--max_iter', type=int)
+parser.add_argument('-a', '--alpha', type=float, default=0.25)
+parser.add_argument('--init', choices=['ramp', 'random', 'fixed'], default='random')
+args = parser.parse_args()
 
 filename = args.filename
 p: int = args.reps
-hardware = args.hardware
 shots = args.shots
-noisy = args.noisy
 init_type = args.init
+max_iter = args.max_iter
 alpha = args.alpha
+
 
 data_file = f'/lustre/scratch127/qpg/jc59/out/oriented/qubo_data_{filename}.gfa.pkl'
 Q, _, offset, _ = get_Q_and_hamiltonian(data_file)
 
-if args.method != '':
-    filename_suffix = f'alpha{alpha}.p{p}.shots{shots}.method{args.method}.hardware{hardware}.noisy{noisy}.init{init_type}'
-else:
-    filename_suffix = f'p{p}.shots{shots}.hardware{hardware}.noisy{noisy}.init{init_type}'
+filename_suffix = f'error_miti.alpha{alpha}.p{p}.shots{shots}.method{args.method}.max_iter{max_iter}.init{init_type}'
 
-with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/cvar_new/{filename}_cvar.{filename_suffix}.pkl', 'rb') as f:
+
+with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/cvar_new/hardware/{filename}_cvar.{filename_suffix}.pkl', 'rb') as f:
     data = pickle.load(f)
     
 history = data["history"]
-singles = data["singles"]
-doubles = data["doubles"]
-sat_map = data["sat_map"]
 cost_op = data["cost_op"]
 best_func_val = data["best_func_val"]
 best_samples = data["best_samples"]
@@ -65,7 +52,7 @@ axs.set_ylabel('Objective value')
 
 
 fig.tight_layout()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/qubo_new/{filename}.convergence.{filename_suffix}.png')
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/qubo_new/hardware/{filename}.convergence.{filename_suffix}.png')
 
 min_val = 0
 
@@ -88,32 +75,22 @@ evals = np.array([
 energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
 sample_vals = np.array([x for xs in energies for x in xs])
 
-# evals = evaluate_sparse_pauli_samples(counts.keys(), cost_op) + offset
-# energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
-# sample_vals = [x for xs in energies for x in xs]
+
 elapsed = time() - start
 logger.info(f'Time to compute energies {elapsed}')
 counter = Counter(sample_vals)
 print(counter.most_common(10))
+for x in sorted(evals)[:5]:
+    print(x, counter[x])
 
-print(len(evals), len(int_samples))
-evals, int_samples = zip(*sorted(zip(evals, int_samples), key=lambda e: e[0]))
-for x in range(7):
-    print(int_samples[x], evals[x], counts[''.join([str(y) for y in int_samples[x]])[::-1]], counter[evals[x]])
-
-
-# random_samples = np.random.choice(('0', '1'), (sum(history[-1][3].values()), n))
-# rand_vals = evaluate_sparse_pauli_samples([''.join(sample) for sample in random_samples], cost_op) + offset
 
 random_samples = np.random.choice((0, 1), (num_samples, n))
 rand_vals = np.array([
     sample @ Q @ sample for sample in random_samples
 ]) + offset
 rand_counter = Counter(rand_vals)
-rand_vals, random_samples = zip(*sorted(zip(rand_vals, random_samples), key=lambda e: e[0]))
-rand_vals = np.array(rand_vals)
-for x in range(7):
-    print(random_samples[x], rand_vals[x], rand_counter[rand_vals[x]])
+for x in sorted(rand_vals)[:5]:
+    print(x, rand_counter[x])
 
 fig, axs = plt.subplots(1,1,figsize=(8, 5))
 print(f'Max val: {np.max(list(counter.keys()) + list(rand_counter.keys()))}')
@@ -124,8 +101,8 @@ bins = np.logspace(0, np.log10(np.max([np.max(sample_vals+1), np.max(rand_vals+1
 # bins = sorted(list(set(np.ceil(bins))))
 # print(bins)
 
-# hist_counts, hist_bins = np.histogram(sample_vals+1, bins, density=False)
-# print(hist_counts, hist_bins)
+hist_counts, hist_bins = np.histogram(sample_vals+1, bins, density=False)
+print(hist_counts, hist_bins)
 
 # axs.set_ylim(0, max([counter.most_common(1)[0][1], rand_counter.most_common(1)[0][1]])/sum(counts.values()))
 axs.hist(sample_vals+1, bins=bins, label='QAOA samples at last iter', density=False, weights=[1/num_samples]*num_samples)
@@ -148,4 +125,4 @@ axs.set_ylabel("Sample density")
 axs.set_xscale('log')
 
 fig.tight_layout()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/qubo_new/{filename}.histogram.{filename_suffix}.png')
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/qubo_new/hardware/{filename}.histogram.{filename_suffix}.png')

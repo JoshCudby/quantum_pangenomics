@@ -314,7 +314,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         allowed_number_of_cx: int
     ) -> tuple[int,...] | None:
         i = 1
-        while i < allowed_number_of_cx + 2:
+        while i < allowed_number_of_cx + 3:
             for cx_qubits in combinations(range(self._num_qubits), i):
                 if reduce(
                     set.symmetric_difference,
@@ -337,11 +337,14 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         impossible_gates: dict[tuple[int,...], Gate],
         circuit: QuantumCircuit
     ) -> tuple[bool, list[tuple[int, int]], tuple[int,...], list[tuple[int,...]]]:     
-        def find_final_interaction(interactions) -> tuple[Optional[tuple[int,...]], Optional[tuple[int,...]]]:
+        def find_final_interaction(interactions, offset=0) -> tuple[Optional[tuple[int,...]], Optional[tuple[int,...]]]:
             cx_qubits, final_interaction = None, None
             for interaction in sort_by_length(interactions, circuit.num_qubits, ascending=ascending):
-                allowed_num_cx = len(interaction) - 1 if previous_final_interaction is None else np.abs(len(previous_final_interaction) - len(interaction))
+                allowed_num_cx = (
+                    len(interaction) - 1 if previous_final_interaction is None else np.abs(len(previous_final_interaction) - len(interaction))
+                ) + offset
                 cx_qubits = self._is_implementable_in_linear_cx_depth(interaction, currently_stored_info, allowed_num_cx)
+                print(interaction, allowed_num_cx, cx_qubits)
                 if cx_qubits is not None and (not ascending or set(interaction).issubset(previous_final_interaction)): # type: ignore
                     final_interaction = interaction
                     break
@@ -373,7 +376,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         # Start by finding the endpoint of the chain
         cx_qubits, final_interaction = find_final_interaction(available_interactions)
         if cx_qubits is None:
-            cx_qubits, final_interaction = find_final_interaction(extra_interactions)           
+            cx_qubits, final_interaction = find_final_interaction(extra_interactions, offset=1)           
             
         if cx_qubits is None or final_interaction is None:
             # No chain
@@ -456,6 +459,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
                 )
                 for neighbour in neighbours
             ]
+            print(cx, possible_interactions)
             for neighbour, interaction in possible_interactions:
                 if interaction in available_interactions: 
                     apply_interaction(cx[1], neighbour, interaction, available_interactions, current_layer)

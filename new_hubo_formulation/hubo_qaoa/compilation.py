@@ -14,8 +14,8 @@ from qiskit_aer.backends.backendconfiguration import AerBackendConfiguration
 
 from qiskit.quantum_info import SparsePauliOp
 
-from qiskit_qaoa.hubo.graph_to_hubo_hamiltonian import graph_to_hubo_hamiltonian
-from qiskit_qaoa.utils.gfa_utils import gfa_file_to_graph
+from hubo_qaoa.utils.graph_to_hubo_hamiltonian import graph_to_hubo_hamiltonian
+from hubo_qaoa.utils.gfa_utils import gfa_file_to_graph
 from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
 from qiskit_qaoa.utils.hamiltonian_utils import hamiltonian_to_interactions
 from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy
@@ -51,8 +51,9 @@ def print_circuit_info(qc: QuantumCircuit, circuit_name: str):
     
     
 filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{args.filename}.gfa'
-graph, n, V, T = gfa_file_to_graph(filepath, args.copy_numbers)
-num_qubits = n * T
+graph, n, V, total_weight = gfa_file_to_graph(filepath, args.copy_numbers)
+# TODO: search over T near to total_weight
+num_qubits = n * total_weight
 logger.info(f'Virtual qubits: {num_qubits}')
 
 
