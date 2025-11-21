@@ -2,11 +2,11 @@
 import numpy as np
 import pickle
 import argparse
-from scipy.optimize import minimize, OptimizeResult, basinhopping
+from scipy.optimize import minimize, OptimizeResult
 
 from itertools import product
 
-from qiskit import QuantumCircuit, generate_preset_pass_manager
+from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter
 from qiskit.circuit.library import PauliEvolutionGate, CXGate
 from qiskit.converters import dag_to_circuit, circuit_to_dag
@@ -41,8 +41,6 @@ parser.add_argument('-f', '--filename')
 parser.add_argument('-M', '--method', type=str, default="COBYLA")
 parser.add_argument('-p', '--reps', type=int, default=4)
 parser.add_argument('-m', '--memory', type=int, default=16000)
-parser.add_argument('-N', '--nodes', type=int)
-parser.add_argument('-T', '--time', type=int)
 parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
     type=lambda s: [float(item) for item in s.split(',') if len(item)])
 
@@ -52,21 +50,22 @@ logger.info(args)
 
 filename: str = args.filename
 p: int = args.reps
-N: int = args.nodes
-T: int = args.time
 copy_numbers: list[float] = args.copy_numbers
-n = int(np.ceil(np.log2(2*N+1)))
-
 seed = 1
 rng = np.random.default_rng()
 
 basis_gates=["sx", "x", "rz", "rzz", "cz", "id", "swap", "cx", "h"]
 
+filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{filename}.gfa'
+graph, n, V, T = gfa_file_to_graph(filepath, copy_numbers)
 
+full_hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=1.0)
+num_qubits = n * T
 extended_swap_strat = ExtendedSwapStrategy.from_all_to_all(n * T)
 
 num_physical_qubits = extended_swap_strat._num_vertices
 coupling_map = extended_swap_strat._coupling_map
+
 
 backend_options = dict(
     method='statevector',
@@ -75,7 +74,6 @@ backend_options = dict(
     precision='single',
     basis_gates=basis_gates,
 )
-
 config = AerSimulator._DEFAULT_CONFIGURATION
 config["n_qubits"] = num_physical_qubits
 config["basis_gates"] = basis_gates
@@ -83,14 +81,6 @@ config = AerBackendConfiguration.from_dict(config)
 backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map, **backend_options)
 backend.set_option("n_qubits", num_physical_qubits)
 logger.info(f'Num qubits in backend: {backend.configuration().to_dict()["n_qubits"]}')
-
-
-filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{filename}.gfa'
-graph, n, V, T = gfa_file_to_graph(filepath, copy_numbers)
-
-full_hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=1.0)
-num_qubits = n * T
-
 
 
 pm_rz = PassManager(
@@ -179,19 +169,34 @@ def objective(x: np.ndarray):
     return score
 
 
-resolution = 3
-while resolution ** (2*p) < 1000:
-    resolution += 1
+beta_resolution, gamma_resolution = 30, 30
+while (beta_resolution ** p) * (gamma_resolution ** p) > 1000:
+    if beta_resolution == gamma_resolution:
+        beta_resolution -= 1
+    else:
+        gamma_resolution -= 1
+        
 results = []
-for param in product(np.linspace(0.01, 0.99, resolution), repeat=2*p):
+params = [
+    x[0] + x[1] 
+    for x in product(
+        product(np.linspace(0 + np.pi/(2*beta_resolution), np.pi - np.pi/(2*beta_resolution), beta_resolution), repeat=p), 
+        product(np.linspace(-np.pi + np.pi/(gamma_resolution), np.pi - np.pi/(gamma_resolution), gamma_resolution), repeat=p)
+    )
+]
+
+logger.info('Starting optimisation sweep')
+for idx, param in enumerate(params):
     results.append(minimize(
         objective, 
         x0=param, 
         method=args.method, 
-        bounds=tuple((0,1) for _ in range(2 * p)), 
-        options={"maxiter": 300, "rhobeg": 1/(2*resolution)},  # , "ftol": 1e-7
+        bounds=tuple((0, np.pi) for _ in range(p)) +tuple((-np.pi, np.pi) for _ in range(p)), 
+        options={"maxiter": 300, "rhobeg": 1/(3*gamma_resolution)},  # , "ftol": 1e-7
         # callback=callback if args.method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
     ))
+    if idx % 100 == 99:
+        logger.info(f'Completed search number {idx}')
 
 
 obj_to_dump = dict(

@@ -66,7 +66,6 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
                 accumulator.apply_operation_back(node.op, node.qargs, node.cargs)
         
         print(f'Gates we cannot directly implement: {len(self._cannot_implement)}')
-        print([tuple(sorted([dag.find_bit(sub_node.qargs[i]).index for i in range(len(sub_node.qargs))])) for sub_node in self._cannot_implement])
         
         if self._perform_extra_swaps:
             for sub_node in self._cannot_implement:
@@ -204,19 +203,25 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
     ):
         edges = [c for c in combinations(all_vertices_in_chain, 2) if self._is_connected(c)]
 
-        seq = bfs_shortest_sequence(list(all_vertices_in_chain), edges, currently_stored_info, max_states=1_000_000)
-        if seq is not None and len(seq) < len(cx_gates):
-            for gate in seq:
-                circuit.cx(gate[0], gate[1])
-            return
-        
-        # print('Could not find shortest sequence by BFS, try heuristic')
-        seq = heuristic_spanning_tree_solver(list(all_vertices_in_chain), edges, currently_stored_info, max_local_bfs_states=20000)
-        if seq is not None and len(seq) < len(cx_gates):
-            for gate in seq:
-                circuit.cx(gate[0], gate[1])
-            return
-        # print('Could not find shortest sequence by heuristic')
+        try:
+            if circuit.num_qubits > 20:
+                raise Exception('Too large - skip')
+            seq = bfs_shortest_sequence(list(all_vertices_in_chain), edges, currently_stored_info, max_states=100000)
+            if seq is not None and len(seq) < len(cx_gates):
+                for gate in seq:
+                    circuit.cx(gate[0], gate[1])
+                return
+            
+            # print('Could not find shortest sequence by BFS, try heuristic')
+            seq = heuristic_spanning_tree_solver(list(all_vertices_in_chain), edges, currently_stored_info, max_local_bfs_states=2000)
+            if seq is not None and len(seq) < len(cx_gates):
+                for gate in seq:
+                    circuit.cx(gate[0], gate[1])
+                return
+            # print('Could not find shortest sequence by heuristic')
+        except Exception as e:
+            print(f'Error in bfs or heuristic: {e}')
+            pass
         
         for gate in cx_gates[::-1]:
             circuit.cx(gate[0], gate[1])
@@ -251,6 +256,9 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         
         extra_interactions: list[tuple[int,...]] = list(impossible_gates.keys())
         used_extra_interactions = []
+        
+        currently_stored_info = {}
+        
         
         max_iter = len(possible_interactions)
         iter = 0
@@ -344,7 +352,6 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
                     len(interaction) - 1 if previous_final_interaction is None else np.abs(len(previous_final_interaction) - len(interaction))
                 ) + offset
                 cx_qubits = self._is_implementable_in_linear_cx_depth(interaction, currently_stored_info, allowed_num_cx)
-                print(interaction, allowed_num_cx, cx_qubits)
                 if cx_qubits is not None and (not ascending or set(interaction).issubset(previous_final_interaction)): # type: ignore
                     final_interaction = interaction
                     break
@@ -436,10 +443,8 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
             currently_stored_info[cx[1]] = currently_stored_info[cx[1]].symmetric_difference(currently_stored_info[cx[0]])
             
             if (interaction := tuple(sorted(currently_stored_info[cx[1]]))) in available_interactions:
-                print(f'Rz interaction: {interaction}')
                 apply_rz_interaction(cx[1], interaction, available_interactions, current_layer)
             elif interaction in extra_interactions:
-                print(f'Rz interaction: {interaction}')
                 apply_rz_interaction(cx[1], interaction, extra_interactions, impossible_gates)
             
             # Don't include the neighbour we just CX'd from, or the one we are about to CX to
@@ -459,7 +464,6 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
                 )
                 for neighbour in neighbours
             ]
-            print(cx, possible_interactions)
             for neighbour, interaction in possible_interactions:
                 if interaction in available_interactions: 
                     apply_interaction(cx[1], neighbour, interaction, available_interactions, current_layer)

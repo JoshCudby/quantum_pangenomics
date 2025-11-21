@@ -22,12 +22,6 @@ while [ "$1" != "" ]; do
         -c | --copy_numbers )   shift
                                 copy_numbers="$1"
                                 ;;
-        -N )                    shift
-                                nodes="$1"
-                                ;;
-        -T )                    shift
-                                time="$1"
-                                ;;
         -h | --help )           usage
                                 exit
                                 ;;
@@ -48,8 +42,8 @@ outdir="$SCRATCH/out/qiskit/hubo_no_shot_noise_optimum"
 
 # Qiskit Testing
 echo "Qiskit Testing"
-bsub -J "hubo_no_noise.$filename.$reps" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=1:aff=no:j_exclusive=yes" -M "$memory"\
+bsub -J "hubo_no_noise.$filename.$reps" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu - -M "$memory"\
  -o "$outdir/$filename.p$reps.%J" -e "$outdir/error.$filename.p$reps.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/hubo_optimisation_no_noise_all_to_all_sweep.py -f $filename -p $reps -m $memory -N $nodes -T $time -c $copy_numbers"
+ "python3 $WORKING_DIR/hubo_optimisation_no_noise_all_to_all_sweep.py -f $filename -p $reps -m $memory -c $copy_numbers"
 
 exit 0

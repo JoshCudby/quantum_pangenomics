@@ -3,7 +3,7 @@ import numpy as np
 import argparse
 import pickle
 from itertools import product
-from scipy.optimize import minimize, OptimizeResult, basinhopping
+from scipy.optimize import minimize, OptimizeResult
 
 from qiskit import transpile
 from qiskit.circuit.library import QAOAAnsatz

@@ -75,6 +75,7 @@ config["n_qubits"] = hamiltonian.num_qubits
 config["basis_gates"] = basis_gates
 config = AerBackendConfiguration.from_dict(config)
 backend = AerSimulator(configuration=config, **backend_options)
+backend.set_option("n_qubits", n*T)
 logger.info(f'Num qubits in backend: {backend.configuration().to_dict()["n_qubits"]}')
 sampler = Sampler(seed=1).from_backend(backend)
 

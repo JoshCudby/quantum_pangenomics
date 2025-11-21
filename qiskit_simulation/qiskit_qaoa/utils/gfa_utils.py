@@ -1,9 +1,10 @@
 import gfapy
 import networkx as nx
 import numpy as np
+from typing import Sequence
 
 
-def gfa_file_to_graph(filepath: str, copy_numbers: list[float]):
+def gfa_file_to_graph(filepath: str, copy_numbers: Sequence[float | int]):
     gfa = gfapy.Gfa.from_file(filepath, vlevel=0)
 
     graph = nx.DiGraph()

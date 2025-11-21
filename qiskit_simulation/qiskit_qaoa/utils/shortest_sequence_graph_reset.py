@@ -328,7 +328,7 @@ def build_adjacency(vertices: List[int], edges: Iterable[Tuple[int,int]]) -> Dic
     n = len(vertices)
     adj = {i:set() for i in range(n)}
     for a,b in edges:
-        if a not in idx or b not in idx:
+        if a not in idx.keys() or b not in idx.keys():
             raise KeyError("edge references unknown vertex")
         ia, ib = idx[a], idx[b]
         adj[ia].add(ib)
@@ -337,7 +337,7 @@ def build_adjacency(vertices: List[int], edges: Iterable[Tuple[int,int]]) -> Dic
 
 
 def spanning_tree_bfs(adj: Dict[int, Set[int]], root: int = 0) -> List[Tuple[int,int]]:
-    parent = {root: None}
+    parent: dict[int, Optional[int]] = {root: None}
     q = deque([root])
     tree_edges = []
     while q:
@@ -452,7 +452,7 @@ def heuristic_spanning_tree_solver(
 
     if spanning_tree_edges is None:
         try:
-            tree_edges = spanning_tree_bfs(adj, root=vertices[0])
+            tree_edges = spanning_tree_bfs(adj, root=0)
         except ValueError:
             print('Could not find spanning tree')
             return None
@@ -506,7 +506,6 @@ def heuristic_spanning_tree_solver(
             # acts = iddfs_synthesize_op_on_path(path, cur_rows, (a, b), max_states=max_local_bfs_states)
             acts = synthesize_op_on_path(path, cur_rows, (a,b), max_states=max_local_bfs_states)
             if acts is None:
-                print('No acts')
                 return None
             for (u,v) in acts:
                 apply_adj_op(u,v)
