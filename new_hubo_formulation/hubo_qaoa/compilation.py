@@ -63,6 +63,10 @@ def sweep_swap_depths(layers: list[int], qubits: list, best_rzz: Best, swap_stra
             logger.info('Using trivial layout')
             layout = Layout({qubits[i]: i for i in range(num_physical_qubits)})
         else:
+            program_interactions = hamiltonian_to_interactions(hamiltonian, args.fraction_four, args.fraction_six)
+
+            logger.info(f'Program interactions: {len(program_interactions)}')
+            logger.info(f'Orders: {Counter([len(interaction) for interaction in program_interactions])}')
             sat_results = mapper.hubo_max_sat(
                 num_physical_qubits, program_interactions, swap_strategy, layer
             )
@@ -78,9 +82,7 @@ def sweep_swap_depths(layers: list[int], qubits: list, best_rzz: Best, swap_stra
         qc = QuantumCircuit(num_physical_qubits)
         qc.append(PauliEvolutionGate(hamiltonian), [layout.get_virtual_bits()[qubits[i]] for i in range(num_physical_qubits)])
 
-        logger.info('Compiling with precompute Rz')
-        
-            
+                    
         logger.info('Compiling with precompute Rzz')
         tqc_rzz = pm_rzz.run(qc)   
         
@@ -159,32 +161,25 @@ logger.info(f'Number of hamiltonian terms: {len(hamiltonian)}')
 logger.info('------------------------------------')
 logger.info('------------------------------------')
 
-qaoa_cost_op = QAOAAnsatz(
-    hamiltonian,
-    mixer_operator=QuantumCircuit(num_qubits),
-    initial_state=QuantumCircuit(num_qubits)
-)
-backend_tqaoa = transpile(qaoa_cost_op, optimization_level=3, backend=backend, basis_gates=basis_gates)
+# qaoa_cost_op = QAOAAnsatz(
+#     hamiltonian,
+#     mixer_operator=QuantumCircuit(num_qubits),
+#     initial_state=QuantumCircuit(num_qubits)
+# )
+# backend_tqaoa = transpile(qaoa_cost_op, optimization_level=3, backend=backend, basis_gates=basis_gates)
 
-print_circuit_info(backend_tqaoa, 'Default qaoa cost layer on backend')
-logger.info(backend_tqaoa.count_ops())
+# print_circuit_info(backend_tqaoa, 'Default qaoa cost layer on backend')
+# logger.info(backend_tqaoa.count_ops())
 
-logger.info('------------------------------------')
-logger.info('------------------------------------')
+# logger.info('------------------------------------')
+# logger.info('------------------------------------')
 
 
-all_pauli_z = np.array(
-    [i.paulis[0].z for i in hamiltonian]
-)
-logger.info(f'Hamiltonian: {len(hamiltonian)}')
-logger.info(f'Orders: {Counter(np.sum(all_pauli_z, axis=1))}')
-
-program_interactions = hamiltonian_to_interactions(hamiltonian, args.fraction_four, args.fraction_six)
-lengths = Counter([len(interaction) for interaction in program_interactions])
-
-logger.info(f'Program interactions: {len(program_interactions)}')
-logger.info(f'Orders: {Counter([len(interaction) for interaction in program_interactions])}')
-
+# all_pauli_z = np.array(
+#     [i.paulis[0].z for i in hamiltonian]
+# )
+# logger.info(f'Hamiltonian: {len(hamiltonian)}')
+# logger.info(f'Orders: {Counter(np.sum(all_pauli_z, axis=1))}')
 
 
 layers = sorted(list(set([int(x) for x in np.linspace(0, len(extended_swap_strat._swap_layers), 10)])))
@@ -197,16 +192,16 @@ best_rzz = Best(
 
 sweep_swap_depths(layers, donor_qc.qubits, best_rzz, extended_swap_strat)
 
+if not args.coupling_map == 'all':
+    best_rzz_index = layers.index(best_rzz['layers'])
+    rzz_fine_layers = sorted(list(
+        set([
+            int(x) for x in np.linspace(layers[max(best_rzz_index - 1, 0)]+1, layers[min(best_rzz_index + 1, len(layers)-1)]-1, 5)
+        ]).difference(layers)
+    ))
 
-best_rzz_index = layers.index(best_rzz['layers'])
-rzz_fine_layers = sorted(list(
-    set([
-        int(x) for x in np.linspace(layers[max(best_rzz_index - 1, 0)]+1, layers[min(best_rzz_index + 1, len(layers)-1)]-1, 5)
-    ]).difference(layers)
-))
-
-logger.info(f'Best rzz layers: {best_rzz["layers"]}. Fine search over {rzz_fine_layers}.')
-sweep_swap_depths(rzz_fine_layers, donor_qc.qubits, best_rzz, extended_swap_strat)    
+    logger.info(f'Best rzz layers: {best_rzz["layers"]}. Fine search over {rzz_fine_layers}.')
+    sweep_swap_depths(rzz_fine_layers, donor_qc.qubits, best_rzz, extended_swap_strat)    
 
 
 results: dict[str, SparsePauliOp | Layout | Best] = {

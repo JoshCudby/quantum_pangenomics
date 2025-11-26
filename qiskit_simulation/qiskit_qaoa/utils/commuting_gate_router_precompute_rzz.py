@@ -116,7 +116,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         gate_layers, impossible_nodes = self._make_op_layers(dag, node.op, current_layout, swap_strategy)
 
         # Iterate over and apply gate layers
-        max_distance: int = int(max([x for x in gate_layers.keys() if x < np.inf]))
+        max_distance: int = int(max([x for x in gate_layers.keys() if x < np.inf] + [0]))
         print(f'Max layers needed to apply swap decompose: {max_distance}')
 
         circuit_with_swap = QuantumCircuit(len(dag.qubits))
@@ -220,7 +220,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
                 return
             # print('Could not find shortest sequence by heuristic')
         except Exception as e:
-            print(f'Error in bfs or heuristic: {e}')
+            # print(f'Error in bfs or heuristic: {e}')
             pass
         
         for gate in cx_gates[::-1]:
@@ -322,13 +322,14 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         allowed_number_of_cx: int
     ) -> tuple[int,...] | None:
         i = 1
+        interaction_set = set(interaction)
         while i < allowed_number_of_cx + 3:
             for cx_qubits in combinations(range(self._num_qubits), i):
-                if reduce(
+                if self._is_connected(cx_qubits) and reduce(
                     set.symmetric_difference,
                     [currently_stored_info[q] for q in cx_qubits],
                     set()
-                ) == set(interaction) and self._is_connected(cx_qubits):
+                ) == interaction_set:
                     return cx_qubits
             i += 1
         return None
