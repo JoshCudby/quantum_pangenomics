@@ -38,7 +38,8 @@ seed = 1
 rng = np.random.default_rng()
 
 backend_options = dict(
-    method='statevector',
+    method='matrix_product_state',
+    matrix_product_state_max_bond_dimension='20', 
     device='GPU',
     precision='single'
 )
@@ -57,8 +58,11 @@ transpiled_qc = transpile(qc, backend, optimization_level=3, seed_transpiler=see
 
 
 def print_circuit_info(qc, circuit_name):
-    logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
-    and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
+    logger.info(
+        f'{circuit_name} has {qc.num_qubits} qubits, \
+        {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
+        and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth'
+    )
 
 
 print_circuit_info(transpiled_qc, '(Transpiled) Circuit')
@@ -101,8 +105,11 @@ if init_type == 'ramp':
     )
     gammas = betas[::-1]
     init_params = betas.tolist() + gammas.tolist()
+elif init_type == 'fixed':
+    # init_params = [1.45423926, -0.01339011]
+    init_params = [2.69911474, 2.54850482]
 else:
-    init_params = rng.uniform(0, 1, qaoa_depth).tolist() + rng.uniform(0, 1, qaoa_depth).tolist()
+    init_params = rng.uniform(0, np.pi, qaoa_depth).tolist() + rng.uniform(-np.pi, np.pi, qaoa_depth).tolist()
 logger.info(f'Init: {init_params}')
 
 if noisy:
@@ -146,7 +153,7 @@ def objective(x: np.ndarray):
     # ]) + offset
     energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
     flat_energies = [x for xs in energies for x in xs]
-    total_energy = cvar(flat_energies, 0.25)
+    total_energy = cvar(flat_energies, alpha)
     
     global best_func_val
     global best_params
@@ -164,7 +171,7 @@ method = "COBYLA"
 result = minimize(
     objective, x0=init_params, 
     method=method, 
-    bounds=tuple((0,1) for _ in range(2 * p)), 
+    bounds=tuple((0, np.pi) for _ in range(p)) +tuple((-np.pi, np.pi) for _ in range(p)), 
     options={"maxiter": 120, "maxfev": 120, "rhobeg": 0.1, "ftol": 1e-12},  # 
     callback=callback if method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
 )
@@ -173,7 +180,8 @@ logger.info(result)
 
 obj_to_dump = dict(
     result=result, history=history, singles=singles, doubles=doubles, sat_map=sat_map, graph=graph, 
-    cost_op=cost_op, best_func_val=best_func_val, best_params=best_params, best_samples=best_samples
+    cost_op=cost_op, best_func_val=best_func_val, best_params=best_params, best_samples=best_samples,
+    circuit=circuit
 )
-with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/cvar_new/{filename}_cvar.alpha{alpha}.p{p}.shots{shots}.method{method}.hardware{hardware}.noisy{noisy}.init{init_type}.pkl', 'wb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/experiments/{filename}_cvar.alpha{alpha}.p{p}.shots{shots}.method{method}.hardware{hardware}.noisy{noisy}.init{init_type}.pkl', 'wb') as f:
     pickle.dump(obj_to_dump, f)

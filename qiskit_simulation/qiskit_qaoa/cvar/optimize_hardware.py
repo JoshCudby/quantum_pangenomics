@@ -50,7 +50,8 @@ qc = QAOAAnsatz(
 num_qubits = hamiltonian.num_qubits
 
 service = QiskitRuntimeService(name='eu_test_instance')
-backend = service.least_busy(min_num_qubits=num_qubits, operational=True, simulator=False) 
+# backend = service.least_busy(min_num_qubits=num_qubits, operational=True, simulator=False) 
+backend = service.backend(name='ibm_aachen')
 logger.info(f'Backend: {backend}')
 logger.info(f'Num qubits in backend: {backend.configuration().to_dict()["n_qubits"]}')
 
@@ -97,12 +98,10 @@ if init_type == 'ramp':
     gammas = betas[::-1]
     init_params = betas.tolist() + gammas.tolist()
 elif init_type == 'fixed':
-    # p = 4, n = 1024, alpha = 0.25
-    init_params = [0.3031268108609848, 0.49831548462130837, 0.7507748978593458, 0.024266886464312964, 
-                   0.9724396233643415, 0.1929075859444579, 0.9128011274374644, 0.6928266388103032]
+    raise Exception('No fixed values provided')
     logger.info('Using fixed init values')
 else:
-    init_params = rng.uniform(0, 1, qaoa_depth).tolist() + rng.uniform(0, 1, qaoa_depth).tolist()
+    init_params = rng.uniform(0, np.pi, qaoa_depth).tolist() + rng.uniform(-np.pi, np.pi, qaoa_depth).tolist()
 logger.info(f'Init: {init_params}')
 
 history = []
@@ -158,7 +157,7 @@ def objective(x: np.ndarray):
 method = args.method
 max_iter = 120
 with Session(backend=backend):
-    ddOptions = DynamicalDecouplingOptions(enable=True, sequence_type="XX")
+    ddOptions = DynamicalDecouplingOptions(enable=False, sequence_type="XX")
     twirlingOptions = TwirlingOptions(enable_gates=True, enable_measure=True, num_randomizations='auto', shots_per_randomization='auto', strategy="active-accum")
     samplerOptions = SamplerOptions(dynamical_decoupling=ddOptions, twirling=twirlingOptions)
     sampler = Sampler(options=samplerOptions)
@@ -167,7 +166,7 @@ with Session(backend=backend):
         objective, 
         x0=init_params, 
         method=method, 
-        bounds=tuple((0,1) for _ in range(2 * p)), 
+        bounds=tuple((0, np.pi) for _ in range(p)) +tuple((-np.pi, np.pi) for _ in range(p)),
         options={"maxiter": max_iter, "maxfev": 120, "rhobeg": 0.1},
         callback=callback if args.method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
     )

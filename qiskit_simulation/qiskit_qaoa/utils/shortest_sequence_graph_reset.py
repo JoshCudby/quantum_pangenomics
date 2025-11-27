@@ -1,44 +1,40 @@
-from collections import deque
-from typing import overload, Dict, Set, Iterable, List, Generator, Optional, Tuple
+from collections import deque, OrderedDict
+from typing import Dict, Set, Iterable, List, Generator, Optional, Tuple
 
 
-@overload
-def sort_by_length(items: list[set[int]], max_val: int, ascending: bool = True) -> list[set[int]]:
-    pass
 
-@overload
-def sort_by_length(items: list[tuple[int,...]], max_val: int, ascending: bool = True) -> list[tuple[int,...]]:
-    pass
-
-
-def sort_by_length(items, max_val: int, ascending: bool = True):
-    def key(e):
-        le = list(e)
-        acc = 0
-        for i in range(len(le)):
-            acc += (max_val ** i) * le[-i-1]
-        return acc if ascending else -acc
-    return sorted(items, key=key)
+def sort_by_length(items, ascending: bool = True):
+    """
+    Deterministic: primary key = len(item), secondary key = tuple(sorted(item)).
+    Signature kept for compatibility; max_val is unused now (but kept).
+    """
+    def key_fn(e):
+        return (len(e), tuple(sorted(e)))
+    return sorted(items, key=key_fn, reverse=not ascending)
 
 
+# -----------------------
+# Connectivity check
+# -----------------------
 def _bfs_connected(remaining: Set[int], adj: Dict[int, Set[int]]) -> bool:
-    """Return True if the induced subgraph on 'remaining' is connected.
-       Uses BFS/DFS restricted to 'remaining'."""
+    """Return True if the induced subgraph on 'remaining' is connected."""
     if not remaining:
-        return True  # define empty graph as connected for convenience
+        return True
     start = next(iter(remaining))
     q = deque([start])
     seen = {start}
     while q:
         u = q.popleft()
-        # only traverse neighbors inside remaining
-        for w in adj[u]:
+        for w in adj.get(u, ()):
             if w in remaining and w not in seen:
                 seen.add(w)
                 q.append(w)
     return len(seen) == len(remaining)
 
 
+# -----------------------
+# Enumerate removal pair sequences
+# -----------------------
 def enumerate_removal_pair_sequences(
     vertices: Iterable[int],
     edges: Iterable[Iterable[int]],
@@ -48,23 +44,10 @@ def enumerate_removal_pair_sequences(
     max_solutions: Optional[int] = None,
 ) -> Generator[List[Tuple[int, int]], None, None]:
     """
-    Enumerate sequences of vertex-removal pairs (v, u) where v is removed and u is
-    a neighbour of v that remains after removal (u in remaining \\ {v}).
-    At each step the remaining induced subgraph must be connected.
+    Enumerate sequences of (removed_vertex, neighbor) pairs where removing removed_vertex
+    and merging into neighbor keeps the rest of the graph connected.
 
-    Parameters
-    ----------
-    vertices : iterable of vertex ids
-    edges : iterable of (u, v) pairs (undirected)
-    stop_at : int
-        Stop when 'stop_at' vertices remain (default 1).
-    order : optional iterable specifying the order to try candidate removals at each step.
-    neighbor_order : optional dict mapping a vertex -> iterable of neighbors order to try for pairing.
-    max_solutions : optional int, stop after this many sequences.
-
-    Yields
-    ------
-    lists of (removed_vertex, neighbor) pairs, length = n - stop_at.
+    Convention: a pair (u, v) means 'source u', 'target v' — consistent with row_v ^= row_u.
     """
     V = list(vertices)
     n = len(V)
@@ -79,16 +62,22 @@ def enumerate_removal_pair_sequences(
         adjacency[b].add(a)
 
     if not _bfs_connected(set(V), adjacency):
-        print('Initial graph not connected in pair removal')
-        return  # yield nothing if initial graph isn't connected
+        # initial graph not connected -> no sequences
+        return
 
-    connectivity_cache: Dict[frozenset, bool] = {}
+    # bounded LRU connectivity cache to avoid blow-up
+    CONNECTIVITY_CACHE_LIMIT = 20000
+    connectivity_cache: "OrderedDict[frozenset, bool]" = OrderedDict()
+
     def is_connected(remaining: Set[int]) -> bool:
         key = frozenset(remaining)
         v = connectivity_cache.get(key)
-        if v is None:
-            v = _bfs_connected(remaining, adjacency)
-            connectivity_cache[key] = v
+        if v is not None:
+            return v
+        v = _bfs_connected(remaining, adjacency)
+        connectivity_cache[key] = v
+        if len(connectivity_cache) > CONNECTIVITY_CACHE_LIMIT:
+            connectivity_cache.popitem(last=False)
         return v
 
     candidate_order = list(order) if order is not None else list(V)
@@ -114,7 +103,6 @@ def enumerate_removal_pair_sequences(
             if v not in remaining:
                 continue
             remaining2 = remaining - {v}
-            # if rem2 is empty, treat as connected; but neighbor will be None
             if not is_connected(remaining2):
                 continue
 
@@ -124,28 +112,27 @@ def enumerate_removal_pair_sequences(
             else:
                 neighbours_iter = [u for u in neighbours if u in remaining2]
 
-            # If rem2 is non-empty, there must be at least one neighbour in rem2 (since remaining is connected
-            # before removal and size >= 2)
-            if not remaining2:
-                raise Exception('No nodes remaining in graph')
-                # no remaining nodes after removal; pair neighbor = None
-                # current_pairs.append((v, None))
-                # yield from backtrack(rem2, current_pairs)
-                # current_pairs.pop()
-            else:
-                for u in neighbours_iter:
-                    current_pairs.append((v, u))
-                    yield from backtrack(remaining2, current_pairs)
-                    current_pairs.pop()
-                    if max_solutions is not None and solutions_found >= max_solutions:
-                        return
+            # If no neighbours in remaining2 then can't remove v while preserving connectivity
+            if not neighbours_iter:
+                continue
+
+            for u in neighbours_iter:
+                # record operation as (source=u_removed?, target=neighbor?) careful: original semantics
+                # We append (v, u) meaning source=v, target=u -> row_u ^= row_v
+                current_pairs.append((v, u))
+                yield from backtrack(remaining2, current_pairs)
+                current_pairs.pop()
+                if max_solutions is not None and solutions_found >= max_solutions:
+                    return
 
     yield from backtrack(remaining, current_pairs)
-    
-    
-    
+
+
+# -----------------------
+# Labels <-> bitrows mapping
+# -----------------------
 def labels_to_bitrows(vertices: List, labels: Dict) -> List[int]:
-    """Map labels (sets of vertices) to bitmask rows in same vertex index order."""
+    """Map labels (sets of vertices) to bitmask rows using vertex order indexing."""
     index = {v: i for i, v in enumerate(vertices)}
     rows = []
     for v in vertices:
@@ -158,6 +145,19 @@ def labels_to_bitrows(vertices: List, labels: Dict) -> List[int]:
     return rows
 
 
+def bitrows_to_labels(vertices: List, rows: List[int]) -> Dict:
+    idx_to_v = {i: v for i, v in enumerate(vertices)}
+    out = {}
+    n = len(vertices)
+    for i, mask in enumerate(rows):
+        s = set()
+        for b in range(n):
+            if (mask >> b) & 1:
+                s.add(idx_to_v[b])
+        out[idx_to_v[i]] = s
+    return out
+
+
 # -----------------------
 # GF(2) helpers
 # -----------------------
@@ -165,7 +165,7 @@ def gf2_rank(rows: List[int], n: int) -> int:
     """Compute rank over GF(2) of matrix with given row bitmasks (rows length n)."""
     A = rows[:]  # copy
     rank = 0
-    for col in range(n-1, -1, -1):  # from high bit to low bit
+    for col in range(n - 1, -1, -1):
         pivot = None
         for r in range(rank, len(A)):
             if (A[r] >> col) & 1:
@@ -187,8 +187,9 @@ def target_identity_rows(n: int) -> Tuple[int, ...]:
     """Return tuple of rows representing identity (row i = e_i)."""
     return tuple(1 << i for i in range(n))
 
+
 # -----------------------
-# BFS exact solver
+# BFS exact solver (shortest sequence)
 # -----------------------
 def bfs_shortest_sequence(
     vertices: List,
@@ -197,10 +198,9 @@ def bfs_shortest_sequence(
     max_states: Optional[int] = 5_000_000,
 ) -> Optional[List[Tuple]]:
     """
-    Find a shortest sequence of operations (v, u) meaning L[v] ^= L[u],
-    using BFS from the initial label matrix to the identity rows (target).
-    Returns list of (v, u) in terms of vertex objects from 'vertices' list, or
-    None if impossible / not found (e.g., rank < n or BFS exhausted).
+    BFS to find shortest sequence of adjacency ops to convert label-rows into identity rows.
+    Operation convention: (u, v) means row_v ^= row_u (source u, target v).
+    Returns list[(source_label, target_label)] in terms of vertex labels.
     """
     index = {v: i for i, v in enumerate(vertices)}
     n = len(vertices)
@@ -212,34 +212,34 @@ def bfs_shortest_sequence(
         adj[ia].add(ib)
         adj[ib].add(ia)
 
-    # convert labels to rows (bitmasks)
-    rows = labels_to_bitrows(vertices, labels)  # list length n
-    # quick rank check
+    # convert labels to bitrows
+    rows = labels_to_bitrows(vertices, labels)
     if gf2_rank(rows, n) < n:
-        return None  # impossible
+        return None
 
     start = tuple(rows)
-    goal = target_identity_rows(n)
-
+    goal = tuple(1 << i for i in range(n))
     if start == goal:
-        return []  # already solved
+        return []
 
     q = deque([start])
     parent: Dict[Tuple[int, ...], Tuple[Optional[Tuple[int, ...]], Tuple[int, int]]] = {}
-    parent[start] = (None, (-1, -1))  # (prev_state, operation (i,j))
-
+    parent[start] = (None, (-1, -1))
     visited = 1
+
     while q:
         state = q.popleft()
         cur_rows = list(state)
-        for i in range(n):
-            for j in adj[i]:
+        # iterate over directed adjacency (source u -> target v)
+        for u in range(n):
+            for v in adj[u]:
                 new_rows = cur_rows[:]  # copy
-                new_rows[i] = new_rows[i] ^ new_rows[j]
+                # apply convention: row_v ^= row_u
+                new_rows[v] ^= new_rows[u]
                 new_state = tuple(new_rows)
                 if new_state in parent:
                     continue
-                parent[new_state] = (state, (i, j))
+                parent[new_state] = (state, (u, v))
                 if new_state == goal:
                     # reconstruct path
                     ops: List[Tuple[int, int]] = []
@@ -249,8 +249,8 @@ def bfs_shortest_sequence(
                         ops.append(op)
                         cur = prev
                     ops.reverse()
-                    # translate to original vertex labels: (i,j) -> (vertices[j], vertices[i])
-                    result = [(vertices[j], vertices[i]) for i, j in ops]
+                    # translate to original vertex labels: (u, v) -> (vertices[u], vertices[v])
+                    result = [(vertices[u], vertices[v]) for (u, v) in ops]
                     return result
                 q.append(new_state)
                 visited += 1
@@ -258,41 +258,24 @@ def bfs_shortest_sequence(
                     return None
     return None
 
-# -----------------------
-# GF(2) / matrix & elimination helpers
-# -----------------------
 
-def bitrows_to_labels(vertices: List, rows: List[int]) -> Dict:
-    idx_to_v = {i: v for i, v in enumerate(vertices)}
-    out = {}
-    n = len(vertices)
-    for i, mask in enumerate(rows):
-        s = set()
-        for b in range(n):
-            if (mask >> b) & 1:
-                s.add(idx_to_v[b])
-        out[idx_to_v[i]] = s
-    return out
-
-def gaussian_elimination_record_ops(rows: List[int]) -> Tuple[Optional[List[Tuple[str,int,int]]], List[int]]:
+# -----------------------
+# Gaussian elimination + record ops
+# -----------------------
+def gaussian_elimination_record_ops(rows: List[int]) -> Tuple[Optional[List[Tuple[str, int, int]]], List[int]]:
     """
-    Perform Gaussian elimination to turn rows into identity rows, recording the row operations (over GF(2)).
-    This version assigns pivot for column `col` to row `col` (i.e. pivot columns increase 0..n-1),
-    ensuring the final matrix is canonical identity with row i == (1 << i).
-    Returns (ops, final_rows) where ops is a list of recorded operations of two types:
+    Gaussian elimination over GF(2). Record operations needed to transform rows into identity.
+    ops are:
+      - ("swap", i, j)
       - ("xor", i, j) meaning row_i ^= row_j
-      - ("swap", i, j) meaning swap row_i and row_j
-    If matrix is not full rank, returns (None, rows).
+    Note: we record row operations as standard; caller will map these row ops to adjacency ops.
     """
     n = len(rows)
     A = rows[:]  # work copy
-    ops: List[Tuple[str,int,int]] = []
+    ops: List[Tuple[str, int, int]] = []
 
-    # We'll do elimination so that pivot for column `col` ends up at row `col`.
-    # That makes final A equal to identity rows [1<<0, 1<<1, ..., 1<<(n-1)].
     row = 0
-    for col in range(0, n):                 # left-to-right: low-bit (col=0) ... high-bit (col=n-1)
-        # find a pivot row with bit 'col' set at or below 'row'
+    for col in range(0, n):
         pivot = None
         for r in range(row, n):
             if (A[r] >> col) & 1:
@@ -300,11 +283,9 @@ def gaussian_elimination_record_ops(rows: List[int]) -> Tuple[Optional[List[Tupl
                 break
         if pivot is None:
             continue
-        # swap pivot into the target row position if needed
         if pivot != row:
             A[row], A[pivot] = A[pivot], A[row]
             ops.append(("swap", row, pivot))
-        # eliminate the bit 'col' from all other rows
         for r in range(n):
             if r != row and ((A[r] >> col) & 1):
                 A[r] ^= A[row]
@@ -314,30 +295,45 @@ def gaussian_elimination_record_ops(rows: List[int]) -> Tuple[Optional[List[Tupl
             break
 
     if row < n:
-        # rank < n, impossible to reach identity
         return None, rows
-    # A should now be the identity matrix with row i == (1 << i)
     return ops, A
 
 
 # -----------------------
-# Graph helpers 
+# Path utilities & local synthesis
 # -----------------------
-def build_adjacency(vertices: List[int], edges: Iterable[Tuple[int,int]]) -> Dict[int, Set[int]]:
-    idx = {v:i for i,v in enumerate(vertices)}
+def build_adjacency(
+    vertices: List[int],
+    edges: Iterable[Tuple[int,int]],
+    *,
+    allow_self_loops: bool = False
+) -> Dict[int, Set[int]]:
+    """
+    Build adjacency mapping index->set(index) where indices correspond to positions in `vertices`.
+    """
+    if len(vertices) != len(set(vertices)):
+        raise ValueError("`vertices` contains duplicate labels; labels must be unique")
+    idx = {v: i for i, v in enumerate(vertices)}
     n = len(vertices)
-    adj = {i:set() for i in range(n)}
-    for a,b in edges:
-        if a not in idx.keys() or b not in idx.keys():
-            raise KeyError("edge references unknown vertex")
+    adj: Dict[int, Set[int]] = {i: set() for i in range(n)}
+    for a, b in edges:
+        if a not in idx or b not in idx:
+            raise KeyError(f"edge references unknown vertex: {(a,b)}")
         ia, ib = idx[a], idx[b]
+        if ia == ib and not allow_self_loops:
+            continue
         adj[ia].add(ib)
         adj[ib].add(ia)
     return adj
 
 
-def spanning_tree_bfs(adj: Dict[int, Set[int]], root: int = 0) -> List[Tuple[int,int]]:
-    parent: dict[int, Optional[int]] = {root: None}
+def spanning_tree_bfs(adj: Dict[int, Set[int]], root: Optional[int] = None) -> List[Tuple[int,int]]:
+    parent: dict[int, Optional[int]] = {}
+    if not adj:
+        raise ValueError("adj is empty")
+    if root is None or root not in adj:
+        root = next(iter(adj))
+    parent[root] = None
     q = deque([root])
     tree_edges = []
     while q:
@@ -345,10 +341,11 @@ def spanning_tree_bfs(adj: Dict[int, Set[int]], root: int = 0) -> List[Tuple[int
         for v in adj[u]:
             if v not in parent:
                 parent[v] = u
-                tree_edges.append((u,v))
+                tree_edges.append((u, v))
                 q.append(v)
     if len(parent) != len(adj):
-        raise ValueError(f"graph not connected: {adj}")
+        missing = set(adj.keys()) - set(parent.keys())
+        raise ValueError(f"graph not connected: missing vertices {missing}")
     return tree_edges
 
 
@@ -373,32 +370,38 @@ def path_in_tree(tree_adj: Dict[int, Set[int]], a: int, b: int) -> List[int]:
     path.reverse()
     return path
 
-# -----------------------
-# Local synthesis on path
-# -----------------------
+
 def synthesize_op_on_path(
-    path: List[int], 
+    path: List[int],
     full_rows: List[int],
     goal_delta: Tuple[int,int],
     max_states: int = 50000
 ) -> Optional[List[Tuple[int,int]]]:
-    index_in_path = {node:i for i,node in enumerate(path)}
+    """
+    Synthesize sequence of adjacency ops along `path` to implement row_v ^= row_u
+    where goal_delta is (u, v) in terms of node indices in the full graph.
+    We work with indices local to the path and return adjacency ops in global indices (u, v).
+    Convention: op (a,b) means row_b ^= row_a.
+    """
+    index_in_path = {node: i for i, node in enumerate(path)}
     orig = tuple(full_rows[node] for node in path)
     target_idx_in_path = index_in_path[goal_delta[0]]
     source_idx_in_path = index_in_path[goal_delta[1]]
     desired = list(orig)
+    # desired: the row at target becomes target ^ source
     desired[target_idx_in_path] = orig[target_idx_in_path] ^ orig[source_idx_in_path]
     desired = tuple(desired)
 
     if orig == desired:
         return []
 
+    # build adjacency actions (directed along path)
     actions = []
     for t in range(len(path)-1):
-        u = path[t]
-        v = path[t+1]
-        actions.append((u,v))
-        actions.append((v,u))
+        u = path[t]; v = path[t+1]
+        # (u, v) and (v, u) are valid adjacency ops here
+        actions.append((u, v))
+        actions.append((v, u))
 
     start = orig
     q = deque([start])
@@ -415,29 +418,30 @@ def synthesize_op_on_path(
                 cur = prev
             acts.reverse()
             return acts
-        for (u,v) in actions:
-            iu = index_in_path[u]
-            iv = index_in_path[v]
+        for (u, v) in actions:
+            iu = index_in_path[u]; iv = index_in_path[v]
             new_list = list(s)
-            new_list[iu] = new_list[iu] ^ new_list[iv]
+            # apply convention: row_v ^= row_u -> target index iv, source iu
+            new_list[iv] ^= new_list[iu]
             new_state = tuple(new_list)
             if new_state in parent:
                 continue
-            parent[new_state] = (s, (u,v))
+            parent[new_state] = (s, (u, v))
             q.append(new_state)
             states_seen += 1
             if states_seen > max_states:
                 return None
     return None
 
+
 # -----------------------
-# Heuristic spanning-tree solver
+# Heuristic spanning-tree solver (uses gaussian ops translated to adjacency ops)
 # -----------------------
 def heuristic_spanning_tree_solver(
     vertices: List[int],
-    edges: Iterable[Tuple[int, int]], 
+    edges: Iterable[Tuple[int, int]],
     labels: Dict[int, set[int]],
-    max_local_bfs_states: int = 50000,
+    max_local_bfs_states: int = 50_000,
     spanning_tree_edges: Optional[List[Tuple[int,int]]] = None
 ) -> Optional[List[Tuple[int,int]]]:
     n = len(vertices)
@@ -446,18 +450,19 @@ def heuristic_spanning_tree_solver(
     if gf2_rank(rows, n) < n:
         return None
 
-    ops, _ = gaussian_elimination_record_ops(rows)
-    if ops is None:
+    ops_recorded, _ = gaussian_elimination_record_ops(rows)
+    if ops_recorded is None:
         return None
 
     if spanning_tree_edges is None:
         try:
             tree_edges = spanning_tree_bfs(adj, root=0)
         except ValueError:
-            print('Could not find spanning tree')
             return None
     else:
         tree_edges = spanning_tree_edges
+
+    # tree adjacency (indices)
     tree_adj = {i:set() for i in range(n)}
     for a,b in tree_edges:
         tree_adj[a].add(b)
@@ -467,56 +472,69 @@ def heuristic_spanning_tree_solver(
     cur_rows = rows[:]  # list of ints, index by integer node id
 
     def apply_adj_op(u:int, v:int):
-        cur_rows[u] ^= cur_rows[v]
+        # apply adjacency operation: row_v ^= row_u
+        cur_rows[v] ^= cur_rows[u]
         simulated_ops.append((u, v))
 
-    for rec in ops:
+    for rec in ops_recorded:
         typ, a, b = rec
         if typ == "swap":
+            # To simulate a row swap using adjacency ops we perform the standard triple-XOR
+            # with adjacency ops along shortest path in tree between a and b.
             if b in adj[a]:
-                apply_adj_op(a,b)
-                apply_adj_op(b,a)
-                apply_adj_op(a,b)
+                # direct neighbors: three XORs effect a swap when done appropriately
+                apply_adj_op(a, b)
+                apply_adj_op(b, a)
+                apply_adj_op(a, b)
                 continue
             path = path_in_tree(tree_adj, a, b)
             if not path:
                 return None
+            # For swapping rows along path we perform sequence of local swaps using adjacency ops
+            # We'll do the standard approach by moving row bits along path and back
+            # first move a's contents to b, then restore others
+            # forward sweep
             for t in range(len(path)-1):
-                u = path[t]
-                v = path[t+1]
+                u = path[t]; v = path[t+1]
                 apply_adj_op(u, v)
                 apply_adj_op(v, u)
                 apply_adj_op(u, v)
+            # reverse sweep to finish
             for t in range(len(path)-2, -1, -1):
-                u = path[t]
-                v = path[t+1]
+                u = path[t]; v = path[t+1]
                 apply_adj_op(u, v)
                 apply_adj_op(v, u)
                 apply_adj_op(u, v)
             continue
 
         elif typ == "xor":
+            # rec is ("xor", i, j) meaning row_i ^= row_j (in row-operation convention)
+            # We need to enact this using adjacency ops; row_i ^= row_j corresponds to
+            # source = j, target = i in our (u,v) convention. So we need op (j,i)
+            # If j is neighbor of i -> direct adjacency operation (j -> i)
             if b in adj[a]:
-                apply_adj_op(a, b)
+                apply_adj_op(b, a)  # row_a ^= row_b  -> op (b, a)
                 continue
+            # otherwise find path in tree and synthesize
             path = path_in_tree(tree_adj, a, b)
             if not path:
-                print('No path')
                 return None
-            # acts = iddfs_synthesize_op_on_path(path, cur_rows, (a, b), max_states=max_local_bfs_states)
-            acts = synthesize_op_on_path(path, cur_rows, (a,b), max_states=max_local_bfs_states)
+            # synthesize operation along path to implement row_a ^= row_b
+            acts = synthesize_op_on_path(path, cur_rows, (a, b), max_states=max_local_bfs_states)
             if acts is None:
                 return None
             for (u,v) in acts:
-                apply_adj_op(u,v)
+                apply_adj_op(u, v)
             continue
         else:
             return None
 
-    # Final target: row i == e_i where bit i is set
+    # Final check: cur_rows must equal identity rows
     target_rows = [1 << i for i in range(n)]
     if cur_rows == target_rows:
-        vertex_ops = [(vertices[v], vertices[u]) for (u,v) in simulated_ops]
+        # translate simulated_ops (u, v) -> vertex labels (vertices[u], vertices[v])
+        vertex_ops = [(vertices[u], vertices[v]) for (u, v) in simulated_ops]
+        # remove adjacent cancellations if any (two identical ops in a row cancel)
         i = 0
         while i < len(vertex_ops) - 1:
             if vertex_ops[i] == vertex_ops[i+1]:
@@ -526,13 +544,12 @@ def heuristic_spanning_tree_solver(
                 i += 1
         return vertex_ops
     else:
-        print('Failed to reach identity in heuristic tree solver')
-        print(cur_rows)
-        print(target_rows)
-        # failed to reach identity
         return None
 
 
+# -----------------------
+# IDDFS path and global sequence syntheses
+# -----------------------
 def iddfs_synthesize_op_on_path(
     path: List[int],
     full_rows: List[int],
@@ -540,32 +557,23 @@ def iddfs_synthesize_op_on_path(
     max_states: int = 50000,
     max_depth_limit: Optional[int] = None
 ) -> Optional[List[Tuple[int,int]]]:
-    """
-    IDDFS-based synthesis of a single row XOR (target := target ^ source) confined to operations
-    between neighbors along `path`. Returns a list of adjacency ops (u,v) where each op means
-    row[u] ^= row[v]. If no sequence is found within `max_states` or depth limits, returns None.
-    """
     index_in_path = {node:i for i,node in enumerate(path)}
     orig = tuple(full_rows[node] for node in path)
-    # compute desired state on the path (only the target index changes)
     target_idx_in_path = index_in_path[goal_delta[0]]
     source_idx_in_path = index_in_path[goal_delta[1]]
     desired = list(orig)
     desired[target_idx_in_path] = orig[target_idx_in_path] ^ orig[source_idx_in_path]
     desired = tuple(desired)
 
-    # Tight check: if already equal, return empty sequence immediately
     if orig == desired:
         return []
 
-    # Build local actions: directional adjacency along the path
     actions = []
     for t in range(len(path)-1):
         u = path[t]; v = path[t+1]
         actions.append((u,v))
         actions.append((v,u))
 
-    # default max depth if not provided: scale with path length
     if max_depth_limit is None:
         max_depth_limit = max(6, len(path) * 4)
 
@@ -581,19 +589,19 @@ def iddfs_synthesize_op_on_path(
         if depth == limit:
             return None
 
-        # simple ordering: prefer actions that make the affected row equal to its target single-bit row
         def score_act(act):
             u,v = act
             iu = index_in_path[u]; iv = index_in_path[v]
-            new_row = state[iu] ^ state[iv]
-            # prefer if new_row equals the desired row at iu
-            return 1 if new_row == desired[iu] else 0
+            # applying act will set new value of row_iv; check if it matches desired[iv]
+            new_row = state[iv] ^ state[iu]
+            return 1 if new_row == desired[iv] else 0
 
         ordered = sorted(actions, key=lambda a: -score_act(a))
         for (u,v) in ordered:
             iu = index_in_path[u]; iv = index_in_path[v]
             new_list = list(state)
-            new_list[iu] = new_list[iu] ^ new_list[iv]
+            # apply op: row_v ^= row_u
+            new_list[iv] ^= new_list[iu]
             new_state = tuple(new_list)
             states_seen += 1
             if new_state in seen:
@@ -609,7 +617,6 @@ def iddfs_synthesize_op_on_path(
                 return None
         return None
 
-    # Iterative deepening
     for limit in range(1, max_depth_limit + 1):
         res = dfs(orig, 0, limit, [], {orig})
         if res is not None:
@@ -626,12 +633,6 @@ def iddfs_shortest_sequence(
     max_states: Optional[int] = 5_000_000,
     max_depth_limit: Optional[int] = None
 ) -> Optional[List[Tuple]]:
-    """
-    IDDFS-based replacement.
-    Attempts depth-limited DFS (iterative deepening) over the global state space of rows.
-    Returns a sequence of (v,u) in terms of vertex objects from `vertices`, or None if not found
-    within the given max_states or max depth.
-    """
     index = {v: i for i, v in enumerate(vertices)}
     n = len(vertices)
     adj = {i: set() for i in range(n)}
@@ -642,23 +643,18 @@ def iddfs_shortest_sequence(
         adj[ia].add(ib)
         adj[ib].add(ia)
 
-    # convert labels to rows (bitmasks)
     rows = labels_to_bitrows(vertices, labels)
-    # quick rank check
     if gf2_rank(rows, n) < n:
-        return None  # impossible
+        return None
 
     start = tuple(rows)
     goal = tuple(1 << i for i in range(n))
-
-    # trivial case
     if start == goal:
         return []
 
-    # actions are all directed adjacency operations (i,j) meaning row_i ^= row_j
+    # actions: all directed adjacency ops (u->v) meaning row_v ^= row_u
     actions = [(i, j) for i in range(n) for j in adj[i]]
 
-    # default max depth limit if not provided
     if max_depth_limit is None:
         max_depth_limit = max(8, n * 4)
 
@@ -674,22 +670,22 @@ def iddfs_shortest_sequence(
         if depth == limit:
             return None
 
-        # heuristic ordering: prefer ops that make the affected row equal to its target identity row
         def score_op(op):
-            i,j = op
-            new_row = state[i] ^ state[j]
-            return 1 if new_row == (1 << i) else 0
+            i, j = op
+            # applying (i,j) yields new row_j; prefer ops that make row_j equal to identity row (1<<j)
+            new_row = state[j] ^ state[i]
+            return 1 if new_row == (1 << j) else 0
 
         ordered = sorted(actions, key=lambda op: -score_op(op))
-        for (i,j) in ordered:
+        for (i, j) in ordered:
             new_list = list(state)
-            new_list[i] = new_list[i] ^ new_list[j]
+            new_list[j] ^= new_list[i]  # row_j ^= row_i
             new_state = tuple(new_list)
             states_seen += 1
             if new_state in seen:
                 continue
             seen.add(new_state)
-            path_actions.append((i,j))
+            path_actions.append((i, j))
             res = dfs(new_state, depth+1, limit, path_actions, seen)
             if res is not None:
                 return res
@@ -702,8 +698,7 @@ def iddfs_shortest_sequence(
     for limit in range(1, max_depth_limit + 1):
         res = dfs(start, 0, limit, [], {start})
         if res is not None:
-            # translate to original API: (i,j) -> (vertices[j], vertices[i])
-            return [(vertices[j], vertices[i]) for (i,j) in res]
+            return [(vertices[u], vertices[v]) for (u, v) in res]
         if states_seen >= (max_states if max_states is not None else 10**12):
             return None
 

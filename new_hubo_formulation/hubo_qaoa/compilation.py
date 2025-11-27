@@ -23,7 +23,9 @@ from hubo_qaoa.utils.get_swap_strategy import get_swap_strategy
 
 
 from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, FindCommutingPauliEvolutionsMulti
-from qiskit_qaoa.utils.commuting_gate_router_precompute_rzz import CommutingGateRouterPrecomputeRzz
+# from qiskit_qaoa.utils.commuting_gate_router_precompute_rzz import CommutingGateRouterPrecomputeRzz
+from qiskit_qaoa.utils.commuting_gate_router_precompute_rzz_mask import CommutingGateRouterPrecomputeRzz
+
 from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
 from qiskit_qaoa.utils.hamiltonian_utils import hamiltonian_to_interactions
 from qiskit_qaoa.utils.logging import get_logger
@@ -182,7 +184,8 @@ logger.info('------------------------------------')
 # logger.info(f'Orders: {Counter(np.sum(all_pauli_z, axis=1))}')
 
 
-layers = sorted(list(set([int(x) for x in np.linspace(0, len(extended_swap_strat._swap_layers), 10)])))
+# layers = sorted(list(set([int(x) for x in np.linspace(0, len(extended_swap_strat._swap_layers), 10)])))
+layers = [20]
 
 best_rzz = Best(
     count=maxsize, depth=maxsize, layers=0, 
@@ -192,16 +195,16 @@ best_rzz = Best(
 
 sweep_swap_depths(layers, donor_qc.qubits, best_rzz, extended_swap_strat)
 
-if not args.coupling_map == 'all':
-    best_rzz_index = layers.index(best_rzz['layers'])
-    rzz_fine_layers = sorted(list(
-        set([
-            int(x) for x in np.linspace(layers[max(best_rzz_index - 1, 0)]+1, layers[min(best_rzz_index + 1, len(layers)-1)]-1, 5)
-        ]).difference(layers)
-    ))
+# if not args.coupling_map == 'all':
+#     best_rzz_index = layers.index(best_rzz['layers'])
+#     rzz_fine_layers = sorted(list(
+#         set([
+#             int(x) for x in np.linspace(layers[max(best_rzz_index - 1, 0)]+1, layers[min(best_rzz_index + 1, len(layers)-1)]-1, 5)
+#         ]).difference(layers)
+#     ))
 
-    logger.info(f'Best rzz layers: {best_rzz["layers"]}. Fine search over {rzz_fine_layers}.')
-    sweep_swap_depths(rzz_fine_layers, donor_qc.qubits, best_rzz, extended_swap_strat)    
+#     logger.info(f'Best rzz layers: {best_rzz["layers"]}. Fine search over {rzz_fine_layers}.')
+#     sweep_swap_depths(rzz_fine_layers, donor_qc.qubits, best_rzz, extended_swap_strat)    
 
 
 results: dict[str, SparsePauliOp | Layout | Best] = {

@@ -9,6 +9,7 @@ from qiskit.circuit.library import QAOAAnsatz
 from qiskit.transpiler.passes.routing.commuting_2q_gate_routing import SwapStrategy
 
 from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
+from qiskit_ibm_runtime.options import SamplerOptions, TwirlingOptions, DynamicalDecouplingOptions
 
 
 from qopt_best_practices.sat_mapping import SATMapper
@@ -96,7 +97,11 @@ elif init_type == 'fixed':
                    0.07727284052271921, 0.25521259972136145, 0.04596182583685282, 0.04562939468439431]
     logger.info('Using fixed init values')
 elif init_type == 'warm':
-    if p == 2:
+    if p == 1:
+        # test_N4_W6
+        # init_params = [2.69911474, 2.54850482]
+        init_params = [2.69830614, 2.54867345]
+    elif p == 2:
         init_params = [ 1.03193062,  0.66187895,  0.0063484 , -0.01153315]
     elif p == 3:
         # test_N2_W2
@@ -117,9 +122,17 @@ def cvar(energies, alpha=1.0):
     end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx
 
+sampler = Sampler(mode=backend)
+
+error_miti = True
+ddOptions = DynamicalDecouplingOptions(enable=False, sequence_type="XX")
+twirlingOptions = TwirlingOptions(enable_gates=error_miti, enable_measure=error_miti, num_randomizations='auto', shots_per_randomization='auto', strategy="active-accum")
+samplerOptions = SamplerOptions(dynamical_decoupling=ddOptions, twirling=twirlingOptions)
+sampler = Sampler(mode=backend, options=samplerOptions)
+
 
 assigned_circuit = circuit.assign_parameters(init_params, inplace=False)
-sampler = Sampler(mode=backend)
+
 sampler_job = sampler.run([assigned_circuit], shots=shots)
 sampler_result = sampler_job.result()
 counts = sampler_result[0].data.c.get_counts()
@@ -129,7 +142,7 @@ evals = np.array([
 ]) + offset
 energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
 flat_energies = [x for xs in energies for x in xs]
-total_energy = cvar(flat_energies, 0.05)
+total_energy = cvar(flat_energies, 1)
 counter = Counter(flat_energies)
 
 logger.info(f'Energy: {total_energy}')
@@ -138,7 +151,7 @@ logger.info(counter)
 
 obj_to_dump = dict(
     singles=singles, doubles=doubles, sat_map=sat_map, graph=graph, 
-    cost_op=cost_op, counts=counts, energy=total_energy
+    cost_op=cost_op, counts=counts, energy=total_energy, init_params=init_params
 )
-with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/cvar_new/hardware/{filename}_sample.p{p}.shots{shots}.init{init_type}.pkl', 'wb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/experiments/hardware.{filename}_sample.error_miti{error_miti}.p{p}.shots{shots}.init{init_type}.pkl', 'wb') as f:
     pickle.dump(obj_to_dump, f)

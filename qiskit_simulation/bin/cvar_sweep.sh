@@ -2,7 +2,7 @@
 
 usage()
 {
-    echo "usage: hubo_no_noise_sweep.sh [[-f file -m memory -p reps -n shots] | [-h]]"
+    echo "usage: cvar_sweep.sh [[-f file -m memory -p reps -n shots] | [-h]]"
 }
 
 memory="4000"
@@ -39,8 +39,8 @@ outdir="$SCRATCH/out/qiskit/experiments"
 
 # Qiskit Testing
 echo "Qiskit Testing"
-bsub -J "cvar_no_noise.$filename.$reps" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=1:aff=no:j_exclusive=yes" -M "$memory"\
- -o "$outdir/$filename.p$reps.%J" -e "$outdir/error.$filename.p$reps.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/optimize_no_shot_noise_sweep.py -f $filename -p $reps"
+bsub -J "cvar_.$filename.$reps" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=1:aff=no:j_exclusive=yes" -M "$memory"\
+ -o "$outdir/$filename.sweep.p$reps.%J" -e "$outdir/error.$filename.sweep.p$reps.%J" -G "qpg" -q "qpg" \
+ "python3 $WORKING_DIR/optimize_sweep.py -f $filename -p $reps"
 
 exit 0

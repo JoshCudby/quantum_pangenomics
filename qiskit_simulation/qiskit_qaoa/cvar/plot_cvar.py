@@ -7,20 +7,7 @@ from collections import Counter
 from qiskit_qaoa.utils.argparser import get_parser
 from qiskit_qaoa.utils.logging import get_logger
 from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
-
-
-"""
-TODO:
-
-was trying to get sensible parameters for hardware runs. using trivial .gfa.
-Histograms look weird when plotted with 'real' QUBO energy values rather than normalised Hamiltonian energy samples
-optimized params, singles and doubles are stored in /lustre/scratch127/qpg/jc59/out/qiskit/cvar/test_N3_W4_cvar.p2.shots1000.hardwareFalse.noisyFalse.initramp.pkl 
-to recreate the plot from the paper.
-so could undo all changes to the plotting and just run that experiment on hardware.
-
-
-Or use the new results from trivial runs. 
-"""
+from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
 
 
 logger = get_logger(__name__)
@@ -38,14 +25,14 @@ init_type = args.init
 alpha = args.alpha
 
 data_file = f'/lustre/scratch127/qpg/jc59/out/oriented/qubo_data_{filename}.gfa.pkl'
-Q, _, offset, _ = get_Q_and_hamiltonian(data_file)
+Q, hamiltonian, offset, ising_offset = get_Q_and_hamiltonian(data_file)
 
 if args.method != '':
     filename_suffix = f'alpha{alpha}.p{p}.shots{shots}.method{args.method}.hardware{hardware}.noisy{noisy}.init{init_type}'
 else:
     filename_suffix = f'p{p}.shots{shots}.hardware{hardware}.noisy{noisy}.init{init_type}'
 
-with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/cvar_new/{filename}_cvar.{filename_suffix}.pkl', 'rb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/experiments/{filename}_cvar.{filename_suffix}.pkl', 'rb') as f:
     data = pickle.load(f)
     
 history = data["history"]
@@ -65,7 +52,7 @@ axs.set_ylabel('Objective value')
 
 
 fig.tight_layout()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/qubo_new/{filename}.convergence.{filename_suffix}.png')
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/experiments/{filename}.convergence.{filename_suffix}.png')
 
 min_val = 0
 
@@ -81,39 +68,55 @@ else:
 num_samples = sum(counts.values())
 
 
-int_samples = [np.array([int(x) for x in sample[::-1]]) for sample in counts.keys()]
-evals = np.array([
-    sample @ Q @ sample for sample in int_samples
-]) + offset
+# int_samples = [np.array([int(x) for x in sample[::-1]]) for sample in counts.keys()]
+# evals = np.array([
+#     sample @ Q @ sample for sample in int_samples
+# ]) + offset
+# energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
+# sample_vals = np.array([x for xs in energies for x in xs])
+
+evals = evaluate_sparse_pauli_samples(counts.keys(), cost_op) + ising_offset
 energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
 sample_vals = np.array([x for xs in energies for x in xs])
-
-# evals = evaluate_sparse_pauli_samples(counts.keys(), cost_op) + offset
-# energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
-# sample_vals = [x for xs in energies for x in xs]
 elapsed = time() - start
 logger.info(f'Time to compute energies {elapsed}')
 counter = Counter(sample_vals)
 print(counter.most_common(10))
 
-print(len(evals), len(int_samples))
-evals, int_samples = zip(*sorted(zip(evals, int_samples), key=lambda e: e[0]))
-for x in range(7):
-    print(int_samples[x], evals[x], counts[''.join([str(y) for y in int_samples[x]])[::-1]], counter[evals[x]])
+optimum = [1,0,0,0,0,0,0,0,0] + [0,0,1,0,0,0,0,0,0] + [0,0,0,0,0,1,0,0,0] + [1,0,0,0,0,0,0,0,0] + [0,0,1,0,0,0,0,0,0] + [0,0,0,0,0,0,1,0,0]
+print(evaluate_sparse_pauli_samples([''.join([str(x) for x in optimum[::-1]])], hamiltonian) + ising_offset)
+
+sample = ''.join([str(x) for x in optimum[::-1]])
+new_sample = [''] * len(sample)
+for x in range(len(sample)):
+    new_sample[len(sample)-1- sat_map[len(sample)-1-x]] = sample[x]
+new_sample = ''.join(new_sample)
+print(evaluate_sparse_pauli_samples([new_sample], cost_op) + ising_offset)
 
 
-# random_samples = np.random.choice(('0', '1'), (sum(history[-1][3].values()), n))
-# rand_vals = evaluate_sparse_pauli_samples([''.join(sample) for sample in random_samples], cost_op) + offset
+print(np.array([
+    sample @ Q @ sample for sample in [optimum]
+]) + offset)
 
-random_samples = np.random.choice((0, 1), (num_samples, n))
-rand_vals = np.array([
-    sample @ Q @ sample for sample in random_samples
-]) + offset
+
+# print(len(evals), len(int_samples))
+# evals, int_samples = zip(*sorted(zip(evals, int_samples), key=lambda e: e[0]))
+# for x in range(7):
+#     print(int_samples[x], evals[x], counts[''.join([str(y) for y in int_samples[x]])[::-1]], counter[evals[x]])
+
+
+random_samples = np.random.choice(('0', '1'), (sum(history[-1][3].values()), n))
+rand_vals = evaluate_sparse_pauli_samples([''.join(sample) for sample in random_samples], cost_op) + ising_offset
+
+# random_samples = np.random.choice((0, 1), (num_samples, n))
+# rand_vals = np.array([
+#     sample @ Q @ sample for sample in random_samples
+# ]) + offset
 rand_counter = Counter(rand_vals)
 rand_vals, random_samples = zip(*sorted(zip(rand_vals, random_samples), key=lambda e: e[0]))
 rand_vals = np.array(rand_vals)
-for x in range(7):
-    print(random_samples[x], rand_vals[x], rand_counter[rand_vals[x]])
+# for x in range(7):
+#     print(random_samples[x], rand_vals[x], rand_counter[rand_vals[x]])
 
 fig, axs = plt.subplots(1,1,figsize=(8, 5))
 print(f'Max val: {np.max(list(counter.keys()) + list(rand_counter.keys()))}')
@@ -148,4 +151,4 @@ axs.set_ylabel("Sample density")
 axs.set_xscale('log')
 
 fig.tight_layout()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/qubo_new/{filename}.histogram.{filename_suffix}.png')
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/experiments/{filename}.histogram.{filename_suffix}.png')

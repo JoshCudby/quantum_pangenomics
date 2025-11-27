@@ -348,7 +348,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
     ) -> tuple[bool, list[tuple[int, int]], tuple[int,...], list[tuple[int,...]]]:     
         def find_final_interaction(interactions, offset=0) -> tuple[Optional[tuple[int,...]], Optional[tuple[int,...]]]:
             cx_qubits, final_interaction = None, None
-            for interaction in sort_by_length(interactions, circuit.num_qubits, ascending=ascending):
+            for interaction in sort_by_length(interactions, ascending=ascending):
                 allowed_num_cx = (
                     len(interaction) - 1 if previous_final_interaction is None else np.abs(len(previous_final_interaction) - len(interaction))
                 ) + offset

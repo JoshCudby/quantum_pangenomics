@@ -326,7 +326,7 @@ class CommutingGateRouterPrecompute(TransformationPass):
         
         def find_final_interaction(interactions) -> tuple[Optional[tuple[int,...]], Optional[tuple[int,...]]]:
             cx_qubits, final_interaction = None, None
-            for interaction in sort_by_length(interactions, circuit.num_qubits, ascending=ascending):
+            for interaction in sort_by_length(interactions, ascending=ascending):
                 allowed_num_cx = len(interaction) - 1 if previous_final_interaction is None else np.abs(len(previous_final_interaction) - len(interaction))
                 cx_qubits = self._is_implementable_in_linear_cx_depth(interaction, currently_stored_info, allowed_num_cx)
                 if cx_qubits is not None and (not ascending or set(interaction).issubset(previous_final_interaction)): # type: ignore

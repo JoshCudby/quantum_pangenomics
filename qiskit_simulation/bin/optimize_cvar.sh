@@ -10,6 +10,7 @@ reps="4"
 num_gpu="1"
 init="random"
 shots=2000
+alpha=0.25
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -31,6 +32,9 @@ while [ "$1" != "" ]; do
         -i | --init )           shift
                                 init="$1"
                                 ;;
+        -a | --alpha )          shift
+                                alpha="$1"
+                                ;;
         --hardware )            hardware="--hardware"
                                 ;;
         --noisy )               noisy="--noisy"
@@ -51,12 +55,12 @@ done
 # module load ISG/experimental/fg12/openmpi/5.0.4-cuda12.1-lsf
 WORKING_DIR="/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_qaoa/cvar"
 source "/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/qiskit_venv/bin/activate"
-outdir="$SCRATCH/out/qiskit/cvar"
+outdir="$SCRATCH/out/qiskit/experiments"
 
 # Qiskit Testing
 echo "Qiskit Testing"
 bsub -J "optimize_cvar" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no" -M "$memory"\
  -o "$outdir/$filename.%J" -e "$outdir/error.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/optimize.py -f $filename -p $reps -m $memory -n $shots --init $init $hardware $noisy"
+ "python3 $WORKING_DIR/optimize.py -f $filename -p $reps -m $memory -n $shots --init $init -a $alpha $hardware $noisy"
 
 exit 0

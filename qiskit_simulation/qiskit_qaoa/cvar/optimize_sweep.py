@@ -11,18 +11,21 @@ from qiskit.transpiler.passes.routing.commuting_2q_gate_routing import SwapStrat
 from qiskit_ibm_runtime.fake_provider import FakeFez
 
 from qiskit_aer import AerSimulator
-
+from qiskit_aer.primitives import SamplerV2 as Sampler
 
 from qopt_best_practices.sat_mapping import SATMapper
 
 from qiskit_qaoa.utils.circuit_graph_utils import circuit_to_graph, graph_to_operator, circuit_construction
 from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
 from qiskit_qaoa.utils.logging import get_logger
+from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
+
 
 logger = get_logger(__name__)
 parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename')
 parser.add_argument('-p', '--reps', type=int, default=4)
+parser.add_argument('-n', '--shots', type=int, default=10000)
 parser.add_argument('-M', '--method', type=str, default='COBYLA')
 args = parser.parse_args()
 
@@ -41,11 +44,12 @@ def print_circuit_info(qc, circuit_name):
 
 data_file = f'/lustre/scratch127/qpg/jc59/out/oriented/qubo_data_{filename}.gfa.pkl'
 
-Q, hamiltonian, offset, _ = get_Q_and_hamiltonian(data_file)
+Q, hamiltonian, offset, ising_offset = get_Q_and_hamiltonian(data_file)
 
 
 backend_options = dict(
-    method='statevector',
+    method='matrix_product_state',
+    matrix_product_state_max_bond_dimension='20', 
     device='GPU',
     precision='single'
 )
@@ -82,10 +86,10 @@ doubles = cost_op[cost_op.paulis.z.sum(axis=-1) == 2]
 circ_dict = circuit_construction(singles, doubles, None, swap_strat, edge_coloring, {}, p)
 
 circuit = circ_dict["circuit_to_sample"]
-circuit.remove_final_measurements()
 print_circuit_info(circuit, '(Transpiled) Remapped Circuit')
 
 backend = AerSimulator(**backend_options)
+sampler = Sampler(seed=seed, options=dict(backend_options=backend_options))
 
 qaoa_depth = len(circuit.parameters) // 2
 
@@ -93,7 +97,7 @@ qaoa_depth = len(circuit.parameters) // 2
 history = []
 best_func_val = np.inf
 best_params = []
-best_sv = np.array([])
+best_samples = []
 best_res = None
 
 def callback(intermediate_result: OptimizeResult):
@@ -112,29 +116,27 @@ def cvar(energies, alpha=1.0):
     end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx
 
-int_samples = [np.array([int(x) for x in np.binary_repr(y, width=hamiltonian.num_qubits)]) for y in range(2**hamiltonian.num_qubits)]
-evals = np.array([
-    sample @ Q @ sample for sample in int_samples
-]) + offset
-
 
 
 def objective(x: np.ndarray):
     assigned_circuit = circuit.assign_parameters(x, inplace=False)
-    assigned_circuit.save_statevector()
-    job = backend.run([assigned_circuit])
-    result = job.result()
-    data = result.results[0].data
-    sv = np.asarray(data.statevector)
-    energy = np.sum(np.abs(sv) ** 2 * evals)
+    sampler_job = sampler.run([assigned_circuit], shots=args.shots)
+    sampler_result = sampler_job.result()
+    counts = sampler_result[0].data.c.get_counts()
+    
+    energies = []
+    evals = evaluate_sparse_pauli_samples(counts.keys(), cost_op) + ising_offset
+    energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
+    flat_energies = [x for xs in energies for x in xs]
+    energy = cvar(flat_energies, 1.0)
     
     global best_func_val
     global best_params
-    global best_sv
+    global best_samples
     if energy < best_func_val:
         best_func_val = energy
         best_params = x
-        best_sv = sv
+        best_samples = counts
 
     history.append((energy, x.tolist()))
     return energy
@@ -166,13 +168,13 @@ for idx, param in enumerate(params):
     )
     if res.fun == best_func_val:
         best_res = res
-    if idx % 10 == 99:
+    if idx % 10 == 0:
         logger.info(f'Completed search number {idx}')
 
 
 obj_to_dump = dict(
     best_result=best_res, history=history, singles=singles, doubles=doubles, sat_map=sat_map, graph=graph, 
-    cost_op=cost_op, best_func_val=best_func_val, best_params=best_params, best_sv=best_sv, circuit=circuit
+    cost_op=cost_op, best_func_val=best_func_val, best_params=best_params, best_samples=best_samples, circuit=circuit
 )
-with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/experiments/{filename}.sweep.p{p}.no_shot_noise.pkl', 'wb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/experiments/{filename}.sweep.p{p}.pkl', 'wb') as f:
     pickle.dump(obj_to_dump, f)
