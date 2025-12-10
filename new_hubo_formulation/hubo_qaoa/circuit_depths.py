@@ -92,7 +92,7 @@ def sweep_swap_depths(layers: list[int], qubits: list, best_rzz: Best, swap_stra
 method = 'statevector'
 backend_options = dict(
     method=method,
-    device='GPU',
+    device='CPU',
     precision='single',
     basis_gates=["sx", "x", "rz", "rzz", "cz", "id", "cx"]
 )
@@ -109,11 +109,14 @@ for filename, copy_numbers in zip(
         # 'test_N4_W6', 'test_N5_W6', 
         # 'test_N7_W2', 'test_N7_W3','test_N7_W4', 
         # 'test_N7_W5', 
-        # 'test_N8_W2', 'test_N8_W3',
-        # 'test_N8_W4', 'test_N8_W5', 
+        # 'test_N8_W2', 
+        # 'test_N8_W3',
+        # 'test_N8_W4', 
+        # 'test_N8_W5', 
         # 'test_N8_W6',
-        'test_N9_W6', 
-        # 'test_N10_W6','test_N14_W7'
+        # 'test_N9_W6', 
+        # 'test_N10_W6',
+        'test_N14_W7'
     ], 
     [
         # [1,1], [1,1,1], 
@@ -122,11 +125,13 @@ for filename, copy_numbers in zip(
         # [2,2,1,1], [1,2,1,1,1], 
         # [1,0,0,0,0,0,1], [1,1,0,0,0,0,1], [1,1,1,0,0,0,1], 
         # [1,1,1,0,1,0,1],
-        # [1,0,0,0,0,0,0,1],[1,1,0,0,0,0,0,1],
+        # [1,0,0,0,0,0,0,1],
+        # [1,1,0,0,0,0,0,1],
         # [1,1,1,0,0,0,0,1],[1,1,1,1,0,0,0,1],
         # [1,1,0,1,1,1,0,1],
-        [1,1,0,0,1,0,1,1,1], 
-        # [1,1,0,0,1,0,1,1,0,1], [1,1,0,0,1,0,1,0,0,1,0,0,1,1]
+        # [1,1,0,0,1,0,1,1,1], 
+        # [1,1,0,0,1,0,1,1,0,1],
+        [1,1,0,0,1,0,1,0,0,1,0,0,1,1]
     ]
 ):
     logger.info('-------------------------------------')
@@ -186,28 +191,15 @@ for filename, copy_numbers in zip(
         'rzz': best_rzz,
     }
     
-    if args.coupling == 'all2all':
-        try:
-            with open(f'/lustre/scratch127/qpg/jc59/new_hubo_formulation/circuit_depths/results.all2all.precompute.{args.timeout}.pkl', 'rb') as f:
-                loaded_results = pickle.load(f)
-        except FileNotFoundError:
-            loaded_results = dict()
-        to_save = dict(loaded_results, **results)
-            
+    try:
+        with open(f'/lustre/scratch127/qpg/jc59/new_hubo_formulation/circuit_depths/results.coupling{args.coupling}.precompute.{args.timeout}.pkl', 'rb') as f:
+            loaded_results = pickle.load(f)
+    except FileNotFoundError:
+        loaded_results = dict()
+    to_save = dict(loaded_results, **results)
+        
 
-        with open(f'/lustre/scratch127/qpg/jc59/new_hubo_formulation/circuit_depths/results.all2all.precompute.{args.timeout}.pkl', 'wb') as f:
-            pickle.dump(to_save, f)
-    
-    else:        
-        try:
-            with open(f'/lustre/scratch127/qpg/jc59/new_hubo_formulation/circuit_depths/results.coupling{args.coupling}.precompute.{args.timeout}.pkl', 'rb') as f:
-                loaded_results = pickle.load(f)
-        except FileNotFoundError:
-            loaded_results = dict()
-        to_save = dict(loaded_results, **results)
-            
-
-        with open(f'/lustre/scratch127/qpg/jc59/new_hubo_formulation/circuit_depths/results.coupling{args.coupling}.precompute.{args.timeout}.pkl', 'wb') as f:
-            pickle.dump(to_save, f)
-            
+    with open(f'/lustre/scratch127/qpg/jc59/new_hubo_formulation/circuit_depths/results.coupling{args.coupling}.precompute.{args.timeout}.pkl', 'wb') as f:
+        pickle.dump(to_save, f)
+        
 logger.info(to_save)

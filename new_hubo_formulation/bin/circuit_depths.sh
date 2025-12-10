@@ -10,9 +10,6 @@ timeout=60
 
 while [ "$1" != "" ]; do
     case $1 in
-        -f | --file )           shift
-                                filename="$1"
-                                ;;
         -m | --memory )         shift
                                 memory="$1"
                                 ;;
@@ -38,7 +35,7 @@ source "/nfs/users/nfs_j/jc59/quantumwork/pangenome/.venv/bin/activate"
 outdir="$SCRATCH/new_hubo_formulation/circuit_depths"
 
 echo "HUBO Testing"
-bsub -J "hubo_depths" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=1:aff=no:j_exclusive=yes" -M "$memory"\
+bsub -J "hubo_depths" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory"\
  -o "$outdir/depths.$timeout.%J" -e "$outdir/error.depths.$timeout.%J" -G "qpg" -q "qpg" \
  "python3 $WORKING_DIR/circuit_depths.py -t $timeout -C $coupling"
 

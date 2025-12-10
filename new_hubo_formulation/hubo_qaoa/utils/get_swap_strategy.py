@@ -11,7 +11,7 @@ def get_swap_strategy(coupling_map: str, n: int, T: int):
             extended_swap_strat = ExtendedSwapStrategy.from_all_to_all(n * T)
         case 'heavy-hex':
             rows, cols = 1, 1
-            while 2 * (rows + cols + rows * cols) < n * T:
+            while 4 * (rows + cols + rows * cols) < n * T:
                 if rows < cols:
                     rows += 1
                 else:

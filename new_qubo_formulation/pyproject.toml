@@ -1,0 +1,17 @@
+[project]
+name = "qubo_qaoa"
+version = "0.1.0"
+description = "QPG Qiskit HUBO QAOA for Tangle Resolution"
+dependencies = [
+  "qiskit",
+  "qiskit-optimization[cplex]",
+  "qiskit-ibm-runtime",
+  "scipy",
+  "scikit-optimize",
+  "matplotlib",
+  "gfapy"
+]
+
+[build-system]
+build-backend = "flit_core.buildapi"
+requires = ["flit_core >=3.2,<4"]
