@@ -46,6 +46,31 @@ def get_Q_and_hamiltonian(data_file):
     return Q, hamiltonian, offset, ising_offset
 
 
+def get_normalised_Q_and_hamiltonian(data_file):
+    with open(data_file, 'rb') as f:
+        data = pickle.load(f)
+    Q = data['Q']
+    offset = data['offset']
+    
+    Q = np.triu(Q) * 2
+    Q -= np.triu(np.triu(Q).T) / 2
+
+    mod = QuadraticProgram("QUBO test")
+    mod.binary_var_list(Q.shape[0])
+    mod.minimize(constant=offset, linear=None, quadratic=Q)
+    hamiltonian, ising_offset = mod.to_ising()
+    hamiltonian = hamiltonian.sort(weight=True)
+
+    normalisation = np.max(np.abs(Q))
+    Q = Q / normalisation
+    offset = offset / normalisation
+
+    ham_norm = np.abs(max(hamiltonian.coeffs))
+    hamiltonian /= ham_norm
+    ising_offset /= ham_norm
+    return Q, hamiltonian, offset, ising_offset, normalisation, ham_norm
+
+
 def get_objective_and_hamiltonian(data_file):
     with open(data_file, 'rb') as f:
         data = pickle.load(f)

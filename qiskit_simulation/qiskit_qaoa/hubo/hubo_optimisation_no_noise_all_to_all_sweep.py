@@ -185,7 +185,7 @@ params = [
     )
 ]
 
-logger.info('Starting optimisation sweep')
+logger.info(f'Starting optimisation sweep. Num iters: {len(params)}.')
 for idx, param in enumerate(params):
     results.append(minimize(
         objective, 
@@ -195,8 +195,8 @@ for idx, param in enumerate(params):
         options={"maxiter": 300, "rhobeg": 1/(3*gamma_resolution)},  # , "ftol": 1e-7
         # callback=callback if args.method not in ['SLSQP', 'COBYLA', 'TNC'] else callback_cobyla
     ))
-    if idx % 100 == 99:
-        logger.info(f'Completed search number {idx}')
+    if idx % 100 == 0:
+        logger.info(f'Completed search number {idx+1}')
 
 
 obj_to_dump = dict(

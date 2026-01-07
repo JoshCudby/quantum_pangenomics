@@ -98,9 +98,8 @@ elif init_type == 'fixed':
     logger.info('Using fixed init values')
 elif init_type == 'warm':
     if p == 1:
-        # test_N4_W6
-        # init_params = [2.69911474, 2.54850482]
-        init_params = [2.69830614, 2.54867345]
+        # test_N4_W6 sweep
+        init_params = [2.35810456, 2.81522484]   
     elif p == 2:
         init_params = [ 1.03193062,  0.66187895,  0.0063484 , -0.01153315]
     elif p == 3:

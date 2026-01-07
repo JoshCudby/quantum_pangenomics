@@ -35,6 +35,9 @@ while [ "$1" != "" ]; do
         -a | --alpha )          shift
                                 alpha="$1"
                                 ;;
+        -N | --nodes )          shift
+                                nodes="$1"
+                                ;;
         --hardware )            hardware="--hardware"
                                 ;;
         --noisy )               noisy="--noisy"
@@ -61,6 +64,6 @@ outdir="$SCRATCH/out/qiskit/experiments"
 echo "Qiskit Testing"
 bsub -J "optimize_cvar" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -gpu "num=$num_gpu:aff=no" -M "$memory"\
  -o "$outdir/$filename.%J" -e "$outdir/error.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/optimize.py -f $filename -p $reps -m $memory -n $shots --init $init -a $alpha $hardware $noisy"
+ "python3 $WORKING_DIR/optimize.py -f $filename -p $reps -m $memory -n $shots --init $init -a $alpha -N $nodes $hardware $noisy"
 
 exit 0

@@ -305,32 +305,37 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
             for q in range(n):
                 if qmask_list[q] == interaction_mask and 1 <= max_k:
                     return (q,)
-            for start in range(n):
-                cur_list = [start]
-                cur_mask = qmask_list[start]
-                frontier = [nb for nb in self._adj[start] if nb != start and nb > start] 
-                stack = [(cur_list, cur_mask, frontier)]
-                while stack:
-                    s_list, s_mask, s_front = stack.pop()
-                    if len(s_list) >= max_k:
-                        continue
-                    for nb in s_front:
-                        if nb in s_list:
+            def frontier_search(qubits: tuple[int,...]):
+                for start in qubits:
+                    cur_list = [start]
+                    cur_mask = qmask_list[start]
+                    frontier = [nb for nb in self._adj[start] if nb != start and nb > start] 
+                    stack = [(cur_list, cur_mask, frontier)]
+                    while stack:
+                        s_list, s_mask, s_front = stack.pop()
+                        if len(s_list) >= max_k:
                             continue
-                        new_list = s_list + [nb]
-                        new_mask = s_mask ^ qmask_list[nb]
-                        if new_mask == interaction_mask:
-                            return tuple(sorted(new_list))
-                        if len(new_list) < max_k:
-                            new_front = []
-                            for x in s_front:
-                                if x != nb and x not in new_list:
-                                    new_front.append(x)
-                            for nb2 in self._adj[nb]:
-                                if nb2 > start and nb2 not in new_list and nb2 not in new_front:
-                                    new_front.append(nb2)
-                            stack.append((new_list, new_mask, new_front))
-            return None
+                        for nb in s_front:
+                            if nb in s_list:
+                                continue
+                            new_list = s_list + [nb]
+                            new_mask = s_mask ^ qmask_list[nb]
+                            if new_mask == interaction_mask:
+                                return tuple(sorted(new_list))
+                            if len(new_list) < max_k:
+                                new_front = []
+                                for x in s_front:
+                                    if x != nb and x not in new_list:
+                                        new_front.append(x)
+                                for nb2 in self._adj[nb]:
+                                    if nb2 > start and nb2 not in new_list and nb2 not in new_front:
+                                        new_front.append(nb2)
+                                stack.append((new_list, new_mask, new_front))
+                return None
+            cx_qubits = frontier_search(mask_to_tuple_local(interaction_mask))
+            if cx_qubits is not None:
+                return cx_qubits
+            return frontier_search(range(n))
 
         def apply_rzz_from_mask(q1: int, q2: int, mask: int, from_extra: bool, applied_extra_masks: list[int]):
             if from_extra:

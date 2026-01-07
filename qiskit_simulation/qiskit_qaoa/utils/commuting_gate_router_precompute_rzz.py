@@ -235,6 +235,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
     ) -> list:
         gate = current_layer.pop(tuple(), None)
         if gate is not None:
+            print(f'Applying phase {np.real_if_close(gate.params)[0]}')
             circuit.global_phase = circuit.global_phase - 0.5 * np.real_if_close(gate.params)[0]
             
         one_qubit_gate_sites = [key for key in current_layer.keys() if len(key) == 1]
@@ -321,8 +322,23 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         currently_stored_info: dict[int, set[int]],
         allowed_number_of_cx: int
     ) -> tuple[int,...] | None:
-        i = 1
+        if all([currently_stored_info[q] == set([q]) for q in tuple(interaction)]):
+            return tuple(interaction)
         interaction_set = set(interaction)
+
+        i = 1
+        while i < allowed_number_of_cx + 3:
+            for cx_qubits in combinations(interaction_set, i):
+                if self._is_connected(cx_qubits) and reduce(
+                    set.symmetric_difference,
+                    [currently_stored_info[q] for q in cx_qubits],
+                    set()
+                ) == interaction_set:
+                    return cx_qubits
+            i += 1
+
+
+        i = 1
         while i < allowed_number_of_cx + 3:
             for cx_qubits in combinations(range(self._num_qubits), i):
                 if self._is_connected(cx_qubits) and reduce(

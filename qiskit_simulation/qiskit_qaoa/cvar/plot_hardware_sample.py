@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from time import time
 from collections import Counter
 import argparse
+from functools import reduce
 
 from qiskit_qaoa.utils.logging import get_logger
 from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
@@ -76,7 +77,23 @@ post_process_sample_vals = np.array([x for xs in post_process_energies for x in 
 
 
 
-random_samples = np.random.choice(('0', '1'), (num_samples, n))
+# random_samples = np.random.choice(('0', '1'), (num_samples, n))
+
+# random_ones = np.random.random_integers(0, 9-1, (num_samples, 6))
+random_ones = np.random.random_integers(0, 9-1, (len(post_process_sample_vals), 6))
+vectors = [
+    ''.join(['0']*i + ['1'] + ['0']*(9-i-1)) for i in range(9)
+]
+random_samples = [
+    reduce(
+        str.__add__,
+        [vectors[x] for x in random_ones[j, :]],
+        ''
+    )
+    for j in range(num_samples)
+]
+    
+
 rand_samples = [''.join(sample) for sample in random_samples]
 
 
@@ -102,14 +119,19 @@ rand_post_process_sample_vals = np.array([x for xs in rand_post_process_energies
     
 
 fig, axs = plt.subplots(1,1,figsize=(8, 5))
-print(f'Max val: {np.max(list(counter.keys()) + list(rand_counter.keys()))}')
+max_val = np.max([np.max(sample_vals+1), np.max(rand_vals+1)])
+print(f'Max val: {max_val}')
 print(f'Max sample: {np.max(sample_vals)}, {np.log10(np.max(sample_vals))}')
 print(f'Max rand: {np.max(rand_vals)}')
 
-bins = np.logspace(0, np.log10(np.max([np.max(sample_vals+1), np.max(rand_vals+1)])), 50, base=10)
+bins = np.logspace(
+    0, 
+    np.log10(max_val), 
+    10*int(np.ceil(np.log10(max_val))),
+    base=10
+)
 
 
-hist_counts, hist_bins = np.histogram(sample_vals+1, bins, density=False)
 
 axs.hist(sample_vals+1, bins=bins, label='QAOA circuit samples', density=False, weights=[1/num_samples]*num_samples)
 axs.hist(rand_vals+1, bins=bins, label='Random samples', density=False, alpha=0.5, weights=[1/num_samples]*num_samples)
@@ -132,15 +154,12 @@ axs.set_ylabel("Sample density")
 axs.set_xscale('log')
 
 fig.tight_layout()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/experiments/hardware.{filename}.sample_only.histogram.{filename_suffix}.png')
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/experiments/test_random.hardware.{filename}.sample_only.histogram.{filename_suffix}.png')
 
 
 fig, axs = plt.subplots(1,1,figsize=(8, 5))
-bins = np.logspace(0, np.log10(np.max([np.max(sample_vals+1), np.max(rand_vals+1)])), 50, base=10)
-# bins = sorted(list(set(np.ceil(bins))))
-# print(bins)
 
-hist_counts, hist_bins = np.histogram(sample_vals+1, bins, density=False)
+
 
 # axs.hist(sample_vals+1, bins=bins, label='QAOA circuit samples', density=False, weights=[1/num_samples]*num_samples)
 # axs.hist(rand_vals+1, bins=bins, label='Random samples', density=False, alpha=0.75, weights=[1/num_samples]*num_samples)
@@ -163,4 +182,4 @@ axs.set_ylabel("Sample density")
 axs.set_xscale('log')
 
 fig.tight_layout()
-fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/experiments/hardware.{filename}.sample_only.postprocess.histogram.{filename_suffix}.png')
+fig.savefig(f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/experiments/test_random.hardware.{filename}.sample_only.postprocess.histogram.{filename_suffix}.png')

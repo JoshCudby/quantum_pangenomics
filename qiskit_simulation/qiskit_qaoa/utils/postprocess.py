@@ -1,4 +1,4 @@
-def postprocess(samples, T) -> list[list[str]]:
+def postprocess(samples: list[str], T: int) -> list[list[str]]:
     """
     For each bitstring in `samples`, if it has more than T ones,
     return a list of all bitstrings formed by selecting exactly T of those '1' positions
@@ -14,7 +14,7 @@ def postprocess(samples, T) -> list[list[str]]:
         m = len(ones_positions)
 
         # only proceed if strictly more than T ones
-        if 2*T > m > T:
+        if 2.5*T > m > T:
             # Special-case T == 0: produce single all-zero string
             if T == 0:
                 result.append('0' * n)

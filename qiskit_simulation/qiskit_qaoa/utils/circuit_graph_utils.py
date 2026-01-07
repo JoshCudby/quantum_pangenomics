@@ -51,10 +51,12 @@ def circuit_to_graph(qc: QuantumCircuit, parameter) -> nx.Graph:
     return graph
 
 
-def graph_to_operator(graph: nx.Graph, prefactor: float = 1.0) -> SparsePauliOp:
+def graph_to_operator(graph: nx.Graph, physical_qubits=None, prefactor: float = 1.0) -> SparsePauliOp:
     pauli_list = []
+    if physical_qubits is None:
+        physical_qubits = len(graph)
     for node1, node2, data in graph.edges(data=True):
-        paulis = ["I"] * len(graph)
+        paulis = ["I"] * physical_qubits
         paulis[node1], paulis[node2] = "Z", "Z"
         if "weight" in data:
             weight = data["weight"] 
@@ -73,7 +75,9 @@ def circuit_construction(
         swap_strat,
         edge_coloring,
         metadata,
-        reps
+        reps,
+        init_state=None,
+        mixer_layer=None
 ):
     circuits_dict = {}
     n = len(doubles[0].paulis[0])
@@ -107,7 +111,7 @@ def circuit_construction(
     cost_circ = tsingles.compose(tdoubles_circ, inplace=False)
     circuits_dict["cost_circuit"] = cost_circ
 
-    construction_pass = QAOAConstructionPass(reps)
+    construction_pass = QAOAConstructionPass(reps,init_state=init_state,mixer_layer=mixer_layer)
     construction_pass.property_set = properties
     transpiled_circ = dag_to_circuit(construction_pass.run(circuit_to_dag(cost_circ)))
 

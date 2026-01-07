@@ -299,6 +299,9 @@ class ExtendedSwapStrategy(SwapStrategy):
         distance = self._distances.get(nodes, None)
         if distance is not None:
             return distance
+        distance_tensor = self._distance_tensors.get(len(nodes), None)
+        if distance_tensor is not None:
+            return distance_tensor[nodes]
         
         if len(nodes) < 2:
             return 0
