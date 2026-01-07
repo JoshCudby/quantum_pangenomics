@@ -17,8 +17,8 @@ from qiskit_aer.primitives import SamplerV2 as Sampler
 
 # from qopt_best_practices.sat_mapping import SATMapper
 
-from qiskit_qaoa.utils.circuit_graph_utils import circuit_to_graph, graph_to_operator, circuit_construction
-from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
+from qiskit_qaoa.utils.circuit_graph_utils import circuit_construction
+from qiskit_qaoa.utils.hamiltonian_utils import get_normalised_Q_and_hamiltonian
 from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
 from qiskit_qaoa.utils.logging import get_logger
 
@@ -51,7 +51,7 @@ rng = np.random.default_rng()
 
 data_file = f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/qubo_data/qubo_data_{filename}.gfa.pkl'
 
-Q, hamiltonian, offset, ising_offset = get_Q_and_hamiltonian(data_file)
+_, hamiltonian, _, ising_offset, _, ham_norm = get_normalised_Q_and_hamiltonian(data_file)
 num_qubits: int = hamiltonian.num_qubits
 
    
@@ -95,7 +95,7 @@ def iteration(qc, angles, beta_T, history):
     sampler_result = sampler_job.result()
     counts = sampler_result[0].data.c.get_counts()
     
-    evals = evaluate_sparse_pauli_samples(counts.keys(), hamiltonian) + ising_offset
+    evals = ham_norm * (evaluate_sparse_pauli_samples(counts.keys(), hamiltonian) + ising_offset)
     samples, energies = [], []
     for idx, (sample, count) in enumerate(counts.items()):
         samples.extend(count * [sample])
@@ -174,9 +174,9 @@ def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCir
     return energy, samples, circuit
         
 
-delta_bs = np.linspace(0.1, 0.5, 5)
-delta_gs = np.linspace(3.75, 4.25, 5)
-ps = range(1, 12, 5)
+delta_bs = np.linspace(eps, 0.5, 20)
+delta_gs = np.linspace(eps, 0.5, 20)
+ps = [1, 6, 11]
 
 # deltas = np.linspace(0.01, 1, 3)
 # ps = range(1, 3)
@@ -193,5 +193,5 @@ for i, j, k in product(range(len(ps)), range(len(delta_bs)), range(len(delta_gs)
     samples_dict[(ps[i], delta_bs[j], delta_gs[k])] = samples
     
 to_save=dict(energies=energies, delta_bs=delta_bs, delta_gs=delta_gs, ps=ps, samples_dict=samples_dict)    
-with open(f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational.{filename}.db{delta_bs[-1]}.dg{delta_gs[-1]}.shots{shots}.pkl', 'wb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational/nonvariational.{filename}.db{np.round(delta_bs[-1], 2)}.dg{np.round(delta_gs[-1], 2)}.shots{shots}.pkl', 'wb') as f:
     pickle.dump(to_save, f)
