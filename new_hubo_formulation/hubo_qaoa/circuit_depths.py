@@ -114,9 +114,9 @@ for filename, copy_numbers in zip(
         # 'test_N8_W4', 
         # 'test_N8_W5', 
         # 'test_N8_W6',
-        # 'test_N9_W6', 
+        'test_N9_W6', 
         # 'test_N10_W6',
-        'test_N14_W7'
+        # 'test_N14_W7'
     ], 
     [
         # [1,1], [1,1,1], 
@@ -129,9 +129,9 @@ for filename, copy_numbers in zip(
         # [1,1,0,0,0,0,0,1],
         # [1,1,1,0,0,0,0,1],[1,1,1,1,0,0,0,1],
         # [1,1,0,1,1,1,0,1],
-        # [1,1,0,0,1,0,1,1,1], 
+        [1,1,0,0,1,0,1,1,1], 
         # [1,1,0,0,1,0,1,1,0,1],
-        [1,1,0,0,1,0,1,0,0,1,0,0,1,1]
+        # [1,1,0,0,1,0,1,0,0,1,0,0,1,1]
     ]
 ):
     logger.info('-------------------------------------')
@@ -139,8 +139,8 @@ for filename, copy_numbers in zip(
     logger.info('\n\n')
     filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{filename}.gfa'
     graph, n, V, T = gfa_file_to_graph(filepath, copy_numbers)
-    hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=1.0)
-    
+    hamiltonian, norm = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=1.0)
+    hamiltonian = hamiltonian * norm
     extended_swap_strat = get_swap_strategy(args.coupling, n, T)
 
         

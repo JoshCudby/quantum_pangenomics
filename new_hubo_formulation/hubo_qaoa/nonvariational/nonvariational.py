@@ -19,24 +19,12 @@ from qopt_best_practices.transpilation.qaoa_construction_pass import QAOAConstru
 
 from hubo_qaoa.utils.graph_to_hubo_hamiltonian import graph_to_hubo_hamiltonian
 from hubo_qaoa.utils.gfa_utils import gfa_file_to_graph
-
+from hubo_qaoa.utils.parameterise_circuit import parameterise_circuit
+from hubo_qaoa.utils.lr_qaoa import get_LR_qaoa_circuit
 
 from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
 from qiskit_qaoa.utils.logging import get_logger
 
-
-def parameterise_circuit(qc: QuantumCircuit) -> QuantumCircuit:
-    clone = QuantumCircuit(qc.num_qubits)
-    gamma = Parameter('γ')
-
-    for g in qc:
-        if len(g.operation.params) == 0:
-            clone.append(g)
-        else:
-            op = g.operation.copy()
-            op.params = [g.operation.params[0] * gamma]
-            clone.append(op, g.qubits)
-    return clone
         
 
 logger = get_logger(__name__)
@@ -69,12 +57,12 @@ rng = np.random.default_rng()
 data_file = '/lustre/scratch127/qpg/jc59/new_hubo_formulation/circuit_depths/results.couplingall.precompute.0.pkl'
 with open(data_file, 'rb') as f:
     res = pickle.load(f)
-cost_circuit = parameterise_circuit(res[filename]['rzz']['circuit'])
+cost_circuit = parameterise_circuit(res[filename]['rzz']['circuit'], parameter=Parameter('γ'))
 num_qubits: int = cost_circuit.num_qubits    
     
 filepath = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/data/{filename}.gfa'
 graph, n, V, T = gfa_file_to_graph(filepath, args.copy_numbers)
-full_hamiltonian = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=1.0)
+full_hamiltonian, norm = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=1.0)
 
 
 eta = 1
@@ -110,7 +98,7 @@ def iteration(qc, angles, beta_T, history):
     sampler_result = sampler_job.result()
     counts = sampler_result[0].data.c.get_counts()
     
-    evals = evaluate_sparse_pauli_samples(counts.keys(), full_hamiltonian)
+    evals = evaluate_sparse_pauli_samples(counts.keys(), full_hamiltonian * norm)
     samples, energies = [], []
     for idx, (sample, count) in enumerate(counts.items()):
         samples.extend(count * [sample])
@@ -131,37 +119,8 @@ init_angles = theta * np.ones((num_qubits,))
 
 
 def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircuit]=None):
-    betas = [(1-k/p) * delta_b for k in range(p)]
-    gammas = [(k+1) / p * delta_g for k in range(p)]
-    fixed_params = betas + gammas
-    
-    if circ is None:
-        phis = ParameterVector('ϕ', num_qubits)
-        betas = ParameterVector('β', p)
-
-
-        init = QuantumCircuit(num_qubits)
-        for i in range(num_qubits):
-            init.ry(phis[i], i)
-            
-        mixer = QuantumCircuit(num_qubits)
-        for i in range(num_qubits):
-            mixer.ry(-phis[i], i)
-            mixer.rz(-2*betas[0], i)
-            mixer.ry(phis[i], i)
-        
-        construction_pass = QAOAConstructionPass(p, init_state=init, mixer_layer=mixer)
-        circuit = dag_to_circuit(construction_pass.run(circuit_to_dag(cost_circuit)))
-        
-        logger.info(f'p = {p}. Circuit depth: {circuit.depth()}. Circuit counts: {circuit.count_ops()}')
-    else:
-        circuit = circ
-    
-
-    fixed_param_bind = {circuit.parameters[i]: fixed_params[i] for i in range(2*p)}
-    fixed_qc = circuit.assign_parameters(fixed_param_bind)
-
-
+    phis = ParameterVector('ϕ', num_qubits)
+    fixed_qc, circuit = get_LR_qaoa_circuit(p, delta_b, delta_g, num_qubits, cost_circuit, circ, phis, True)
     history = []
     angles = [init_angles]
     iters = 10
@@ -187,25 +146,25 @@ def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCir
     logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}')
     return energy, samples, circuit
         
+delta_b_fixed = 0.45
+delta_g_fixed = 0.26
 
-delta_bs = np.linspace(0.1, 0.5, 5)
-delta_gs = np.linspace(3.75, 4.25, 5)
-ps = range(1, 12, 5)
+rescaling = np.logspace(-0.5, 0, 3, base=10)
+# ps = sorted(set([int(x) for x in np.logspace(0, 1.5, 3, base=10)]))
+ps = [1, 5, 10]
+# ps = [1, 6, 11, 16, 21]
 
-# deltas = np.linspace(0.01, 1, 3)
-# ps = range(1, 3)
-
-energies = np.zeros((len(ps), len(delta_bs), len(delta_gs)))
+energies = np.zeros((len(ps), len(rescaling)))
 samples_dict = {}
 
 circuit = None
-for i, j, k in product(range(len(ps)), range(len(delta_bs)), range(len(delta_gs))):
-    if j == 0 and k == 0:
+for i, j in product(range(len(ps)), range(len(rescaling))):
+    if j == 0:
         circuit = None
-    e, samples, circuit = warm_start(ps[i], delta_bs[j], delta_gs[k], circuit)
-    energies[i, j, k] = e
-    samples_dict[(ps[i], delta_bs[j], delta_gs[k])] = samples
+    e, samples, circuit = warm_start(ps[i], delta_b_fixed * rescaling[j], delta_g_fixed * rescaling[j], circuit)
+    energies[i, j] = e
+    samples_dict[(ps[i], rescaling[j])] = samples
     
-to_save=dict(energies=energies, delta_bs=delta_bs, delta_gs=delta_gs, ps=ps, samples_dict=samples_dict)    
-with open(f'/lustre/scratch127/qpg/jc59/new_hubo_formulation/nonvariational/nonvariational.{filename}.db{delta_bs[-1]}.dg{delta_gs[-1]}.shots{shots}.pkl', 'wb') as f:
+to_save=dict(energies=energies, delta_b_fixed=delta_b_fixed, delta_g_fixed=delta_g_fixed, ps=ps, rescaling=rescaling, samples_dict=samples_dict)    
+with open(f'/lustre/scratch127/qpg/jc59/new_hubo_formulation/nonvariational/nonvariational.{filename}.db{delta_b_fixed}.dg{delta_g_fixed}.shots{shots}.pkl', 'wb') as f:
     pickle.dump(to_save, f)

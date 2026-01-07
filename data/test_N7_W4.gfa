@@ -1,11 +1,11 @@
 H	VN:Z:1.0
-S	u0	*	LN:i:4	SC:f:1.0	st:Z:start
+S	u0	*	LN:i:4	SC:f:1.0
 S	u1	*	LN:i:4	SC:f:1.0
 S	u2	*	LN:i:4	SC:f:1.0
 S	u3	*	LN:i:4	SC:f:0.0
 S	u4	*	LN:i:4	SC:f:0.0
 S	u5	*	LN:i:4	SC:f:0.0
-S	u6	*	LN:i:4	SC:f:1.0	st:Z:end
+S	u6	*	LN:i:4	SC:f:1.0
 L	u0	+	u1	+	0M	EC:i:1
 L	u0	+	u2	+	0M	EC:i:1
 L	u1	+	u2	+	0M	EC:i:1

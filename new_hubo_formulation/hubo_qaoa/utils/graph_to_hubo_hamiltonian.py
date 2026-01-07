@@ -9,7 +9,7 @@ rng = np.random.default_rng(seed=1)
 
 def graph_to_hubo_hamiltonian(
         graph: nx.Graph, n: int, T: int, lamda: float, constraint_terms: float | tuple[int,...]=1.0
-) -> SparsePauliOp:
+) -> tuple[SparsePauliOp, float]:
     nodes = list(graph.nodes)
     V = len(nodes)
     if isinstance(constraint_terms, tuple):
@@ -81,4 +81,6 @@ def graph_to_hubo_hamiltonian(
     hamiltonian = lamda * cons_spo + obj_spo
     hamiltonian = hamiltonian.simplify()
     hamiltonian = hamiltonian.sort()
-    return hamiltonian
+    norm = np.abs(max(hamiltonian.coeffs[1:]))
+    hamiltonian /= norm
+    return hamiltonian, norm

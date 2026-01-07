@@ -2,11 +2,10 @@
 
 usage()
 {
-    echo "usage: nonvariational.sh [[-f file -m memory -n shots -c copy_numbers] | [-h]]"
+    echo "usage: param_exploration.sh [[-f file -m memory -c copy_numbers] | [-h]]"
 }
 
 memory="4000"
-shots=4000
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -15,9 +14,6 @@ while [ "$1" != "" ]; do
                                 ;;
         -m | --memory )         shift
                                 memory="$1"
-                                ;;
-        -n | --shots )          shift
-                                shots="$1"
                                 ;;
         -c | --copy-numbers )   shift
                                 copy_numbers="$1"
@@ -35,12 +31,12 @@ done
 
 WORKING_DIR="/nfs/users/nfs_j/jc59/quantumwork/pangenome/new_hubo_formulation/hubo_qaoa/nonvariational"
 source "/nfs/users/nfs_j/jc59/quantumwork/pangenome/.venv/bin/activate"
-outdir="$SCRATCH/new_hubo_formulation/nonvariational"
+outdir="$SCRATCH/new_hubo_formulation/nonvariational/param_exploration"
 
 echo "HUBO Nonvar"
-bsub -J "nonvar_hubo_$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory"\
- -o "$outdir/nonvariational.$filename.%J" -e "$outdir/error.nonvariational.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/nonvariational.py -f $filename -c $copy_numbers -n $shots"
+bsub -J "hubo_perf_$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -gpu - \
+ -o "$outdir/perf.$filename.%J" -e "$outdir/error.perf.$filename.%J" -G "qpg" -q "qpg" \
+ "python3 $WORKING_DIR/performance_diagram.py -f $filename -c $copy_numbers"
 
 exit 0
 
