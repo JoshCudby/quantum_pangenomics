@@ -12,11 +12,11 @@ while [ "$1" != "" ]; do
         -f | --file )           shift
                                 filename="$1"
                                 ;;
-        -N | --nodes )          shift
-                                nodes="$1"
-                                ;;
         -m | --memory )         shift
                                 memory="$1"
+                                ;;
+        -n | --shots )          shift
+                                shots="$1"
                                 ;;
         -h | --help )           usage
                                 exit
@@ -34,9 +34,9 @@ source "/nfs/users/nfs_j/jc59/quantumwork/pangenome/.venv/bin/activate"
 outdir="$SCRATCH/new_qubo_formulation/oriented/param_exploration"
 
 echo "QUBO Nonvar"
-bsub -J "LR_param_exploration.$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" -gpu - \
+bsub -J "qubo_param_exploration.$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" \
  -o "$outdir/param_exploration.$filename.%J" -e "$outdir/error.param_exploration.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/param_exploration.py -f $filename -N $nodes"
+ "python3 $WORKING_DIR/param_exploration.py -f $filename -n $shots"
 
 exit 0
 

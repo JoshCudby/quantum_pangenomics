@@ -8,14 +8,12 @@ from typing import Optional
 
 from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterVector, Parameter
-from qiskit.converters import dag_to_circuit, circuit_to_dag
 
 from qiskit_aer import AerSimulator
 from qiskit_aer.primitives import SamplerV2 as Sampler
 # from qiskit_ibm_runtime.fake_provider import FakeFez
 
 # from qopt_best_practices.sat_mapping import SATMapper
-from qopt_best_practices.transpilation.qaoa_construction_pass import QAOAConstructionPass
 
 from hubo_qaoa.utils.graph_to_hubo_hamiltonian import graph_to_hubo_hamiltonian
 from hubo_qaoa.utils.gfa_utils import gfa_file_to_graph
@@ -126,7 +124,8 @@ def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCir
     iters = 10
 
     for i in range(iters):
-        beta_T = (i ** 2) * 0.9 / (iters - 1)**2 + 0.1
+        # beta_T = (i ** 2) * 0.9 / (iters - 1)**2 + 0.1
+        beta_T = (i ** 2) * 0.4 / (iters - 1)**2 + 0.1
         angles.append(iteration(fixed_qc, angles[-1], beta_T, history))
         
         
@@ -146,12 +145,14 @@ def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCir
     logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}')
     return energy, samples, circuit
         
-delta_b_fixed = 0.45
-delta_g_fixed = 0.26
+# delta_b_fixed = 0.45
+# delta_g_fixed = 0.26
+delta_b_fixed = 0.33
+delta_g_fixed = 0.19
 
-rescaling = np.logspace(-0.5, 0, 3, base=10)
-# ps = sorted(set([int(x) for x in np.logspace(0, 1.5, 3, base=10)]))
-ps = [1, 5, 10]
+rescaling = np.logspace(-0.5, 0.2, 8, base=10)
+ps = sorted(set([int(x) for x in np.logspace(0, 1.5, 3, base=10)]))
+# ps = [1, 5, 10]
 # ps = [1, 6, 11, 16, 21]
 
 energies = np.zeros((len(ps), len(rescaling)))

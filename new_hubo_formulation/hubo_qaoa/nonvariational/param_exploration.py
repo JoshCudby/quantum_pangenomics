@@ -91,7 +91,8 @@ num_qubits: int = cost_circuit.num_qubits
 keys = list(genbin(num_qubits))
 evals = evaluate_sparse_pauli_samples(keys, hamiltonian)
 opt_evals = np.nonzero(evals < 1e-5)
-print(len(opt_evals))
+print(f'Opt evals: {opt_evals}')
+
 
 def get_energy(qc) -> float:
     job = backend.run([qc],shots=1)
