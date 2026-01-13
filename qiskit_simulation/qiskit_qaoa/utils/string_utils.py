@@ -7,6 +7,17 @@ logger = get_logger(__name__)
 _PARITY = np.array([-1 if bin(i).count("1") % 2 else 1 for i in range(256)], dtype=np.int8)
 
 
+def evaluate_sparse_pauli_samples_all(observable: SparsePauliOp) -> np.typing.NDArray:
+    """Utility for the evaluation of the expectation value of a measured state."""
+    coeffs = np.array(observable.coeffs, dtype=np.float16)
+    packed_uint8 = np.packbits(observable.paulis.z, axis=1, bitorder="little")
+    
+    packed = np.arange(2**observable.num_qubits, dtype=np.uint64)[:, None].view(np.uint8)[:, :packed_uint8.shape[1]]
+    bytes = np.bitwise_and(packed[:, None, :], packed_uint8[None, :, :])
+    reduced = np.bitwise_xor.reduce(bytes, axis=-1)
+    return np.sum(coeffs * _PARITY[reduced], axis=-1)
+
+
 def evaluate_sparse_pauli_samples(samples: list[str], observable: SparsePauliOp) -> np.typing.NDArray:
     """Utility for the evaluation of the expectation value of a measured state."""
     packed_uint8 = np.packbits(observable.paulis.z, axis=1, bitorder="little")

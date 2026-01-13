@@ -40,9 +40,9 @@ source "/nfs/users/nfs_j/jc59/quantumwork/pangenome/.venv/bin/activate"
 outdir="$SCRATCH/new_qubo_formulation/oriented/param_exploration"
 
 echo "QUBO Nonvar"
-bsub -J "qubo_param_exploration.$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" \
- -o "$outdir/param_exploration.$filename.%J" -e "$outdir/error.param_exploration.$filename.%J" -gpu "$gpu_str" -G "qpg" -q "qpg"  \
- "python3 $WORKING_DIR/param_exploration.py -f $filename -n $shots $measure"
+bsub -J "qubo_perf.$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" \
+ -o "$outdir/qubo_perf.$filename.%J" -e "$outdir/error.qubo_perf.$filename.%J" -gpu "$gpu_str" -G "qpg" -q "qpg"  \
+ "python3 $WORKING_DIR/performance_diagram.py -f $filename -n $shots $measure"
 
 exit 0
 

@@ -83,8 +83,8 @@ def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None) -> tuple
     
     if len(start_nodes) > 0:
         for i, j, sigma, tau in product(start_nodes, start_nodes, range(2), range(2)):
-            Q[0, 0, i, sigma, 0, 0, j, tau] += lambda_start * (-1) ** (i==j * sigma == tau)
-            Q[1, 0, i, sigma, 0, 0, j, tau] += lambda_start * (-1) ** (i==j * sigma == tau)
+            Q[0, 0, i, sigma, 0, 0, j, tau] += lambda_start * (-1) ** ((i==j) * (sigma == tau))
+            Q[1, 0, i, sigma, 1, 0, j, tau] += lambda_start * (-1) ** ((i==j) * (sigma == tau))
     
     if len(end_nodes) > 0:
         Q_end_prime = np.zeros((N+1, 2, N+1, 2), dtype=np.int8)

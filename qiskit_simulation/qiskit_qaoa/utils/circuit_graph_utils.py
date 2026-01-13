@@ -111,7 +111,7 @@ def circuit_construction(
     cost_circ = tsingles.compose(tdoubles_circ, inplace=False)
     circuits_dict["cost_circuit"] = cost_circ
 
-    construction_pass = QAOAConstructionPass(reps,init_state=init_state,mixer_layer=mixer_layer)
+    construction_pass = QAOAConstructionPass(reps, init_state=init_state, mixer_layer=mixer_layer)
     construction_pass.property_set = properties
     transpiled_circ = dag_to_circuit(construction_pass.run(circuit_to_dag(cost_circ)))
 

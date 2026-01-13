@@ -1,14 +1,17 @@
-
 import numpy as np
+from typing import Optional
 import pickle
 import argparse
 from itertools import product
 
+from qiskit import QuantumCircuit
+
+
 from qiskit_aer import AerSimulator
 from qiskit_aer.primitives import SamplerV2 as Sampler
 
+
 from qubo_qaoa.utils.lr_qaoa import get_LR_qaoa_circuit
-from qubo_qaoa.utils.str_utils import genbin
 
 from qiskit_qaoa.utils.hamiltonian_utils import get_normalised_Q_and_hamiltonian
 from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples_all
@@ -16,14 +19,15 @@ from qiskit_qaoa.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename', type=str)
 parser.add_argument('--measure', action='store_true', default=False)
 parser.add_argument('-n', '--shots', default=4000, type=int)
 args = parser.parse_args()
 logger.info(args)
-filename: str = args.filename
 measure = args.measure
+filename: str = args.filename
 
 if measure:
     backend_options = dict(
@@ -46,7 +50,6 @@ backend = AerSimulator(**backend_options)
 sampler = Sampler.from_backend(backend)
 
 
-
 rng = np.random.default_rng()
 
 data_file = f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/qubo_data/qubo_data_{filename}.gfa.pkl'
@@ -58,8 +61,8 @@ num_qubits: int = hamiltonian.num_qubits
 
 evals = evaluate_sparse_pauli_samples_all(hamiltonian) + ising_offset
 opt_evals = np.nonzero(evals < 1e-5)
-print(f'Opt evals: {opt_evals}')
-
+logger.info(f'Opt evals: {opt_evals}')
+    
 
 def get_energy_and_p_opt(qc):
     job = sampler.run([qc], shots=args.shots)
@@ -84,41 +87,38 @@ def get_energy_and_p_opt_sv(qc):
     return energy, p_opt
 
 
-def LR_QAOA(p, delta_b, delta_g, circ):
+def LR_QAOA(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircuit]):
     fixed_qc, circuit = get_LR_qaoa_circuit(
         p, delta_b, delta_g, num_qubits,
         hamiltonian, circ, phis=None, measure=measure
     )
-    
+
     if measure:
-        energy, p_opt = get_energy_and_p_opt(fixed_qc)
+        _, p_opt = get_energy_and_p_opt(fixed_qc)
     else:
-        energy, p_opt = get_energy_and_p_opt_sv(fixed_qc)
+        _, p_opt = get_energy_and_p_opt_sv(fixed_qc)
         
-    logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}, p_opt: {np.round(p_opt, 4)}')
-    return energy, p_opt, circuit
-        
-        
-
-eps = 1e-2
-delta_bs = np.logspace(-1.0, 0.0, 11, base=10)
-delta_gs = np.logspace(-1.0, -0.5, 11, base=10)
-ps = sorted(set([int(x) for x in np.logspace(0, 2, 5, base=10)]))
-
-
-energies = np.zeros((len(ps), len(delta_bs), len(delta_gs)))
-p_opts = np.zeros((len(ps), len(delta_bs), len(delta_gs)))
-circuit = None
-for i, j, k in product(range(len(ps)), range(len(delta_bs)), range(len(delta_gs))):
-    if j == 0 and k == 0:
-        circuit = None
-    e, p_opt, circuit = LR_QAOA(ps[i], delta_bs[j], delta_gs[k], circuit)
-    energies[i, j, k] = e
-    p_opts[i, j, k] = p_opt
-
-to_save_name = f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/param_exploration/LR_unequal.{filename}.db{np.round(delta_bs[-1],2)}.dg{np.round(delta_gs[-1],2)}.p{ps[-1]}.pkl'
-ret = dict(delta_bs=delta_bs, delta_gs=delta_gs, ps=ps, energies=energies, p_opts=p_opts)
+    logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, probability:{np.round(p_opt, 4)}')
+    return p_opt, circuit
     
+eps = 1e-2
+  
+delta_b_fixed = 0.63
+delta_g_fixed = 0.16
+
+rescaling = 10 ** np.linspace(-1, 0.5, 31)
+ps = sorted(set([int(p) for p in np.logspace(0, 2.5, 51, base=10)]))
+
+probabilities = np.zeros((len(ps), len(rescaling)))
+circuit = None
+for i, j in product(range(len(ps)), range(len(rescaling))):
+    if j == 0:
+        circuit = None
+    p, circuit = LR_QAOA(ps[i], delta_b_fixed * rescaling[j], delta_g_fixed * rescaling[j], circuit)
+    probabilities[i, j] = p
+
+to_save_name = f"/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/param_exploration/LR_equal.performance.{filename}.db{delta_b_fixed}.dg{delta_g_fixed}.rescaling{np.round(rescaling[-1],2)}.p{ps[-1]}.pkl"
+ret = dict(delta_b_fixed=delta_b_fixed, delta_g_fixed=delta_g_fixed, ps=ps, rescaling=rescaling, probabilities=probabilities)
     
 with open(to_save_name, 'wb') as f:
     pickle.dump(ret, f)

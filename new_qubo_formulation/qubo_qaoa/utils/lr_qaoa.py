@@ -4,7 +4,7 @@ from typing import Optional
 from qiskit import QuantumCircuit, transpile
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.circuit import Parameter, ParameterVector
-from qiskit.circuit.library import QAOAAnsatz
+from qiskit.circuit.library import QAOAAnsatz, PauliEvolutionGate
 
 from qiskit_qaoa.utils.logging import get_logger
 logger = get_logger(__name__)
@@ -41,20 +41,38 @@ def get_LR_qaoa_circuit(
                 mixer.rz(-2 * beta, i)
                 mixer.ry(phis[i], i)
         else:
-            mixer.rx(-2 * beta, range(num_qubits))
+            mixer.rx(-2 * beta, range(num_qubits))#
+            
+        gamma_params = ParameterVector("γ", p)
+        beta_params = ParameterVector("β", p)
+        
+        gamma = Parameter("γ")
+        cost_circuit = QuantumCircuit(num_qubits)
+        cost_circuit.append(PauliEvolutionGate(hamiltonian, time=gamma), range(num_qubits))
+        cost_circuit = transpile(cost_circuit)
+        
+        circuit = QuantumCircuit(num_qubits, num_qubits)
+        circuit.compose(init, range(num_qubits), inplace=True)
+        for layer in range(p):
+            bind_dict = {cost_circuit.parameters[0]: gamma_params[layer]}
+            bound_cost_layer = cost_circuit.assign_parameters(bind_dict)
+
+            bind_dict = {mixer.parameters[0]: beta_params[layer]}
+            bound_mixer_layer = mixer.assign_parameters(bind_dict)
+            
+            circuit.compose(bound_cost_layer, range(num_qubits), inplace=True)
+            circuit.compose(bound_mixer_layer, range(num_qubits), inplace=True)
         
 
-        circuit = QAOAAnsatz(hamiltonian, reps=p, initial_state=init, mixer_operator=mixer, flatten=True)
-        t_circuit = transpile(circuit)
         if measure:
-            t_circuit.measure_all()
+            circuit.measure_all(add_bits=False)
         else:
-            t_circuit.save_statevector()
+            circuit.save_statevector()
         
-        logger.info(f'p = {p}. Circuit depth: {t_circuit.depth()}')
+        logger.info(f'p = {p}. Circuit depth: {circuit.depth()}')
     else:
-        t_circuit = qaoa_circ
+        circuit = qaoa_circ
         
-    fixed_param_bind = {t_circuit.parameters[i]: fixed_params[i] for i in range(2*p)}
-    fixed_qc = t_circuit.assign_parameters(fixed_param_bind)
-    return fixed_qc, t_circuit
+    fixed_param_bind = {circuit.parameters[i]: fixed_params[i] for i in range(2*p)}
+    fixed_qc = circuit.assign_parameters(fixed_param_bind)
+    return fixed_qc, circuit

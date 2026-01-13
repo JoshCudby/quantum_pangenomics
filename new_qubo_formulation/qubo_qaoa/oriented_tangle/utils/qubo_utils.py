@@ -83,13 +83,13 @@ def qubo_matrix_from_graph(
     
     if len(start_nodes) > 0:
         for i, j, sigma, tau in product(start_nodes, start_nodes, range(2), range(2)):
-            qubo_matrix[0, i, sigma, 0, j, tau] += lambda_start * (-1) ** (i==j * sigma == tau)
+            qubo_matrix[0, i, sigma, 0, j, tau] += lambda_start * (-1) ** ((i==j) * (sigma == tau))
     
     if len(end_nodes) > 0:
-        for i, j, sigma, tau in product(start_nodes, start_nodes, range(2), range(2)):
-            qubo_matrix[T-1, i, sigma, T-1, j, tau] += lambda_start * (-1) ** (i==j * sigma == tau)
-    offset += (1 if len(start_nodes) else 0)  * lambda_g \
-                + (1 if len(end_nodes) else 0)  * lambda_g 
+        for i, j, sigma, tau in product(end_nodes, end_nodes, range(2), range(2)):
+            qubo_matrix[T-1, i, sigma, T-1, j, tau] += lambda_start * (-1) ** ((i==j) * (sigma == tau))
+    offset += (1 if len(start_nodes) else 0)  * lambda_start \
+                + (1 if len(end_nodes) else 0)  * lambda_start 
                 
     # Number of visits constraints
     for i in range(V):

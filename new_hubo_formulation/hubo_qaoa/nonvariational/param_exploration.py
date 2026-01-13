@@ -25,7 +25,7 @@ from hubo_qaoa.utils.lr_qaoa import get_LR_qaoa_circuit
 
 from qiskit_qaoa.utils.transpiler_passes import FindCommutingPauliEvolutionsMulti
 from qiskit_qaoa.utils.commuting_gate_router_precompute_rzz import CommutingGateRouterPrecomputeRzz
-from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
+from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples_all
 from qiskit_qaoa.utils.logging import get_logger
 logger = get_logger(__name__)
 
@@ -88,36 +88,27 @@ cost_circuit = parameterise_circuit(cost_circuit, parameter=Parameter('γ'))
 
 num_qubits: int = cost_circuit.num_qubits    
     
-keys = list(genbin(num_qubits))
-evals = evaluate_sparse_pauli_samples(keys, hamiltonian)
+evals = evaluate_sparse_pauli_samples_all(hamiltonian)
 opt_evals = np.nonzero(evals < 1e-5)
 print(f'Opt evals: {opt_evals}')
 
 
-def get_energy(qc) -> float:
+def get_energy_and_p_opt(qc) -> tuple[float, float]:
     job = backend.run([qc],shots=1)
-    sampler_result = job.result()
-    data = sampler_result.results[0].data
+    result = job.result()
+    data = result.results[0].data
 
     sv = np.asarray(data.statevector)
     energy = np.sum(np.abs(sv) ** 2 * evals)
-    return energy
-
-def get_p_opt(qc) -> float:
-    job = backend.run([qc],shots=1)
-    sampler_result = job.result()
-    data = sampler_result.results[0].data
-
-    sv = np.asarray(data.statevector)
     p_opt = np.sum(np.abs(sv[opt_evals]) ** 2)
-    return p_opt
+    return energy,p_opt
+
 
 
 def LR_QAOA(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircuit]):
-    fixed_qc, circuit = get_LR_qaoa_circuit(p, delta_b, delta_g, num_qubits, cost_circuit, circ)
+    fixed_qc, circuit = get_LR_qaoa_circuit(p, delta_b, delta_g, num_qubits, cost_circuit, circ, None, None)
 
-    energy = get_energy(fixed_qc)
-    p_opt = get_p_opt(fixed_qc)
+    energy = get_energy_and_p_opt(fixed_qc)
         
     logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}, p_opt: {np.round(p_opt, 4)}')
     return energy, p_opt, circuit

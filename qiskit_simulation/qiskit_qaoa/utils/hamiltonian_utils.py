@@ -34,9 +34,6 @@ def get_Q_and_hamiltonian(data_file):
     Q = np.triu(Q) * 2
     Q -= np.triu(np.triu(Q).T) / 2
 
-    # normalisation = np.max(np.abs(Q))
-    # Q = Q / normalisation
-    # offset = offset / normalisation
 
     mod = QuadraticProgram("QUBO test")
     mod.binary_var_list(Q.shape[0])
