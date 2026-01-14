@@ -48,6 +48,10 @@ _, hamiltonian, _, ising_offset = get_Q_and_hamiltonian(data_file)
 num_qubits: int = hamiltonian.num_qubits
 
 
+def get_beta_T(i: int):
+    # A quadratic ramp from 0.1 to 1 over 10 iterations, scaled by max_beta_T
+    return ((i ** 2)/9 + 1) / 10 * max_beta_T
+
 def boltzmann(energies: npt.NDArray, beta_T: float) -> npt.NDArray:
     B = np.exp(- beta_T * energies ** 2)
     return B / np.sum(B)
@@ -68,6 +72,13 @@ def get_angles(samples: list[str], energies: npt.NDArray, beta_T: float) -> npt.
     angles = 2 * np.arcsin(np.sqrt(probabilities))
     return angles
 
+def subsample(samples, energies, alpha=1.0) -> tuple[list[str], npt.NDArray]:
+    idx = np.argsort(energies)
+    sorted_energies = energies[idx]
+    sorted_samples = [samples[i] for i in idx]
+    end_idx = int(alpha * len(energies))
+    return sorted_samples[:end_idx],sorted_energies[:end_idx]
+
 
 def iteration(qc, angles, beta_T, history):
     sample_circuit = qc.assign_parameters(angles, inplace=False)
@@ -80,10 +91,12 @@ def iteration(qc, angles, beta_T, history):
     for idx, (sample, count) in enumerate(counts.items()):
         samples.extend(count * [sample])
         energies.extend(count * [evals[idx]])
+    energies = np.array(energies)
     total_energy = np.mean(energies)
     
+    subsamples, subenergies = subsample(samples, energies, alpha)
     history.append([samples, energies, total_energy])
-    new_angles = get_angles(samples, np.array(energies), beta_T)
+    new_angles = get_angles(subsamples, subenergies, beta_T)
     return new_angles
 
 
@@ -95,14 +108,11 @@ def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCir
     )
     
     history = []
-    angles = [init_angles]
+    angles = init_angles
     iters = 5
 
     for i in range(iters):
-        # First half of a quadratic ramp from 0.1 to 1, scaled by max_beta_T
-        beta_T = ((i ** 2) * 0.9 / (2*iters - 1)**2 + 0.1) * max_beta_T
-        angles.append(iteration(fixed_qc, angles[-1], beta_T, history))
-        
+        angles = iteration(fixed_qc, angles, get_beta_T(i), history)
         
     energy = history[-1][2]
     samples = [history[i][0] for i in range(len(history))]
@@ -116,6 +126,7 @@ eps = 0.15
 delta_b_fixed = 0.63
 delta_g_fixed = 0.16
 max_beta_T =  0.15
+alpha = 1.0
 
 # init_angles = np.pi/2 * np.ones((num_qubits,))
 prob = 1 / (2 * N)
@@ -142,5 +153,5 @@ for i, j in product(range(len(ps)), range(len(rescaling))):
     samples_dict[(ps[i], np.round(rescaling[j],3))] = samples
     
 to_save=dict(energies=energies,  delta_b_fixed=delta_b_fixed, delta_g_fixed=delta_g_fixed, ps=ps, rescaling=rescaling, samples_dict=samples_dict)    
-with open(f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational/nonvariational.{filename}.db{delta_b_fixed}.dg{delta_g_fixed}.shots{shots}.betaT{max_beta_T}.eps{eps}.pkl', 'wb') as f:
+with open(f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational/nonvariational.{filename}.db{delta_b_fixed}.dg{delta_g_fixed}.shots{shots}.betaT{max_beta_T}.eps{eps}.alpha{alpha}.pkl', 'wb') as f:
     pickle.dump(to_save, f)
