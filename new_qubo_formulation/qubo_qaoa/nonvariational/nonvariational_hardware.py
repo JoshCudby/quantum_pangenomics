@@ -1,10 +1,10 @@
 
 import numpy as np
-import networkx as nx
 import numpy.typing as npt
+import networkx as nx
+from itertools import product
 import pickle
 import argparse
-from collections import Counter
 from typing import Optional
 from itertools import combinations
 
@@ -15,49 +15,67 @@ from qiskit.circuit.library import QAOAAnsatz
 from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
 from qiskit_ibm_runtime.options import SamplerOptions, TwirlingOptions, DynamicalDecouplingOptions
 
+from qiskit_aer import AerSimulator
+from qiskit_aer.primitives import SamplerV2 as AerSampler
 
 from qopt_best_practices.sat_mapping import SATMapper
 
-from qubo_qaoa.utils.swap_strategy import ExtendedSwapStrategy
-from qubo_qaoa.utils.circuit_construction import circuit_construction
+from qubo_qaoa.utils.swap_strategy import QUBOSwapStrategy
+from qubo_qaoa.utils.iterative_qaoa_utils import IterativeQAOAData, iteration, get_beta_T
+from qubo_qaoa.utils.lr_qaoa import get_hardware_LR_qaoa_circuit
 
 from qiskit_qaoa.utils.circuit_graph_utils import circuit_to_graph, graph_to_operator
 from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
-from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
 from qiskit_qaoa.utils.logging import get_logger
 
 
 logger = get_logger(__name__)
 
 
-def print_circuit_info(qc, circuit_name):
-    logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0) + qc.count_ops().get("ecr", 0)} 2Q gates \
-    and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
+
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename', type=str)
 parser.add_argument('-N', '--nodes', type=int)
 parser.add_argument('-n', '--shots', type=int)
+parser.add_argument('-s', '--simulation', action='store_true')
+parser.add_argument('-e', '--error-mitigation', action='store_true')
 args = parser.parse_args()
 
 filename: str = args.filename
 N: int = args.nodes
 shots: int = args.shots
+error_mitigation = args.error_mitigation
+simulation = args.simulation
 
 data_file = f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/qubo_data/qubo_data_{filename}.gfa.pkl'
 
 Q, hamiltonian, offset, ising_offset = get_Q_and_hamiltonian(data_file)
 num_qubits: int = hamiltonian.num_qubits
 
-service = QiskitRuntimeService(name='eu_test_instance')
-backend = service.least_busy(min_num_qubits=num_qubits, operational=True, simulator=False) 
-# backend = service.backend(name='ibm_aachen')
-error_mit = True
-ddOptions = DynamicalDecouplingOptions(enable=error_mit, sequence_type="XX")
-twirlingOptions = TwirlingOptions(enable_gates=error_mit, enable_measure=error_mit, num_randomizations='auto', shots_per_randomization='auto', strategy="active-accum")
-samplerOptions = SamplerOptions(dynamical_decoupling=ddOptions, twirling=twirlingOptions)
-sampler = Sampler(mode=backend, options=samplerOptions)
+# service = QiskitRuntimeService(name='eu_test_instance')
+# backend = service.least_busy(min_num_qubits=num_qubits, operational=True, simulator=False) 
+service = QiskitRuntimeService(name='us_instance')
+backend = service.backend(name='ibm_boston')
+
+if simulation:
+    backend_options = dict(
+        method='matrix_product_state',
+        matrix_product_state_max_bond_dimension='32', 
+        device='CPU',
+        precision='single',
+        basis_gates = backend.configuration().basis_gates
+    )
+    simulator = AerSimulator.from_backend(backend, **backend_options)
+    sampler = AerSampler.from_backend(simulator)
+else:
+    ddOptions = DynamicalDecouplingOptions(enable=False, sequence_type="XX")
+    # shots_per_randomizations >= 100 per randomization, shot budget for experiment 
+    twirlingOptions = TwirlingOptions(enable_gates=error_mitigation, enable_measure=error_mitigation, num_randomizations='auto', shots_per_randomization=100, strategy="active-accum")
+    samplerOptions = SamplerOptions(dynamical_decoupling=ddOptions, twirling=twirlingOptions)
+    sampler = Sampler(mode=backend, options=samplerOptions)
+
 logger.info(f'Backend: {backend}')
 logger.info(f'Num qubits in backend: {backend.configuration().to_dict()["n_qubits"]}')
 
@@ -70,7 +88,7 @@ while 4 * (rows + cols + rows * cols) < num_qubits:
         cols += 1
 print(f'Min size to support virtual qubits: {(rows, cols)}')
 
-swap_strat = ExtendedSwapStrategy.from_heavy_hex(rows, cols)
+swap_strat = QUBOSwapStrategy.from_heavy_hex(rows, cols)
 coupling_map = swap_strat._coupling_map
 coupling_map_edge = list(coupling_map)
 physical_qubits = list(coupling_map.physical_qubits)
@@ -103,127 +121,74 @@ if remapped_g is None or sat_map is None:
 cost_op = graph_to_operator(remapped_g, swap_strat._num_vertices)
 
 
-eta = 1
-eps = 0.005
-
-def normalisation(energies: npt.NDArray, beta_T: float) -> float:
-    return sum([np.exp(-beta_T * E) for E in energies])
-
-def boltzmann(energies: npt.NDArray, Z: float, beta_T: float) -> npt.NDArray:
-    return np.exp(- beta_T * energies) / Z
-
-def bias(boltzmanns: npt.NDArray, q: int, samples: list[str]) -> float:
-    return sum([boltzmanns[i] * (-1 if samples[i][q] == '1' else 1) for i in range(len(samples))])
-
-def get_biases(samples: list[str], energies: npt.NDArray, beta_T: float) -> npt.NDArray:
-    Z = normalisation(energies, beta_T)
-    boltzmanns = boltzmann(energies, Z, beta_T)
-    return np.array([bias(boltzmanns, q, samples) for q in range(num_qubits)][::-1])
-
-def get_angles(samples: list[str], energies: npt.NDArray, beta_T: float) -> npt.NDArray:
-    biases = get_biases(samples, energies, beta_T)
-    probabilities = 0.5 * (1 - eta * biases)
-    probabilities[probabilities < eps] = eps
-    probabilities[probabilities > 1 - eps] = 1 - eps
+def warm_start(
+    p: int, 
+    delta_b: float, 
+    delta_g: float, 
+    circ: Optional[QuantumCircuit]=None
+) -> tuple[float, list[list[str]], QuantumCircuit]:
+    phis = ParameterVector('ϕ', num_qubits)
+    fixed_qc, circuit = get_hardware_LR_qaoa_circuit(
+        p, delta_b, delta_g, num_qubits,
+        cost_op, sat_map, backend, edge_colouring_copy, swap_strat,
+        circ, phis=phis,
+    )
     
-    angles = 2 * np.arcsin(np.sqrt(probabilities))
-    return angles
-
-
-def iteration(qc, angles, beta_T, history):
-    sample_circuit = qc.assign_parameters(angles, inplace=False)
-    sampler_job = sampler.run([sample_circuit],shots=shots)
-    sampler_result = sampler_job.result()
-    counts = sampler_result[0].data.c.get_counts()
-    
-    evals = evaluate_sparse_pauli_samples(counts.keys(), hamiltonian) + ising_offset
-    samples, energies = [], []
-    for idx, (sample, count) in enumerate(counts.items()):
-        samples.extend(count * [sample])
-        energies.extend(count * [evals[idx]])
-    total_energy = np.mean(energies)
-    
-    
-    history.append([samples, energies, total_energy])
-    new_angles = get_angles(samples, np.array(energies), beta_T)
-    return new_angles
-
-
-def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircuit]=None):
-    betas = [(1-k/p) * delta_b for k in range(p)]
-    gammas = [(k+1) / p * delta_g for k in range(p)]
-    fixed_params = betas + gammas
-    
-    if circ is None:
-        phis = ParameterVector('ϕ', num_qubits)
-        betas = ParameterVector('β', p)
-
-
-        init = QuantumCircuit(num_qubits)
-        for i in range(num_qubits):
-            init.ry(phis[i], i)
-            
-        mixer = QuantumCircuit(num_qubits)
-        for i in range(num_qubits):
-            mixer.ry(-phis[i], i)
-            mixer.rz(-2*betas[0], i)
-            mixer.ry(phis[i], i)
-            
-        # TODO: need to feed in the init and mixer to the circuit construction
-        circ_dict = circuit_construction(hamiltonian.num_qubits, cost_op, sat_map, p, backend, edge_colouring_copy, swap_strat)
-        circuit = circ_dict["backend"]
-        logger.info(f'p = {p}. Circuit depth: {circuit.depth()}. Circuit counts: {circuit.count_ops()}')
-    else:
-        circuit = circ
-    
-
-    fixed_param_bind = {circuit.parameters[i]: fixed_params[i] for i in range(2*p)}
-    fixed_qc = circuit.assign_parameters(fixed_param_bind)
-
-
     history = []
-    angles = [init_angles]
+    angles = init_angles
     iters = 10
 
     for i in range(iters):
-        beta_T = (i ** 2) * 0.9 / (iters - 1) ** 2 + 0.1
-        angles.append(iteration(fixed_qc, angles[-1], beta_T, history))
-        
-        
-    for i in range(iters):
-        logger.info(i)
-        counter = Counter(history[i][0])
-        energy_counter = Counter(history[i][1])
-        energy = history[i][2]
-        logger.info(energy)
-        logger.info(counter.most_common(5))
-        logger.info(evaluate_sparse_pauli_samples([e[0] for e in counter.most_common(5)], hamiltonian) + ising_offset)
-        
-        logger.info(energy_counter.most_common(5))
-        logger.info('------------------------------')
-    energy = history[-1][2]
-    samples = (history[0][0], history[iters // 2][0], history[-1][0])
-    logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}')
-    return energy, samples, circuit
+        angles = iteration(fixed_qc, sampler, shots, angles, get_beta_T(i, max_beta_T), data, history)
         
 
-delta_b = 0.1
-delta_g = 4.0
-ps = [1, 3, 6]
+    energy = history[-1][2]
+    samples = [history[i][0] for i in range(len(history))]
+    logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}')
+    return energy, samples, circuit
+     
+        
+
+delta_b_fixed = 0.63
+delta_g_fixed = 0.16
+        
+eta = 1
+eps = 0.15
+max_beta_T =  0.15
+alpha = 0.05
+
+data = IterativeQAOAData(
+    hamiltonian=hamiltonian,
+    ising_offset=ising_offset,
+    eta=eta,
+    eps=eps,
+    alpha=alpha
+)
 
 prob = 1 / (2 * N)
 theta = 2 * np.arcsin(np.sqrt(prob))
-init_angles = theta * np.ones((num_qubits,))
+init_angles: npt.NDArray = theta * np.ones((num_qubits,))
+
+
+rescaling = np.array([1,])
+ps = [1, 3]
 
 energies = {}
 samples_dict = {}
 
+# MAIN
+energies = np.zeros((len(ps), len(rescaling)))
+samples_dict: dict[tuple[int, float], list[list[str]]] = {}
+
 circuit = None
-for p in ps:
-    e, samples, _ = warm_start(p, delta_b, delta_g, None)
-    energies[p] = e
-    samples_dict[p] = 0
+for i, j in product(range(len(ps)), range(len(rescaling))):
+    if j == 0:
+        circuit = None
+    e, samples, circuit = warm_start(ps[i], delta_b_fixed * rescaling[j], delta_g_fixed * rescaling[j], circuit)
+    energies[i, j] = e
+    samples_dict[(ps[i], np.round(rescaling[j], 3))] = samples
     
-to_save=dict(energies=energies, delta_b=delta_b, delta_g=delta_g, ps=ps, samples_dict=samples_dict)    
-with open(f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational/hardware.error_mit{error_mit}.{filename}.db{delta_b}.dg{delta_g}.shots{shots}.pkl', 'wb') as f:
+to_save=dict(energies=energies, delta_b_fixed=delta_b_fixed, delta_g_fixed=delta_g_fixed, ps=ps, rescaling=rescaling, samples_dict=samples_dict)    
+append_str = f'.{filename}{".error_mit" if error_mitigation else ""}{".simulation" if simulation else ""}.backend{backend.name}.db{delta_b_fixed}.dg{delta_g_fixed}.shots{shots}.betaT{max_beta_T}.eps{eps}.alpha{alpha}'
+with open(f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational/hardware/hardware{append_str}.pkl', 'wb') as f:
     pickle.dump(to_save, f)

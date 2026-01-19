@@ -94,7 +94,7 @@ def get_longest_line_swaps(mapping: dict, graph: nx.Graph, rows: int, cols: int)
     return swap_layers * 5
 
 
-class ExtendedSwapStrategy(SwapStrategy):
+class QUBOSwapStrategy(SwapStrategy):
     def __init__(
         self, coupling_map: CouplingMap, swap_layers: tuple[tuple[tuple[int, int], ...], ...], type: str="custom"
     ) -> None:
@@ -105,7 +105,7 @@ class ExtendedSwapStrategy(SwapStrategy):
         
     
     @classmethod
-    def from_all_to_all(cls, num_qubits: int) -> ExtendedSwapStrategy:
+    def from_all_to_all(cls, num_qubits: int) -> QUBOSwapStrategy:
         couplings = []
         for i in range(num_qubits - 1):
             for j in range(i+1, num_qubits):
@@ -115,14 +115,27 @@ class ExtendedSwapStrategy(SwapStrategy):
         return cls(coupling_map=CouplingMap(couplings), swap_layers=tuple(), type="all_to_all")
         
       
-      
     @classmethod  
-    def from_line(cls, line: list[int], num_swap_layers: int | None = None) -> ExtendedSwapStrategy:
-        return SwapStrategy.from_line(line, num_swap_layers) 
+    def from_line(cls, line: list[int], num_swap_layers: int | None = None) -> QUBOSwapStrategy:
+        if num_swap_layers is None:
+            num_swap_layers = len(line) - 2
+        swap_layer0 = tuple((line[i], line[i + 1]) for i in range(0, len(line) - 1, 2))
+        swap_layer1 = tuple((line[i], line[i + 1]) for i in range(1, len(line) - 1, 2))
+
+        base_layers = [swap_layer0, swap_layer1]
+
+        swap_layers = tuple(base_layers[i % 2] for i in range(num_swap_layers))
+
+        couplings = []
+        for idx in range(len(line) - 1):
+            couplings.append((line[idx], line[idx + 1]))
+            couplings.append((line[idx + 1], line[idx]))
+
+        return cls(coupling_map=CouplingMap(couplings), swap_layers=tuple(swap_layers))
     
 
     @classmethod  
-    def from_grid(cls, rows: int, cols: int) -> ExtendedSwapStrategy:
+    def from_grid(cls, rows: int, cols: int) -> QUBOSwapStrategy:
 
         qubits = [(row, col) for row in range(rows) for col in range(cols)]
         mapping = {qubit: idx for idx, qubit in enumerate(qubits)}
@@ -182,8 +195,7 @@ class ExtendedSwapStrategy(SwapStrategy):
 
     
     @classmethod  
-    def from_heavy_hex(cls, rows: int, cols: int) -> ExtendedSwapStrategy:
-        
+    def from_heavy_hex(cls, rows: int, cols: int) -> QUBOSwapStrategy:
         hex = nx.hexagonal_lattice_graph(cols, rows)
         coupling_graph = nx.Graph()
         counter = 0
@@ -217,98 +229,50 @@ class ExtendedSwapStrategy(SwapStrategy):
         return cls(coupling_map=coupling_map, swap_layers=tuple(swap_layers), type="heavy_hex")
     
     
-    def distance_nodes(self, nodes: tuple[int,...], cutoff: int | None = None) -> int:
-        if cutoff is None:
-            cutoff = len(self._swap_layers) + 1
-        nodes = tuple(sorted(nodes))
-        if np.any([nodes[i] == nodes[i+1] for i in range(len(nodes)-1)]):
-            return -1
-        distance = self._distances.get(nodes, None)
-        if distance is not None:
-            return distance
+    # def distance_nodes(self, nodes: tuple[int,...], cutoff: int | None = None) -> int:
+    #     if cutoff is None:
+    #         cutoff = len(self._swap_layers) + 1
+    #     nodes = tuple(sorted(nodes))
+    #     if np.any([nodes[i] == nodes[i+1] for i in range(len(nodes)-1)]):
+    #         return -1
+    #     distance = self._distances.get(nodes, None)
+    #     if distance is not None:
+    #         return distance
         
-        if len(nodes) < 2:
-            return 0
+    #     if len(nodes) < 2:
+    #         return 0
         
-        for i in range(cutoff):
-            cmap = self.swapped_coupling_map(i)
-            distance_matrix: npt.NDArray[np.float64] = cmap.distance_matrix
-            sub_distance = distance_matrix[nodes, :][:, nodes]
-            if (
-                np.max(sub_distance) <= len(nodes) - 1
-                and
-                np.any(
-                    np.all(np.linalg.matrix_power(sub_distance <= 1, len(nodes)) > 0, axis=1)
-                ) # If nodes form a connected subgraph
-            ):
-                self._distances[nodes] = i
-                return i
-        return -1
+    #     for i in range(cutoff):
+    #         cmap = self.swapped_coupling_map(i)
+    #         distance_matrix: npt.NDArray[np.float64] = cmap.distance_matrix
+    #         sub_distance = distance_matrix[nodes, :][:, nodes]
+    #         if (
+    #             np.max(sub_distance) <= len(nodes) - 1
+    #             and
+    #             np.any(
+    #                 np.all(np.linalg.matrix_power(sub_distance <= 1, len(nodes)) > 0, axis=1)
+    #             ) # If nodes form a connected subgraph
+    #         ):
+    #             self._distances[nodes] = i
+    #             return i
+    #     return -1
     
     
-    def all_connected_subgraphs(self, layer: int, order: int):
-        cmap = self.swapped_coupling_map(layer)
-        g = [set(cmap.neighbors(q)) for q in cmap.physical_qubits]
-        def _recurse(t: tuple, possible: set[int], excluded: set[int]):
-            if len(t) == order:
-                yield tuple(sorted(list(t)))
-            else:
-                excluded = set(excluded)
-                for i in possible.difference(excluded):
-                    new_t = (*t, i)
-                    new_possible = possible | g[i]
-                    excluded.add(i)
-                    yield from _recurse(new_t, new_possible, excluded)
-        excluded = set()
-        for (i, possible) in enumerate(g):
-            excluded.add(i)
-            yield from _recurse((i,), possible, excluded)
+    # def all_connected_subgraphs(self, layer: int, order: int):
+    #     cmap = self.swapped_coupling_map(layer)
+    #     g = [set(cmap.neighbors(q)) for q in cmap.physical_qubits]
+    #     def _recurse(t: tuple, possible: set[int], excluded: set[int]):
+    #         if len(t) == order:
+    #             yield tuple(sorted(list(t)))
+    #         else:
+    #             excluded = set(excluded)
+    #             for i in possible.difference(excluded):
+    #                 new_t = (*t, i)
+    #                 new_possible = possible | g[i]
+    #                 excluded.add(i)
+    #                 yield from _recurse(new_t, new_possible, excluded)
+    #     excluded = set()
+    #     for (i, possible) in enumerate(g):
+    #         excluded.add(i)
+    #         yield from _recurse((i,), possible, excluded)
     
-    
-    def distance_tensor(self, order) -> np.ndarray:
-        if order == 2:
-            return self.distance_matrix
-        
-        dt = self._distance_tensors.get(order, None)
-        if dt is not None:
-            return dt
-        
-        try:
-            with open(f'/lustre/scratch127/qpg/jc59/hubo_swap_strategies/swap_strategy_{self._type}_distance_qubits_{self._num_vertices}_order_{order}.pkl', 'rb') as f:
-                dt = pickle.load(f)
-                logger.info("Loaded data")
-                return dt
-        except FileNotFoundError:
-            logger.info('Computing data')
-            pass
-        except Exception as e:
-            raise Exception(f'Other than file not found: {e}')
-        
-        
-        if self._type == 'all_to_all':
-            distance_tensor = np.full([self._num_vertices]*order, -1)
-            np.put(
-                distance_tensor, 
-                [np.ravel_multi_index(x, distance_tensor.shape) for x in permutations(range(self._num_vertices), order)], 
-                0
-            )
-            return distance_tensor
-        
-        
-        distance_tensor = np.full([self._num_vertices]*order, -1)        
-        for i in range(len(self._swap_layers) + 1):
-            subgraphs = self.all_connected_subgraphs(i, order)
-            for subgraph in subgraphs:
-                subgraph = tuple(sorted(subgraph))
-                if distance_tensor[subgraph] == -1:
-                    self._distances[subgraph] = i
-                    for perm in permutations(subgraph, len(subgraph)):
-                        distance_tensor[perm] = i
-
-                    
-        self._distance_tensors[order] = distance_tensor
-        
-        with open(f'/lustre/scratch127/qpg/jc59/qubo_swap_strategies/swap_strategy_{self._type}_distance_qubits_{self._num_vertices}_order_{order}.pkl', 'wb') as f:
-            pickle.dump(distance_tensor, f)
-        
-        return distance_tensor

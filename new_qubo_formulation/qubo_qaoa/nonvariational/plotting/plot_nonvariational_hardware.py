@@ -1,0 +1,108 @@
+import pickle
+from matplotlib import pyplot as plt
+from matplotlib.axes import Axes
+from collections import Counter
+import numpy as np
+from matplotlib.ticker import (MultipleLocator, AutoMinorLocator, FixedLocator, NullLocator)
+from typing import Optional
+
+from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
+from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
+
+
+def plot_several_p_dist(
+    axs: list[Axes], 
+    filename, prob,
+    db_fixed, dg_fixed, shots,
+    ps, rescale,
+    max_beta_T:Optional[float]=None, eps:Optional[float]=None, alpha:Optional[float]=None, 
+    simulation:Optional[bool]=None, error_mitigation:Optional[bool]=None,
+    iters=None, normalise=False
+) -> list[Axes]:
+    data_file = f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/qubo_data/qubo_data_{filename}.gfa.pkl'
+
+    _, hamiltonian, _, ising_offset = get_Q_and_hamiltonian(data_file)
+    num_qubits: int = hamiltonian.num_qubits
+
+    base_file_name = f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational/hardware/hardware.{filename}'
+    append_str = (f'{".error_mit" if error_mitigation else ""}') + (f'{".simulation" if simulation else ""}') + (f'.db{db_fixed}.dg{dg_fixed}.shots{shots}') + (f'.betaT{max_beta_T}' if max_beta_T is not None else '') + (f'.eps{eps}' if eps is not None else '') + (f'.alpha{alpha}' if alpha is not None else '')
+    with open(f'{base_file_name}{append_str}.pkl', 'rb') as f:
+        res = pickle.load(f)
+        
+    sample_sequence = []
+    samples_dict: dict[tuple[int, float], list[list[str]]] = res['samples_dict']
+    keys = samples_dict.keys()
+    energies = res['energies']
+    if iters is None:
+        iters = [0, 5, 9]
+    energies = np.array(energies)
+    if normalise:
+        energies /= energies.max()
+        # energies /= energies[0,0]
+    
+    cutoff = 25
+    ax = axs[0]
+    rand_shots = min(shots*10, 40000)
+    random_samples = np.random.choice(('0', '1'), (rand_shots, num_qubits), p=(1-prob,prob))
+    rand_samples = [''.join(sample) for sample in random_samples]
+    rand_vals = np.round(ising_offset + evaluate_sparse_pauli_samples(rand_samples, hamiltonian), 2)
+    ax.hist(rand_vals, bins=range(cutoff+1), weights=[1/rand_shots]*len(rand_vals), rwidth=1, log=True, color='gray', label='Random')
+    ax.set_xlim(0, cutoff)
+    ax.set_ylim(10**-3, 10**0)
+    
+
+    ax.xaxis.set_major_locator(MultipleLocator(10))
+    ax.xaxis.set_minor_locator(AutoMinorLocator(10))
+    ax.text(.95, .99, 'Iter = 0', ha='right', va='top', transform=ax.transAxes)
+    # ax.legend(loc='best', bbox_to_anchor=(0.6, 0.6, 0.4, 0.4))
+    ax.legend(
+        loc="upper right",
+        bbox_to_anchor=(1.0, 0.92),  # move legend down
+        frameon=True
+    )
+    
+    for i in range(1, len(axs)):
+        ax = axs[i]
+        sample_sequence = []
+        for p in ps:
+            rescale_value = None
+            for key in keys:
+                if key[0] == p and np.abs(key[1] - rescale)**2 < 0.0005:
+                    rescale_value = key[1]
+                    break
+            if rescale_value is None:
+                raise Exception('Could not rescale value')
+            if len(samples_dict[(p, rescale_value)]) > 3:
+                counter = Counter(samples_dict[(p, rescale_value)][iters[i-1]])
+            else:
+                counter = Counter(samples_dict[(p, rescale_value)][i-1])
+            if i == len(axs) - 1:
+                print(p, counter.most_common(2))
+            evals = np.round(ising_offset + evaluate_sparse_pauli_samples(list(counter.keys()), hamiltonian), 2)
+            
+            # energies = [count * [evals[idx]] for idx, count in enumerate(counter.values()) if evals[idx] < cutoff]
+            energies = [count * [evals[idx]] for idx, count in enumerate(counter.values())]
+            sample_vals = np.array([x for xs in energies for x in xs])
+            if alpha is not None:
+                sample_vals = np.sort(sample_vals)[:int(alpha * len(sample_vals))]
+            sample_sequence.append(sample_vals)
+
+        ax.hist(sample_sequence, bins=range(cutoff+1), weights=[[1/len(sample_vals)]*len(sample_vals) for sample_vals in sample_sequence], rwidth=1, log=True, label=ps)
+        ax.set_xlim(0, cutoff)
+        ax.set_ylim(10**-3, 10**0)
+
+        ax.xaxis.set_major_locator(MultipleLocator(10))
+        ax.xaxis.set_minor_locator(AutoMinorLocator(10))
+        ax.tick_params(axis='x', which='major', length=6)
+        ax.tick_params(axis='x', which='minor', length=2)
+        ax.text(.95, .99, f'Iter = {iters[i-1]+1}', ha='right', va='top', transform=ax.transAxes)
+          
+    # ax.legend(loc='best', bbox_to_anchor=(0.6, 0.6, 0.4, 0.4))
+    ax.legend(
+        loc="upper right",
+        bbox_to_anchor=(1.0, 0.92),  # move legend down
+        frameon=True
+    )
+    return axs
+
+

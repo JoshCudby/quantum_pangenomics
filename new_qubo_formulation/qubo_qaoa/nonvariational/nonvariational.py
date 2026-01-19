@@ -13,9 +13,9 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.primitives import SamplerV2 as Sampler
 
 from qubo_qaoa.utils.lr_qaoa import get_LR_qaoa_circuit
+from qubo_qaoa.utils.iterative_qaoa_utils import IterativeQAOAData, iteration, get_beta_T
 
 from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
-from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
 from qiskit_qaoa.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -48,59 +48,12 @@ _, hamiltonian, _, ising_offset = get_Q_and_hamiltonian(data_file)
 num_qubits: int = hamiltonian.num_qubits
 
 
-def get_beta_T(i: int):
-    # A quadratic ramp from 0.1 to 1 over 10 iterations, scaled by max_beta_T
-    return ((i ** 2)/9 + 1) / 10 * max_beta_T
-
-def boltzmann(energies: npt.NDArray, beta_T: float) -> npt.NDArray:
-    B = np.exp(- beta_T * energies ** 2)
-    return B / np.sum(B)
-
-def bias(boltzmanns: npt.NDArray, q: int, samples: list[str]) -> float:
-    return sum([boltzmanns[i] * (-1 if samples[i][q] == '1' else 1) for i in range(len(samples))])
-
-def get_biases(samples: list[str], energies: npt.NDArray, beta_T: float) -> npt.NDArray:
-    boltzmanns = boltzmann(energies, beta_T)
-    return np.array([bias(boltzmanns, q, samples) for q in range(num_qubits)][::-1])
-
-def get_angles(samples: list[str], energies: npt.NDArray, beta_T: float) -> npt.NDArray:
-    biases = get_biases(samples, energies, beta_T)
-    probabilities = 0.5 * (1 - eta * biases)
-    probabilities[probabilities < eps] = eps
-    probabilities[probabilities > 1 - eps] = 1 - eps
-    
-    angles = 2 * np.arcsin(np.sqrt(probabilities))
-    return angles
-
-def subsample(samples, energies, alpha=1.0) -> tuple[list[str], npt.NDArray]:
-    idx = np.argsort(energies)
-    sorted_energies = energies[idx]
-    sorted_samples = [samples[i] for i in idx]
-    end_idx = int(alpha * len(energies))
-    return sorted_samples[:end_idx],sorted_energies[:end_idx]
-
-
-def iteration(qc, angles, beta_T, history):
-    sample_circuit = qc.assign_parameters(angles, inplace=False)
-    sampler_job = sampler.run([sample_circuit],shots=shots)
-    sampler_result = sampler_job.result()
-    counts = sampler_result[0].data.c.get_counts()
-    
-    evals = evaluate_sparse_pauli_samples(counts.keys(), hamiltonian) + ising_offset
-    samples, energies = [], []
-    for idx, (sample, count) in enumerate(counts.items()):
-        samples.extend(count * [sample])
-        energies.extend(count * [evals[idx]])
-    energies = np.array(energies)
-    total_energy = np.mean(energies)
-    
-    subsamples, subenergies = subsample(samples, energies, alpha)
-    history.append([samples, energies, total_energy])
-    new_angles = get_angles(subsamples, subenergies, beta_T)
-    return new_angles
-
-
-def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircuit]=None) -> tuple[float, list[list[str]], QuantumCircuit]:
+def warm_start(
+    p: int, 
+    delta_b: float, 
+    delta_g: float, 
+    circ: Optional[QuantumCircuit]=None
+) -> tuple[float, list[list[str]], QuantumCircuit]:
     phis = ParameterVector('ϕ', num_qubits)
     fixed_qc, circuit = get_LR_qaoa_circuit(
         p, delta_b, delta_g, num_qubits,
@@ -110,28 +63,35 @@ def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCir
     history = []
     angles = init_angles
     iters = 5
-
+    
     for i in range(iters):
-        angles = iteration(fixed_qc, angles, get_beta_T(i), history)
+        angles = iteration(fixed_qc, sampler, shots, angles, get_beta_T(i, max_beta_T), data, history)
         
     energy = history[-1][2]
     samples = [history[i][0] for i in range(len(history))]
     logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}')
     return energy, samples, circuit
 
+delta_b_fixed = 0.63
+delta_g_fixed = 0.16
         
 eta = 1
 eps = 0.15
-
-delta_b_fixed = 0.63
-delta_g_fixed = 0.16
 max_beta_T =  0.15
-alpha = 1.0
+alpha = 0.1
+
+data = IterativeQAOAData(
+    hamiltonian=hamiltonian,
+    ising_offset=ising_offset,
+    eta=eta,
+    eps=eps,
+    alpha=alpha
+)
 
 # init_angles = np.pi/2 * np.ones((num_qubits,))
 prob = 1 / (2 * N)
 theta = 2 * np.arcsin(np.sqrt(prob))
-init_angles = theta * np.ones((num_qubits,))
+init_angles: npt.NDArray = theta * np.ones((num_qubits,))
 
 
 # rescaling = np.logspace(-0.5, 0.2, 8, base=10)

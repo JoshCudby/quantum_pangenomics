@@ -9,7 +9,7 @@ from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 
 from qopt_best_practices.transpilation import qaoa_swap_strategy_pm
 
-from qubo_qaoa.utils.swap_strategy import ExtendedSwapStrategy
+from qubo_qaoa.utils.swap_strategy import QUBOSwapStrategy
 
 
 def circuit_construction(
@@ -19,11 +19,10 @@ def circuit_construction(
     p: int,
     backend: Optional[IBMBackend],
     edge_colouring,
-    swap_strategy: ExtendedSwapStrategy,
+    swap_strategy: QUBOSwapStrategy,
 ) -> dict[str, QuantumCircuit]:
     circuits_dict = {}    
     n = swap_strategy._num_vertices
-    
 
     singles = cost_op[cost_op.paulis.z.sum(axis=-1) == 1]
     doubles = cost_op[cost_op.paulis.z.sum(axis=-1) == 2]
@@ -72,7 +71,7 @@ def circuit_construction(
         bind_dict = {cost_circ.parameters[0]: gammas[layer]}
         bound_cost_layer = cost_circ.assign_parameters(bind_dict)
 
-        mixer_layer = mixer_layer_even if p % 2 == 0 else mixer_layer_odd
+        mixer_layer = mixer_layer_even if layer % 2 == 0 else mixer_layer_odd
         bind_dict = {mixer_layer.parameters[0]: betas[layer]}
         bound_mixer_layer = mixer_layer.assign_parameters(bind_dict)
 
