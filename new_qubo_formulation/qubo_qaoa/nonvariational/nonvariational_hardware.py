@@ -23,6 +23,7 @@ from qopt_best_practices.sat_mapping import SATMapper
 from qubo_qaoa.utils.swap_strategy import QUBOSwapStrategy
 from qubo_qaoa.utils.iterative_qaoa_utils import IterativeQAOAData, iteration, get_beta_T
 from qubo_qaoa.utils.lr_qaoa import get_hardware_LR_qaoa_circuit
+from qubo_qaoa.utils.circuit_construction import circuit_construction
 
 from qiskit_qaoa.utils.circuit_graph_utils import circuit_to_graph, graph_to_operator
 from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
@@ -32,15 +33,13 @@ from qiskit_qaoa.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-
-
-
 parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename', type=str)
 parser.add_argument('-N', '--nodes', type=int)
 parser.add_argument('-n', '--shots', type=int)
-parser.add_argument('-s', '--simulation', action='store_true')
-parser.add_argument('-e', '--error-mitigation', action='store_true')
+parser.add_argument('--simulation', action='store_true')
+parser.add_argument('--error-mitigation', action='store_true')
+parser.add_argument('--heavy-hex', action='store_true')
 args = parser.parse_args()
 
 filename: str = args.filename
@@ -79,31 +78,38 @@ else:
 logger.info(f'Backend: {backend}')
 logger.info(f'Num qubits in backend: {backend.configuration().to_dict()["n_qubits"]}')
 
+if args.heavy_hex:
+    print('Compiling with heavy-hex SWAP strategy')
+    rows, cols = 1, 1
+    while 4 * (rows + cols + rows * cols) < num_qubits:
+        if rows < cols:
+            rows += 1
+        else:
+            cols += 1
+    print(f'Min size to support virtual qubits: {(rows, cols)}')
 
-rows, cols = 1, 1
-while 4 * (rows + cols + rows * cols) < num_qubits:
-    if rows < cols:
-        rows += 1
-    else:
-        cols += 1
-print(f'Min size to support virtual qubits: {(rows, cols)}')
+    swap_strat = QUBOSwapStrategy.from_heavy_hex(rows, cols)
+    coupling_map = swap_strat._coupling_map
+    coupling_map_edge = list(coupling_map)
+    physical_qubits = list(coupling_map.physical_qubits)
 
-swap_strat = QUBOSwapStrategy.from_heavy_hex(rows, cols)
-coupling_map = swap_strat._coupling_map
-coupling_map_edge = list(coupling_map)
-physical_qubits = list(coupling_map.physical_qubits)
+    dual_coupling_map = nx.Graph()
 
-dual_coupling_map = nx.Graph()
-
-for qubit in physical_qubits:
-    edges = [edge for edge in coupling_map_edge if edge[0]==qubit]
-    for edge1, edge2 in combinations(edges, 2):
-        dual_coupling_map.add_edge(tuple(sorted(edge1)), tuple(sorted(edge2)))
-edge_colouring = nx.greedy_color(dual_coupling_map, interchange=True)
-edge_colouring_copy = {}
-for k, v in edge_colouring.items():
-    edge_colouring_copy[k] = v
-    edge_colouring_copy[k[::-1]] = v
+    for qubit in physical_qubits:
+        edges = [edge for edge in coupling_map_edge if edge[0]==qubit]
+        for edge1, edge2 in combinations(edges, 2):
+            dual_coupling_map.add_edge(tuple(sorted(edge1)), tuple(sorted(edge2)))
+    edge_colouring = nx.greedy_color(dual_coupling_map, interchange=True)
+    edge_colouring_copy = {}
+    for k, v in edge_colouring.items():
+        edge_colouring_copy[k] = v
+        edge_colouring_copy[k[::-1]] = v
+    edge_colouring = edge_colouring_copy
+else:
+    print('Compiling with line SWAP strategy')
+    swap_strat = QUBOSwapStrategy.from_line(range(num_qubits))
+    edge_colouring = {(i, i+1): i % 2 for i in range(num_qubits)}
+    edge_colouring.update({(i+1, i): i % 2 for i in range(num_qubits)})
 
 qc = QAOAAnsatz(
     cost_operator=hamiltonian,
@@ -128,9 +134,10 @@ def warm_start(
     circ: Optional[QuantumCircuit]=None
 ) -> tuple[float, list[list[str]], QuantumCircuit]:
     phis = ParameterVector('ϕ', num_qubits)
+    
     fixed_qc, circuit = get_hardware_LR_qaoa_circuit(
         p, delta_b, delta_g, num_qubits,
-        cost_op, sat_map, backend, edge_colouring_copy, swap_strat,
+        cost_op, sat_map, backend, edge_colouring, swap_strat,
         circ, phis=phis,
     )
     
@@ -155,7 +162,7 @@ delta_g_fixed = 0.16
 eta = 1
 eps = 0.15
 max_beta_T =  0.15
-alpha = 0.05
+alpha = 1.0
 
 data = IterativeQAOAData(
     hamiltonian=hamiltonian,
@@ -171,7 +178,7 @@ init_angles: npt.NDArray = theta * np.ones((num_qubits,))
 
 
 rescaling = np.array([1,])
-ps = [1, 3]
+ps = [1]
 
 energies = {}
 samples_dict = {}

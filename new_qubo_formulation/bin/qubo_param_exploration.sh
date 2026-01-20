@@ -22,7 +22,7 @@ while [ "$1" != "" ]; do
                                 shots="$1"
                                 ;;
         --measure )             measure="--measure"
-                                gpu_str="num=0"
+                                gpu_str="num=1"
                                 ;;
         -h | --help )           usage
                                 exit

@@ -3,26 +3,27 @@ import pickle
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.colors import LogNorm
-from matplotlib.ticker import FuncFormatter
 
 # -----------------------------
 # Configuration
 # -----------------------------
 n_instances = 3          # number of problem instances
 instance_names = ['test_N2_W2', 'trivial', 'test_N3_W4']
-p_values = [1, 3, 10, 31, 100]
+n_values = [8, 18, 24]
+p_values = [1]
 n_p = len(p_values)
 
-nx, ny = 11, 11          # resolution of (Δβ, Δγ) grid
-delta_beta = np.logspace(-1, 0, nx, base=10)
-delta_gamma = np.logspace(-1, -0.5, ny, base=10)
+nx, ny = 41, 41          # resolution of (Δβ, Δγ) grid
+# delta_beta = np.logspace(-1, 0, nx, base=10)
+# delta_gamma = np.logspace(-1, -0.5, ny, base=10)
+delta_beta = np.logspace(-1.5, 0.5, 41, base=10)
+delta_gamma = np.logspace(-1.5, -0.5, 41, base=10)
 
-
-X, Y = np.meshgrid(delta_beta, delta_gamma)
-extent = [
-    delta_beta.min(),  delta_beta.max(),
-    delta_gamma.min(), delta_gamma.max()
-]
+# X, Y = np.meshgrid(delta_beta, delta_gamma)
+# extent = [
+#     delta_beta.min(),  delta_beta.max(),
+#     delta_gamma.min(), delta_gamma.max()
+# ]
 
 # -----------------------------
 data = {}
@@ -30,12 +31,13 @@ for instance_index in range(n_instances):
     with open(f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/param_exploration/LR_unequal.{instance_names[instance_index]}.db{np.round(delta_beta[-1], 2)}.dg{np.round(delta_gamma[-1], 2)}.p{p_values[-1]}.pkl', 'rb') as f:
         res = pickle.load(f)
     p_opts = res['p_opts']
+    delta_beta = res['delta_bs']
+    delta_gamma = res['delta_gs']
     for p_index in range(n_p):
         data[(instance_index, p_index)] = p_opts[p_index, :, :]
 
 
 
-# (Keep your geom_edges_from_centers and data-loading above unchanged)
 
 # -----------------------------
 # Summary metric: best p_opt
@@ -163,7 +165,7 @@ for inst in range(n_instances):
     # Place the instance name slightly to the left of the heatmap row bbox
     instance_x = row_bbox.x0 - xpad_instance
     instance_y = row_bbox.y0 + 0.5 * row_bbox.height + 0.03
-    fig.text(instance_x, instance_y, instance_names[inst],
+    fig.text(instance_x, instance_y, f'n = {n_values[inst]}',
              ha='right', va='center', fontsize=14, rotation='vertical')
 
 
@@ -171,7 +173,7 @@ for inst in range(n_instances):
 # Shared colorbar (moved left a bit to make space for legend)
 # -----------------------------
 # reserve right margin for legend; colorbar inside that reserved area
-cbar_ax = fig.add_axes([heatmap_bbox.x1-0.08, heatmap_bbox.y0+0.031, 0.02, heatmap_bbox.height])  # [left, bottom, width, height] in figure coords
+cbar_ax = fig.add_axes((heatmap_bbox.x1-0.08, heatmap_bbox.y0+0.031, 0.02, heatmap_bbox.height))  # [left, bottom, width, height] in figure coords
 cb = fig.colorbar(pcm, cax=cbar_ax)
 cb.set_label(r"$p_{\mathrm{opt}}$", fontsize=14)
 
@@ -184,7 +186,7 @@ for inst in range(n_instances):
         np.round(np.log10(np.array(p_values)), 1),
         best_vals[inst],
         marker="o",
-        label=instance_names[inst],
+        label=n_values[inst],
     )
 
 ax_summary.set_xlabel(r"$\log_{10}(p)$", fontsize=14)
@@ -195,7 +197,7 @@ ax_summary.set_xticklabels(np.array(p_values))
 
 # Legend placed outside to the right of the figure (in the reserved right area)
 ax_summary.legend(
-    title="Problem instance",
+    title="Number of qubits",
     loc="center left",
     bbox_to_anchor=(1.02, 0.5),
     borderaxespad=0.0

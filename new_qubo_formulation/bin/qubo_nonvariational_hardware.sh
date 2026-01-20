@@ -26,6 +26,8 @@ while [ "$1" != "" ]; do
                                 ;;
         --error-mitigation )    error_mitigation="--error-mitigation"
                                 ;;
+        --heavy-hex )           heavy_hex="--heavy-hex"
+                                ;;
         -h | --help )           usage
                                 exit
                                 ;;
@@ -44,7 +46,7 @@ outdir="$SCRATCH/new_qubo_formulation/oriented/nonvariational/hardware"
 echo "QUBO Nonvar"
 bsub -J "nonvar_hardware_qubo_$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory"\
  -o "$outdir/nonvar.hardware.$filename.%J" -e "$outdir/error.nonvar.hardware.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/nonvariational_hardware.py -f $filename -N $nodes -n $shots $simulation $error_mitigation"
+ "python3 $WORKING_DIR/nonvariational_hardware.py -f $filename -N $nodes -n $shots $simulation $error_mitigation $heavy_hex"
 
 exit 0
 

@@ -20,6 +20,7 @@ def circuit_construction(
     backend: Optional[IBMBackend],
     edge_colouring,
     swap_strategy: QUBOSwapStrategy,
+    phis: Optional[ParameterVector]
 ) -> dict[str, QuantumCircuit]:
     circuits_dict = {}    
     n = swap_strategy._num_vertices
@@ -51,20 +52,41 @@ def circuit_construction(
 
     mixer_layer_even = QuantumCircuit(n)
     beta = Parameter("β")
-    mixer_layer_even.rx(2 * beta, [properties['virtual_permutation_layout'].get_physical_bits()[x] for x in sat_map.values()])
-
+    if phis is not None:
+        inv_sat_map = {v: k for k, v in sat_map.items()}
+        for i, qidx in [(inv_sat_map[x], properties['virtual_permutation_layout'].get_physical_bits()[x]) for x in sat_map.values()]:
+            mixer_layer_even.ry(-phis[i], qidx)
+            mixer_layer_even.rz(-2 * beta, qidx)
+            mixer_layer_even.ry(phis[i], qidx)
+    else:
+        mixer_layer_even.rx(-2 * beta, [properties['virtual_permutation_layout'].get_physical_bits()[x] for x in sat_map.values()])
+    
+    
     mixer_layer_odd = QuantumCircuit(n)
-    beta = Parameter("β")
-    mixer_layer_odd.rx(2 * beta, [x for x in sat_map.values()])
+    if phis is not None:
+        for i in range(num_qubits):
+            qubit = sat_map[i]
+            mixer_layer_odd.ry(-phis[i], qubit)
+            mixer_layer_odd.rz(-2 * beta, qubit)
+            mixer_layer_odd.ry(phis[i], qubit)
+    else:
+        mixer_layer_odd.rx(-2 * beta, [x for x in sat_map.values()])
     
     gammas = ParameterVector("γ",p)
     betas = ParameterVector("β", p)
 
     qaoa_circuit = QuantumCircuit(n, num_qubits)
 
-    init_state = QuantumCircuit(n)
-    init_state.h([x for x in sat_map.values()])
 
+    init_state = QuantumCircuit(n)
+    if phis is not None:
+        if not len(phis) == num_qubits:
+            raise Exception(f'Wrong number of phis, expected {num_qubits}, got {len(phis)}')
+        for i in range(num_qubits):
+            qubit = sat_map[i]
+            init_state.ry(phis[i], qubit)
+    else:
+        init_state.h([x for x in sat_map.values()])  
 
     qaoa_circuit.compose(init_state, inplace=True)
     for layer in range(p):
@@ -106,5 +128,5 @@ def circuit_construction(
     if backend is not None:
         generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend, scheduling_method="alap")
         circuits_dict["backend"] = generic_pm.run(qaoa_circuit)
-        
+    
     return circuits_dict

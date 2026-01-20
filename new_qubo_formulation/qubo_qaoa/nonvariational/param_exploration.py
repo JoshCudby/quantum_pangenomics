@@ -11,7 +11,7 @@ from qubo_qaoa.utils.lr_qaoa import get_LR_qaoa_circuit
 from qubo_qaoa.utils.str_utils import genbin
 
 from qiskit_qaoa.utils.hamiltonian_utils import get_normalised_Q_and_hamiltonian
-from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples_all
+from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples_all, evaluate_sparse_pauli_samples
 from qiskit_qaoa.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -56,19 +56,23 @@ hamiltonian = hamiltonian * ham_norm
 ising_offset = ising_offset * ham_norm
 num_qubits: int = hamiltonian.num_qubits
 
-evals = evaluate_sparse_pauli_samples_all(hamiltonian) + ising_offset
-opt_evals = np.nonzero(evals < 1e-5)
-print(f'Opt evals: {opt_evals}')
+if not measure:
+    evals = evaluate_sparse_pauli_samples_all(hamiltonian) + ising_offset
+    opt_evals = np.nonzero(evals < 1e-5)
+    print(f'Opt evals: {opt_evals}')
 
 
 def get_energy_and_p_opt(qc):
     job = sampler.run([qc], shots=args.shots)
     sampler_result = job.result()
     counts = sampler_result[0].data.meas.get_counts()
+    
+    evals = evaluate_sparse_pauli_samples(counts.keys(), hamiltonian) + ising_offset
     samples, energies = [], []
-    for sample, count in counts.items():
+    for idx, (sample, count) in enumerate(counts.items()):
         samples.extend(count * [sample])
-        energies.extend(count * [evals[int(sample, 2)]])
+        energies.extend(count * [evals[idx]])
+        
     energies = np.array(energies)
     energy = np.mean(energies)
     p_opt = np.flatnonzero(energies < 1e-5).shape[0] / args.shots
@@ -101,10 +105,10 @@ def LR_QAOA(p, delta_b, delta_g, circ):
         
 
 eps = 1e-2
-delta_bs = np.logspace(-1.0, 0.0, 11, base=10)
-delta_gs = np.logspace(-1.0, -0.5, 11, base=10)
-ps = sorted(set([int(x) for x in np.logspace(0, 2, 5, base=10)]))
-
+delta_bs = np.logspace(-0.5, 0.5, 41, base=10)
+delta_gs = np.logspace(-1.5, -0.5, 41, base=10)
+# ps = sorted(set([int(x) for x in np.logspace(0, 2, 5, base=10)]))
+ps = [1,3,5]
 
 energies = np.zeros((len(ps), len(delta_bs), len(delta_gs)))
 p_opts = np.zeros((len(ps), len(delta_bs), len(delta_gs)))

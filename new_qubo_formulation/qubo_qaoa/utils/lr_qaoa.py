@@ -226,7 +226,7 @@ def get_hardware_LR_qaoa_circuit(
     remapped_cost_op: SparsePauliOp,
     sat_map: dict[int, int],
     backend: IBMBackend,
-    edge_colouring: dict[int, int],
+    edge_colouring: dict[tuple[int, int], int],
     swap_strategy: QUBOSwapStrategy,
     qaoa_circ: Optional[QuantumCircuit],
     phis: Optional[ParameterVector],
