@@ -108,7 +108,7 @@ delta_b_fixed = 0.63
 delta_g_fixed = 0.16
 rescale = 10**(0.0)
 
-ps = [1,3,5]
+ps = [1]
 iters=range(0,5,2)
 max_beta_T = 0.15
 eps = 0.15
@@ -157,10 +157,11 @@ for large, very_large in zip([True, False], [False, True]):
         plt.tight_layout()
 
         append_str = (f'.betaT{max_beta_T}' if max_beta_T is not None else '') + (f'.eps{eps}' if eps is not None else '') + (f'.alpha{alpha if alpha is not None else 1.0}')
-        figname = '/nfs/users/nfs_j/jc59/quantumwork/pangenome/new_qubo_formulation/out/iter_qaoa.{}.db{}.dg{}.n{}{}.png'.format(
+        figname = '/nfs/users/nfs_j/jc59/quantumwork/pangenome/new_qubo_formulation/out/iter_qaoa.{}.db{}.dg{}.p{}.n{}{}.png'.format(
             'very_large' if very_large else 'large' if large else 'small',
             delta_b_fixed,
             delta_g_fixed,
+            ps[-1],
             n,
             append_str
         )

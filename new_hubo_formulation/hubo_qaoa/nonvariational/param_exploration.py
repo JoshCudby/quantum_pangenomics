@@ -5,28 +5,20 @@ import argparse
 from itertools import product
 
 from qiskit import QuantumCircuit
-from qiskit.circuit.library import CXGate, PauliEvolutionGate
-from qiskit.transpiler import PassManager, Layout
-from qiskit.transpiler.passes import InverseCancellation, CommutativeCancellation
-from qiskit.circuit import Parameter, ParameterVector
+from qiskit.circuit import Parameter
 
 from qiskit_aer import AerSimulator
 from qiskit_aer.primitives import SamplerV2 as Sampler
 
-from qopt_best_practices.transpilation.swap_cancellation_pass import SwapToFinalMapping
-
-from hubo_qaoa.utils.get_swap_strategy import get_swap_strategy
 
 from hubo_qaoa.utils.graph_to_hubo_hamiltonian import graph_to_hubo_hamiltonian
 from hubo_qaoa.utils.gfa_utils import gfa_file_to_graph
-from hubo_qaoa.utils.str_utils import genbin
 from hubo_qaoa.utils.parameterise_circuit import parameterise_circuit
 from hubo_qaoa.utils.lr_qaoa import get_LR_qaoa_circuit
-
-from qiskit_qaoa.utils.transpiler_passes import FindCommutingPauliEvolutionsMulti
-from qiskit_qaoa.utils.commuting_gate_router_precompute_rzz import CommutingGateRouterPrecomputeRzz
 from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples_all
 from qiskit_qaoa.utils.logging import get_logger
+
+
 logger = get_logger(__name__)
 
 
@@ -38,7 +30,6 @@ backend_options = dict(
     precision='single',
     basis_gates = ['rx', 'ry', 'rz', 'cx']
 )
-# fake_fez = FakeFez()
 backend = AerSimulator(**backend_options)
 sampler = Sampler.from_backend(backend)
 
@@ -59,31 +50,10 @@ hamiltonian = normalised_hamiltonian * norm
 
 circuit_hamiltonian = normalised_hamiltonian if args.normalise else hamiltonian
 
-extended_swap_strat = get_swap_strategy('all', n, T)
-num_physical_qubits = extended_swap_strat._num_vertices
-
-donor_qc = QuantumCircuit(num_physical_qubits)
-pm_rzz = PassManager(
-    [
-        FindCommutingPauliEvolutionsMulti(), 
-        CommutingGateRouterPrecomputeRzz(
-            extended_swap_strat,
-            max_layers=0,
-            perform_extra_swaps=True
-        ),
-        SwapToFinalMapping(),
-        InverseCancellation(gates_to_cancel=[CXGate()]),
-        CommutativeCancellation(basis_gates=["cx", "swap", "rz", "rzz"]),
-        InverseCancellation(gates_to_cancel=[CXGate()]),
-    ]
-)
-layout = Layout({donor_qc.qubits[i]: i for i in range(num_physical_qubits)})
-qc = QuantumCircuit(num_physical_qubits)
-qc.append(PauliEvolutionGate(circuit_hamiltonian), [layout.get_virtual_bits()[donor_qc.qubits[i]] for i in range(num_physical_qubits)])     
-    
-logger.info('Compiling with precompute Rzz')
-cost_circuit = pm_rzz.run(qc)   
-cost_circuit = parameterise_circuit(cost_circuit, parameter=Parameter('γ'))
+data_file = '/lustre/scratch127/qpg/jc59/new_hubo_formulation/circuit_depths/results.couplingall.precompute.0.pkl'
+with open(data_file, 'rb') as f:
+    res = pickle.load(f)
+cost_circuit = parameterise_circuit(res[filename]['rzz']['circuit'], parameter=Parameter('γ'))
 
 
 num_qubits: int = cost_circuit.num_qubits    
@@ -108,7 +78,7 @@ def get_energy_and_p_opt(qc) -> tuple[float, float]:
 def LR_QAOA(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircuit]):
     fixed_qc, circuit = get_LR_qaoa_circuit(p, delta_b, delta_g, num_qubits, cost_circuit, circ, None, None)
 
-    energy = get_energy_and_p_opt(fixed_qc)
+    energy, p_opt = get_energy_and_p_opt(fixed_qc)
         
     logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}, p_opt: {np.round(p_opt, 4)}')
     return energy, p_opt, circuit
@@ -116,10 +86,13 @@ def LR_QAOA(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircui
 eps = 1e-2
   
 
-delta_bs = np.logspace(-1, 0, 11, base=10)
-delta_gs = np.logspace(-1.0, -0.5, 11, base=10)
-ps = [int(x) for x in np.logspace(0, 2.5, 6, base=10)]
+# delta_bs = np.logspace(-1.0, 0.5, 21, base=10)
+# delta_gs = np.logspace(-1.0, 0.5, 21, base=10)
+delta_bs = np.linspace(0.1, 1, 30)
+delta_gs = np.linspace(0.1, 2, 30)
 
+# ps = [int(x) for x in np.logspace(0, 2.5, 6, base=10)]
+ps = [1,2,3,4,5]
 
 energies = np.zeros((len(ps), len(delta_bs), len(delta_gs)))
 p_opts = np.zeros((len(ps), len(delta_bs), len(delta_gs)))

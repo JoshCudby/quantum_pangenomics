@@ -214,7 +214,7 @@ results: dict[str, SparsePauliOp | Layout | Best] = {
     'best_rzz': best_rzz
 }
 
-basepath = '/lustre/scratch127/qpg/jc59/new_hubo_formulation/'
+basepath = '/lustre/scratch127/qpg/jc59/new_hubo_formulation/compilation/'
 filename = 'compilation.{}.coupling{}.extra{}.times{}.four{}.six{}'.format(
     args.filename,
     args.coupling_map,

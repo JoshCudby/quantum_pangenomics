@@ -21,8 +21,8 @@ class IterativeQAOAData:
     
 
 def get_beta_T(i: int, max_beta_T: float, max_iterations: int=10):
-    # A quadratic ramp from 0.1 to 1 over 10 iterations, scaled by max_beta_T
-    return ((i ** 2)/9 + 1) / max_iterations * max_beta_T
+    # A quadratic ramp from 1/max_iterations to 1 over max_iterations iterations, scaled by max_beta_T
+    return ((i ** 2)/(max_iterations-1) + 1) / max_iterations * max_beta_T
 
 def _boltzmann(energies: npt.NDArray, beta_T: float) -> npt.NDArray:
     B = np.exp(- beta_T * energies ** 2)

@@ -34,7 +34,6 @@ Q, _, offset, _ = get_Q_and_hamiltonian(data_file)
 
 filename_suffix = f'error_miti.alpha{alpha}.p{p}.shots{shots}.method{args.method}.max_iter{max_iter}.init{init_type}'
 
-
 with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/cvar_new/hardware/{filename}_cvar.{filename_suffix}.pkl', 'rb') as f:
     data = pickle.load(f)
     

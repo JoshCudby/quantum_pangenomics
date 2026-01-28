@@ -72,7 +72,7 @@ def _hardware_circuit_construction(
         "swap_strategy": swap_strategy,
         "edge_coloring": edge_colouring,
         "construct_qaoa": False,
-        "basis_gates": ["rz", "cx", "swap"]
+        "basis_gates": ["rz", "rzz", "cz", "x", "swap"]
     }
     
     properties = {}
@@ -161,7 +161,7 @@ def _hardware_circuit_construction(
     generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend) # , scheduling_method="asap"
     backend_circ = generic_pm.run(qaoa_circuit)
         
-    return backend_circ
+    return backend_circ, qaoa_circuit
 
 
 def get_LR_qaoa_circuit(
@@ -237,7 +237,7 @@ def get_hardware_LR_qaoa_circuit(
     fixed_params = list(betas) + list(gammas)
     
     if qaoa_circ is None:
-        circuit = _hardware_circuit_construction(
+        circuit, abstract_circuit = _hardware_circuit_construction(
             num_virtual_qubits, remapped_cost_op, sat_map, p, backend, edge_colouring, swap_strategy, phis
         )
         
@@ -246,4 +246,4 @@ def get_hardware_LR_qaoa_circuit(
         
     fixed_param_bind = {circuit.parameters[i]: fixed_params[i] for i in range(2*p)}
     fixed_qc = circuit.assign_parameters(fixed_param_bind)
-    return fixed_qc, circuit
+    return fixed_qc, circuit, abstract_circuit

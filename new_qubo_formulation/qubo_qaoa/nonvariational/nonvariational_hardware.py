@@ -23,7 +23,6 @@ from qopt_best_practices.sat_mapping import SATMapper
 from qubo_qaoa.utils.swap_strategy import QUBOSwapStrategy
 from qubo_qaoa.utils.iterative_qaoa_utils import IterativeQAOAData, iteration, get_beta_T
 from qubo_qaoa.utils.lr_qaoa import get_hardware_LR_qaoa_circuit
-from qubo_qaoa.utils.circuit_construction import circuit_construction
 
 from qiskit_qaoa.utils.circuit_graph_utils import circuit_to_graph, graph_to_operator
 from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian

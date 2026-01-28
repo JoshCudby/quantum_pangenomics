@@ -47,7 +47,8 @@ elif args.method != '':
 else:
     filename_suffix = f'p{p}.shots{shots}.hardware{hardware}.noisy{noisy}.init{init_type}'
 
-with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/experiments/{filename}_cvar.{filename_suffix}.pkl', 'rb') as f:
+with open('/lustre/scratch127/qpg/jc59/out/qiskit/cvartest_N2_W2_cvar.p4.shots256.methodCOBYLA.hardwareTrue.noisyFalse.initrandom.pkl', 'rb') as f:
+# with open(f'/lustre/scratch127/qpg/jc59/out/qiskit/experiments/{filename}_cvar.{filename_suffix}.pkl', 'rb') as f:
     data = pickle.load(f)
     
 history = data["history"]
@@ -89,35 +90,35 @@ logger.info(f'Time to compute energies {elapsed}')
 counter = Counter(sample_vals)
 print(counter.most_common(10))
 
-optimum = [1,0,0,0,0,0,0,0,0] + [0,0,1,0,0,0,0,0,0] + [0,0,0,0,0,1,0,0,0] + [1,0,0,0,0,0,0,0,0] + [0,0,1,0,0,0,0,0,0] + [0,0,0,0,0,0,1,0,0]
-print(evaluate_sparse_pauli_samples([''.join([str(x) for x in optimum[::-1]])], hamiltonian) + ising_offset)
+# optimum = [1,0,0,0,0,0,0,0,0] + [0,0,1,0,0,0,0,0,0] + [0,0,0,0,0,1,0,0,0] + [1,0,0,0,0,0,0,0,0] + [0,0,1,0,0,0,0,0,0] + [0,0,0,0,0,0,1,0,0]
+# print(evaluate_sparse_pauli_samples([''.join([str(x) for x in optimum[::-1]])], hamiltonian) + ising_offset)
 
-sample = ''.join([str(x) for x in optimum[::-1]])
-new_sample = [''] * len(sample)
-for x in range(len(sample)):
-    new_sample[len(sample)-1- sat_map[len(sample)-1-x]] = sample[x]
-new_sample = ''.join(new_sample)
-print(evaluate_sparse_pauli_samples([new_sample], cost_op) + ising_offset)
-
-
-print(np.array([
-    sample @ Q @ sample for sample in [optimum]
-]) + offset)
+# sample = ''.join([str(x) for x in optimum[::-1]])
+# new_sample = [''] * len(sample)
+# for x in range(len(sample)):
+#     new_sample[len(sample)-1- sat_map[len(sample)-1-x]] = sample[x]
+# new_sample = ''.join(new_sample)
+# print(evaluate_sparse_pauli_samples([new_sample], cost_op) + ising_offset)
 
 
-# random_samples = np.random.choice(('0', '1'), (num_samples, n))
-random_ones = np.random.random_integers(0, 9-1, (num_samples, 6))
-vectors = [
-    ''.join(['0']*i + ['1'] + ['0']*(9-i-1)) for i in range(9)
-]
-random_samples = [
-    reduce(
-        str.__add__,
-        [vectors[x] for x in random_ones[j, :]],
-        ''
-    )
-    for j in range(num_samples)
-]
+# print(np.array([
+#     sample @ Q @ sample for sample in [optimum]
+# ]) + offset)
+
+
+random_samples = np.random.choice(('0', '1'), (num_samples, n))
+# random_ones = np.random.random_integers(0, 9-1, (num_samples, 6))
+# vectors = [
+#     ''.join(['0']*i + ['1'] + ['0']*(9-i-1)) for i in range(9)
+# ]
+# random_samples = [
+#     reduce(
+#         str.__add__,
+#         [vectors[x] for x in random_ones[j, :]],
+#         ''
+#     )
+#     for j in range(num_samples)
+# ]
 rand_samples = [''.join(sample) for sample in random_samples]
 rand_vals = evaluate_sparse_pauli_samples(rand_samples, cost_op) + ising_offset
 

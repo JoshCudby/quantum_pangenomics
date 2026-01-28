@@ -2,7 +2,7 @@
 
 usage()
 {
-    echo "usage: nonvariational.sh [[-f file -m memory -n shots -N nodes] | [-h]]"
+    echo "usage: qubo_nonvariational.sh [[-f file -m memory -n shots -N nodes] | [-h]]"
 }
 
 memory="4000"
