@@ -88,8 +88,8 @@ eps = 1e-2
 
 # delta_bs = np.logspace(-1.0, 0.5, 21, base=10)
 # delta_gs = np.logspace(-1.0, 0.5, 21, base=10)
-delta_bs = np.linspace(0.1, 1, 30)
-delta_gs = np.linspace(0.1, 2, 30)
+delta_bs = np.linspace(0.0, 1, 41)
+delta_gs = np.linspace(0.0, 2, 41)
 
 # ps = [int(x) for x in np.logspace(0, 2.5, 6, base=10)]
 ps = [1,2,3,4,5]

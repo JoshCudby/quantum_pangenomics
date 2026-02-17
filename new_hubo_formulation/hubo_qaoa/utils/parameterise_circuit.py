@@ -9,7 +9,7 @@ def parameterise_circuit(qc: QuantumCircuit, parameter: Parameter) -> QuantumCir
         if len(g.operation.params) == 0:
             clone.append(g)
         elif len(g.operation.params) > 1:
-            raise Exception('Only single parameter circuits allowed.')
+            raise Exception(f'Only single parameter circuits allowed, received: {g}')
         else:
             op = g.operation.copy()
             op.params = [g.operation.params[0] * parameter]

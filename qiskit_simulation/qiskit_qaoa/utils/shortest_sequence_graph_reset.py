@@ -4,10 +4,6 @@ from typing import Dict, Set, Iterable, List, Generator, Optional, Tuple
 
 
 def sort_by_length(items, ascending: bool = True):
-    """
-    Deterministic: primary key = len(item), secondary key = tuple(sorted(item)).
-    Signature kept for compatibility; max_val is unused now (but kept).
-    """
     def key_fn(e):
         return (len(e), tuple(sorted(e)))
     return sorted(items, key=key_fn, reverse=not ascending)

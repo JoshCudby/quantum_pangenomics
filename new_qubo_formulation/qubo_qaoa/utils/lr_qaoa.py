@@ -72,7 +72,7 @@ def _hardware_circuit_construction(
         "swap_strategy": swap_strategy,
         "edge_coloring": edge_colouring,
         "construct_qaoa": False,
-        "basis_gates": ["rz", "rzz", "cz", "x", "swap"]
+        # "basis_gates": ["rz", "rzz", "cz", "x", "swap"]
     }
     
     properties = {}
@@ -158,10 +158,10 @@ def _hardware_circuit_construction(
             qaoa_circuit.measure(qidx, cidx)
             
 
-    generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend) # , scheduling_method="asap"
+    generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend , scheduling_method="alap")
     backend_circ = generic_pm.run(qaoa_circuit)
         
-    return backend_circ, qaoa_circuit
+    return backend_circ
 
 
 def get_LR_qaoa_circuit(
@@ -173,7 +173,7 @@ def get_LR_qaoa_circuit(
     qaoa_circ: Optional[QuantumCircuit],
     phis: Optional[ParameterVector],
     measure: Optional[bool]
-) -> tuple[QuantumCircuit, QuantumCircuit]:
+) -> tuple[QuantumCircuit, ...]:
     x = np.array([(j-0.5)/p for j in range(1, p+1)])
     betas = delta_b * (1-x)
     gammas = delta_g * x
@@ -230,14 +230,14 @@ def get_hardware_LR_qaoa_circuit(
     swap_strategy: QUBOSwapStrategy,
     qaoa_circ: Optional[QuantumCircuit],
     phis: Optional[ParameterVector],
-) -> tuple[QuantumCircuit, QuantumCircuit]:
+) -> tuple[QuantumCircuit, ...]:
     x = np.array([(j-0.5)/p for j in range(1, p+1)])
     betas = delta_b * (1-x)
     gammas = delta_g * x
     fixed_params = list(betas) + list(gammas)
     
     if qaoa_circ is None:
-        circuit, abstract_circuit = _hardware_circuit_construction(
+        circuit = _hardware_circuit_construction(
             num_virtual_qubits, remapped_cost_op, sat_map, p, backend, edge_colouring, swap_strategy, phis
         )
         
@@ -246,4 +246,4 @@ def get_hardware_LR_qaoa_circuit(
         
     fixed_param_bind = {circuit.parameters[i]: fixed_params[i] for i in range(2*p)}
     fixed_qc = circuit.assign_parameters(fixed_param_bind)
-    return fixed_qc, circuit, abstract_circuit
+    return fixed_qc, circuit

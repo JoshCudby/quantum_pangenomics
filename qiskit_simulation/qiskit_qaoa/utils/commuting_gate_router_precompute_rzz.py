@@ -201,27 +201,28 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         cx_gates: list[tuple[int, int]],
         all_vertices_in_chain: set[int]
     ):
-        edges = [c for c in combinations(all_vertices_in_chain, 2) if self._is_connected(c)]
+        # SKIP
+        # edges = [c for c in combinations(all_vertices_in_chain, 2) if self._is_connected(c)]
 
-        try:
-            if circuit.num_qubits > 20:
-                raise Exception('Too large - skip')
-            seq = bfs_shortest_sequence(list(all_vertices_in_chain), edges, currently_stored_info, max_states=100000)
-            if seq is not None and len(seq) < len(cx_gates):
-                for gate in seq:
-                    circuit.cx(gate[0], gate[1])
-                return
+        # try:
+        #     if circuit.num_qubits > 20:
+        #         raise Exception('Too large - skip')
+        #     seq = bfs_shortest_sequence(list(all_vertices_in_chain), edges, currently_stored_info, max_states=100000)
+        #     if seq is not None and len(seq) < len(cx_gates):
+        #         for gate in seq:
+        #             circuit.cx(gate[0], gate[1])
+        #         return
             
-            # print('Could not find shortest sequence by BFS, try heuristic')
-            seq = heuristic_spanning_tree_solver(list(all_vertices_in_chain), edges, currently_stored_info, max_local_bfs_states=2000)
-            if seq is not None and len(seq) < len(cx_gates):
-                for gate in seq:
-                    circuit.cx(gate[0], gate[1])
-                return
-            # print('Could not find shortest sequence by heuristic')
-        except Exception as e:
-            # print(f'Error in bfs or heuristic: {e}')
-            pass
+        #     # print('Could not find shortest sequence by BFS, try heuristic')
+        #     seq = heuristic_spanning_tree_solver(list(all_vertices_in_chain), edges, currently_stored_info, max_local_bfs_states=2000)
+        #     if seq is not None and len(seq) < len(cx_gates):
+        #         for gate in seq:
+        #             circuit.cx(gate[0], gate[1])
+        #         return
+        #     # print('Could not find shortest sequence by heuristic')
+        # except Exception as e:
+        #     # print(f'Error in bfs or heuristic: {e}')
+        #     pass
         
         for gate in cx_gates[::-1]:
             circuit.cx(gate[0], gate[1])
@@ -322,10 +323,9 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         currently_stored_info: dict[int, set[int]],
         allowed_number_of_cx: int
     ) -> tuple[int,...] | None:
-        if all([currently_stored_info[q] == set([q]) for q in tuple(interaction)]):
+        if self._is_connected(interaction) and all([currently_stored_info[q] == set([q]) for q in tuple(interaction)]):
             return tuple(interaction)
         interaction_set = set(interaction)
-
         i = 1
         while i < allowed_number_of_cx + 3:
             for cx_qubits in combinations(interaction_set, i):
@@ -423,7 +423,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
             cx_qubits,
             edges,
             stop_at=2,
-            max_solutions=100
+            max_solutions=5
         )
         
         best_num_interactions = 0
@@ -450,6 +450,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         
         if best_sequence is None:
             print(cx_qubits, list(possible_cx_sequences))
+            print(final_interaction)
             raise Exception('Failed to find best sequence of CX gates')
         
         

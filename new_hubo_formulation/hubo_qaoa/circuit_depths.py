@@ -73,7 +73,7 @@ def sweep_swap_depths(layers: list[int], qubits: list, best_rzz: Best, swap_stra
             layout = Layout({qubits[key]: val for key, val in edge_map.items()})
 
         qc = QuantumCircuit(num_physical_qubits)
-        qc.append(PauliEvolutionGate(hamiltonian), [layout.get_virtual_bits()[qubits[i]] for i in range(num_physical_qubits)])     
+        qc.append(PauliEvolutionGate(hamiltonian), [layout.get_virtual_bits()[qubits[i]] for i in range(num_virtual_qubits)])     
             
         logger.info('Compiling with precompute Rzz')
         tqc_rzz = pm_rzz.run(qc)   
@@ -103,10 +103,11 @@ mapper = HigherOrderSatMapper(timeout=args.timeout)
 
 for filename, copy_numbers in zip(
     [
-        # 'test_N2_W2', 'trivial', 
+        # 'test_N2_W2', 
+        # 'trivial', 
         # 'test_N3_W4', 
         # 'test_N4_W5', 
-        # 'test_N4_W6', 'test_N5_W6', 
+        'test_N4_W6', 'test_N5_W6', 
         # 'test_N7_W2', 'test_N7_W3','test_N7_W4', 
         # 'test_N7_W5', 
         # 'test_N8_W2', 
@@ -114,22 +115,24 @@ for filename, copy_numbers in zip(
         # 'test_N8_W4', 
         # 'test_N8_W5', 
         # 'test_N8_W6',
-        'test_N9_W6', 
+        # 'test_N9_W6', 
         # 'test_N10_W6',
         # 'test_N14_W7'
     ], 
     [
-        # [1,1], [1,1,1], 
+        # [1,1],
+        # [1,1,1], 
         # [2,1,1], 
         # [2,1,1,1],
-        # [2,2,1,1], [1,2,1,1,1], 
+        [2,2,1,1], [1,2,1,1,1], 
         # [1,0,0,0,0,0,1], [1,1,0,0,0,0,1], [1,1,1,0,0,0,1], 
         # [1,1,1,0,1,0,1],
         # [1,0,0,0,0,0,0,1],
         # [1,1,0,0,0,0,0,1],
-        # [1,1,1,0,0,0,0,1],[1,1,1,1,0,0,0,1],
+        # [1,1,1,0,0,0,0,1],
+        # [1,1,1,1,0,0,0,1],
         # [1,1,0,1,1,1,0,1],
-        [1,1,0,0,1,0,1,1,1], 
+        # [1,1,0,0,1,0,1,1,1], 
         # [1,1,0,0,1,0,1,1,0,1],
         # [1,1,0,0,1,0,1,0,0,1,0,0,1,1]
     ]
@@ -141,6 +144,8 @@ for filename, copy_numbers in zip(
     graph, n, V, T = gfa_file_to_graph(filepath, copy_numbers)
     hamiltonian, norm = graph_to_hubo_hamiltonian(graph, n, T, lamda=10, constraint_terms=1.0)
     hamiltonian = hamiltonian * norm
+    num_virtual_qubits: int = hamiltonian.num_qubits
+    
     extended_swap_strat = get_swap_strategy(args.coupling, n, T)
 
         
@@ -155,7 +160,7 @@ for filename, copy_numbers in zip(
     backend = AerSimulator(configuration=config, coupling_map=extended_swap_strat._coupling_map, **backend_options)
     backend.set_option("n_qubits", num_physical_qubits)
 
-    default_qaoa = QAOAAnsatz(hamiltonian, reps=1, initial_state= QuantumCircuit(num_physical_qubits), mixer_operator=QuantumCircuit(num_physical_qubits))
+    default_qaoa = QAOAAnsatz(hamiltonian, reps=1, initial_state= QuantumCircuit(num_virtual_qubits), mixer_operator=QuantumCircuit(num_virtual_qubits))
     t_default_qaoa = transpile(default_qaoa, backend=backend, optimization_level=3, basis_gates=["sx", "x", "rz", "rzz", "cz", "id", "cx"])
 
 

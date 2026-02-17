@@ -63,10 +63,10 @@ def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCir
     fixed_qc, circuit = get_LR_qaoa_circuit(p, delta_b, delta_g, num_qubits, cost_circuit, circ, phis, True)
     history = []
     angles = init_angles
-    iters = 10
+    iters = 5
 
     for i in range(iters):
-        angles = iteration(fixed_qc, sampler, shots, angles, get_beta_T(i, max_beta_T, max_iterations=iters), data, history)
+        angles = iteration(fixed_qc, sampler, shots, angles, get_beta_T(i, max_beta_T, max_iterations=10), data, history)
         
         
     energy = history[-1][2]
@@ -80,13 +80,15 @@ def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCir
 delta_b_fixed, delta_g_fixed = 0.75, 0.30
 
 eta = 1
-eps = 0.15
-max_beta_T = 0.15
-alpha=1.0
+eps = 0.25
+max_beta_T = 0.25
+alpha = 1.0
 
-prob = 1 / 2
-theta = 2 * np.arcsin(np.sqrt(prob))
-init_angles = theta * np.ones((num_qubits,))
+probs = 1 / 2 * np.ones((num_qubits,))
+#experimental
+probs[0] = eps 
+thetas = 2 * np.arcsin(np.sqrt(probs))
+init_angles = thetas
 
 data = IterativeQAOAData(
     hamiltonian=hamiltonian,

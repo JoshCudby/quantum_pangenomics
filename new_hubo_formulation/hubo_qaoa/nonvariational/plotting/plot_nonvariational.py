@@ -96,10 +96,10 @@ rescale = 10**(0.0)
 
 n = 4000
 ps = [1,3,5]
-iters=range(0,10,2)
+iters=range(0,5,2)
 max_beta_T = 0.15
 eps=0.15
-alpha=1.0
+alpha=0.1
 
 
 match setting:

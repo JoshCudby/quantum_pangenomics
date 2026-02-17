@@ -13,6 +13,9 @@ from qubo_qaoa.utils.lr_qaoa import get_LR_qaoa_circuit, get_hardware_LR_qaoa_ci
 
 from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
 from qiskit_qaoa.utils.circuit_graph_utils import circuit_to_graph, graph_to_operator
+from qiskit_qaoa.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 def circuit_to_info(circuit: QuantumCircuit):
     return {
@@ -33,7 +36,7 @@ backend = service.backend(name='ibm_boston')
 data = {}
 
 for filename in [
-    'test_N2_W2', 'test_N3_W4','test_N3_W5','test_N4_W5','test_N4_W6',
+    'test_N2_W2','test_N3_W4','test_N3_W5','test_N4_W5','test_N4_W6',
     'test_N5_W6','test_N7_W2','test_N7_W3','test_N7_W4','test_N7_W5',
     'test_N8_W2','test_N8_W3','test_N8_W4','test_N8_W5','test_N8_W6',
     'test_N9_W6','test_N10_W6','test_N14_W7'
@@ -43,7 +46,7 @@ for filename in [
         Q, hamiltonian, offset, ising_offset = get_Q_and_hamiltonian(data_file)
         num_qubits: int = hamiltonian.num_qubits
 
-        print('Compiling with line SWAP strategy')
+        logger.info(f'Compiling {filename} with line SWAP strategy')
         swap_strat = QUBOSwapStrategy.from_line(range(num_qubits))
         edge_colouring = {(i, i+1): i % 2 for i in range(num_qubits)}
         edge_colouring.update({(i+1, i): i % 2 for i in range(num_qubits)})
@@ -74,13 +77,21 @@ for filename in [
             p, delta_b, delta_g, num_qubits,
             hamiltonian, None, phis=phis, measure=True
         )
+        
+        logger.info(f"""
+                    filename: {filename},
+                    Abstract circuit: depth {fixed_qc.depth()}, counts: {sum(fixed_qc.count_ops().values())},
+                    Hardware circuit: depth {fixed_hardware_qc.depth()}, counts: {sum(fixed_hardware_qc.count_ops().values())}
+                    """
+        )
 
         data[filename] = {
             'abstract': circuit_to_info(fixed_qc),
             'hardware': circuit_to_info(fixed_hardware_qc)
         }
         
-    except Exception:
+    except Exception as e:
+        logger.info(e)
         pass
     
     

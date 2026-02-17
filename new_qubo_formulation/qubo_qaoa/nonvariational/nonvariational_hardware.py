@@ -68,10 +68,10 @@ if simulation:
     simulator = AerSimulator.from_backend(backend, **backend_options)
     sampler = AerSampler.from_backend(simulator)
 else:
-    ddOptions = DynamicalDecouplingOptions(enable=False, sequence_type="XX")
+    # ddOptions = DynamicalDecouplingOptions(enable=False, sequence_type="XX")
     # shots_per_randomizations >= 100 per randomization, shot budget for experiment 
     twirlingOptions = TwirlingOptions(enable_gates=error_mitigation, enable_measure=error_mitigation, num_randomizations='auto', shots_per_randomization=100, strategy="active-accum")
-    samplerOptions = SamplerOptions(dynamical_decoupling=ddOptions, twirling=twirlingOptions)
+    samplerOptions = SamplerOptions(twirling=twirlingOptions)
     sampler = Sampler(mode=backend, options=samplerOptions)
 
 logger.info(f'Backend: {backend}')
@@ -131,7 +131,7 @@ def warm_start(
     delta_b: float, 
     delta_g: float, 
     circ: Optional[QuantumCircuit]=None
-) -> tuple[float, list[list[str]], QuantumCircuit]:
+) -> tuple[float, list[list[str]], QuantumCircuit, list[np.ndarray]]:
     phis = ParameterVector('ϕ', num_qubits)
     
     fixed_qc, circuit = get_hardware_LR_qaoa_circuit(
@@ -141,17 +141,19 @@ def warm_start(
     )
     
     history = []
+    angles_history = [init_angles]
     angles = init_angles
-    iters = 10
+    iters = 5
 
     for i in range(iters):
         angles = iteration(fixed_qc, sampler, shots, angles, get_beta_T(i, max_beta_T), data, history)
+        angles_history.append(angles)
         
 
     energy = history[-1][2]
     samples = [history[i][0] for i in range(len(history))]
     logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}')
-    return energy, samples, circuit
+    return energy, samples, circuit, angles_history
      
         
 
@@ -161,7 +163,7 @@ delta_g_fixed = 0.16
 eta = 1
 eps = 0.15
 max_beta_T =  0.15
-alpha = 1.0
+alpha = 0.025
 
 data = IterativeQAOAData(
     hamiltonian=hamiltonian,
@@ -185,16 +187,18 @@ samples_dict = {}
 # MAIN
 energies = np.zeros((len(ps), len(rescaling)))
 samples_dict: dict[tuple[int, float], list[list[str]]] = {}
+angles_dict: dict[tuple[int, float], list[np.ndarray]] = {}
 
 circuit = None
 for i, j in product(range(len(ps)), range(len(rescaling))):
     if j == 0:
         circuit = None
-    e, samples, circuit = warm_start(ps[i], delta_b_fixed * rescaling[j], delta_g_fixed * rescaling[j], circuit)
+    e, samples, circuit, angles = warm_start(ps[i], delta_b_fixed * rescaling[j], delta_g_fixed * rescaling[j], circuit)
     energies[i, j] = e
     samples_dict[(ps[i], np.round(rescaling[j], 3))] = samples
+    angles_dict[(ps[i], np.round(rescaling[j], 3))] = angles
     
-to_save=dict(energies=energies, delta_b_fixed=delta_b_fixed, delta_g_fixed=delta_g_fixed, ps=ps, rescaling=rescaling, samples_dict=samples_dict)    
+to_save=dict(energies=energies, delta_b_fixed=delta_b_fixed, delta_g_fixed=delta_g_fixed, ps=ps, rescaling=rescaling, samples_dict=samples_dict, angles_dict=angles_dict)    
 append_str = f'.{filename}{".error_mit" if error_mitigation else ""}{".simulation" if simulation else ""}.backend{backend.name}.db{delta_b_fixed}.dg{delta_g_fixed}.shots{shots}.betaT{max_beta_T}.eps{eps}.alpha{alpha}'
 with open(f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational/hardware/hardware{append_str}.pkl', 'wb') as f:
     pickle.dump(to_save, f)

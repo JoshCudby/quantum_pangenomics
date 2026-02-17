@@ -25,7 +25,7 @@ def get_beta_T(i: int, max_beta_T: float, max_iterations: int=10):
 
 def _boltzmann(energies: npt.NDArray, beta_T: float) -> npt.NDArray:
     B = np.exp(- beta_T * energies ** 2)
-    return B / np.sum(B)
+    return B / np.sum(B) 
 
 def _bias(boltzmanns: npt.NDArray, q: int, samples: list[str]) -> float:
     return sum([boltzmanns[i] * (-1 if samples[i][q] == '1' else 1) for i in range(len(samples))])

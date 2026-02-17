@@ -11,13 +11,12 @@ n_instances = 3          # number of problem instances
 instance_names = ['test_N2_W2', 'trivial', 'test_N3_W4']
 n_values = [8, 18, 24]
 p_values = [1,3,10,31,100]
+
 n_p = len(p_values)
 
 nx, ny = 41, 41          # resolution of (Δβ, Δγ) grid
-delta_beta = np.logspace(-1, 0, nx, base=10)
-delta_gamma = np.logspace(-1, -0.5, ny, base=10)
-# delta_beta = np.logspace(-1.5, 0.5, 41, base=10)
-# delta_gamma = np.logspace(-1.5, -0.5, 41, base=10)
+delta_beta = np.logspace(-1.5, 0.5, 41, base=10)
+delta_gamma = np.logspace(-1.5, -0.5, 41, base=10)
 
 # X, Y = np.meshgrid(delta_beta, delta_gamma)
 # extent = [

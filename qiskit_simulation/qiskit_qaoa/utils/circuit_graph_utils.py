@@ -100,6 +100,7 @@ def circuit_construction(
         "swap_strategy": swap_strat,
         "edge_coloring": edge_coloring,
         "construct_qaoa": False,
+        # "basis_gates": ["sx", "x", "rz", "rzz", "swap", "cx", "id"]
     }
     pm = qaoa_swap_strategy_pm(config)
     tdoubles_circ = pm.run(doubles_circ, callback=get_permutation)

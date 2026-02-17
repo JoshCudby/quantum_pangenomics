@@ -105,10 +105,14 @@ def LR_QAOA(p, delta_b, delta_g, circ):
         
 
 eps = 1e-2
-delta_bs = np.logspace(-0.5, 0.5, 41, base=10)
-delta_gs = np.logspace(-1.5, -0.5, 41, base=10)
+# delta_bs = np.logspace(-0.5, 0.5, 41, base=10)
+# delta_gs = np.logspace(-1.5, -0.5, 41, base=10)
+delta_bs = np.linspace(0.0, 1, 41) 
+delta_gs = np.linspace(0.0, 1, 41)
+
+
 # ps = sorted(set([int(x) for x in np.logspace(0, 2, 5, base=10)]))
-ps = [1,3,5]
+ps = range(1, 6)
 
 energies = np.zeros((len(ps), len(delta_bs), len(delta_gs)))
 p_opts = np.zeros((len(ps), len(delta_bs), len(delta_gs)))

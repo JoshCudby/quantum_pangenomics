@@ -62,7 +62,7 @@ def warm_start(
     
     history = []
     angles = init_angles
-    iters = 10
+    iters = 5
     
     for i in range(iters):
         angles = iteration(fixed_qc, sampler, shots, angles, get_beta_T(i, max_beta_T), data, history)
@@ -72,8 +72,8 @@ def warm_start(
     logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}')
     return energy, samples, circuit
 
-delta_b_fixed = 1.00
-delta_g_fixed = 0.06
+delta_b_fixed = 0.63
+delta_g_fixed = 0.16
         
 eta = 1
 eps = 0.15

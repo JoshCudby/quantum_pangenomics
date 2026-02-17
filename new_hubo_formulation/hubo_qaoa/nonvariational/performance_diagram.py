@@ -8,7 +8,7 @@ from qiskit import QuantumCircuit
 from qiskit.circuit.library import CXGate, PauliEvolutionGate
 from qiskit.transpiler import PassManager, Layout
 from qiskit.transpiler.passes import InverseCancellation, CommutativeCancellation
-from qiskit.circuit import Parameter, ParameterVector
+from qiskit.circuit import Parameter
 
 from qiskit_aer import AerSimulator
 from qiskit_aer.primitives import SamplerV2 as Sampler
@@ -31,14 +31,11 @@ logger = get_logger(__name__)
 
 
 backend_options = dict(
-    # method='matrix_product_state',
-    # matrix_product_state_max_bond_dimension='20', 
     method='statevector',
     device='GPU',
     precision='single',
     basis_gates = ['rx', 'ry', 'rz', 'cx']
 )
-# fake_fez = FakeFez()
 backend = AerSimulator(**backend_options)
 sampler = Sampler.from_backend(backend)
 
@@ -46,7 +43,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename', type=str)
 parser.add_argument('-c', '--copy-numbers', help='delimited list input', 
     type=lambda s: [float(item) for item in s.split(',') if len(item)])
-parser.add_argument('--normalise', action='store_true', default=False)
 args = parser.parse_args()
 
 
@@ -94,8 +90,8 @@ zero_indexes = np.nonzero(evals < 1e-5)
 
 def get_probability(qc):
     job = backend.run([qc],shots=1)
-    sampler_result = job.result()
-    data = sampler_result.results[0].data
+    result = job.result()
+    data = result.results[0].data
 
     sv = np.asarray(data.statevector)
     probability = np.sum(np.abs(sv[zero_indexes]) ** 2)
@@ -103,7 +99,7 @@ def get_probability(qc):
 
 
 def LR_QAOA(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircuit]):
-    fixed_qc, circuit = get_LR_qaoa_circuit(p, delta_b, delta_g, num_qubits, cost_circuit, circ)
+    fixed_qc, circuit = get_LR_qaoa_circuit(p, delta_b, delta_g, num_qubits, cost_circuit, circ, phis=None, measure=False)
 
     probability = get_probability(fixed_qc)
         
@@ -112,28 +108,8 @@ def LR_QAOA(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircui
     
 eps = 1e-2
   
-
-# delta_bs = np.linspace(0, 0.1, 30)
-# delta_gs = np.linspace(0, 0.1 * 2, 30)
-# ps = [1, 6, 11, 16, 21]
-
-
-# energies = np.zeros((len(ps), len(delta_bs), len(delta_gs)))
-# circuit = None
-# for i, j, k in product(range(len(ps)), range(len(delta_bs)), range(len(delta_gs))):
-#     if j == 0 and k == 0:
-#         circuit = None
-#     e, circuit = LR_QAOA(ps[i], delta_bs[j], delta_gs[k], circuit)
-#     energies[i, j, k] = e
-
-# to_save_name = f'/lustre/scratch127/qpg/jc59/new_hubo_formulation/nonvariational/param_exploration/LR_unequal.{filename}.db{np.round(delta_bs[-1],2)}.dg{np.round(delta_gs[-1],2)}.p{ps[-1]}.pkl'
-# ret = dict(delta_bs=delta_bs, delta_gs=delta_gs, ps=ps, energies=energies)
-    
-# with open(to_save_name, 'wb') as f:
-#     pickle.dump(ret, f)
-
-delta_b_fixed = 0.45
-delta_g_fixed = 0.26
+delta_b_fixed = 0.75
+delta_g_fixed = 0.30
 
 rescaling = 10** np.linspace(-1, 0.5, 50)
 ps = sorted(set([int(p) for p in np.logspace(0, 2.5, 50, base=10)]))
