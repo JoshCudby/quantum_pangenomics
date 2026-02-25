@@ -73,22 +73,7 @@ with open(data_file, 'rb') as f:
 
 
 cost_circuit = res[filename]['rzz']['circuit']
-if cost_circuit.count_ops().get('u', 0) > 0:
-    # Workaround for u gate failing to compile
-    from qiskit.circuit.library import UGate
-    from qiskit.circuit import Parameter
-    from qiskit import QuantumCircuit
-    theta = Parameter('t')
-    phi = Parameter('p')
-    lamda = Parameter('l')
-    qc = QuantumCircuit(1)
-    qc.p(lamda, 0)
-    qc.ry(theta, 0)
-    qc.p(phi, 0)
-    UGate(theta, phi, lamda).add_decomposition(qc)
-cost_circuit = transpile(cost_circuit, basis_gates=['id', 'rz', 'rz', 'ry', 'cx', 'rzz', 'swap', 'cz', 'p'])
 print(cost_circuit.count_ops())
-cost_circuit = parameterise_circuit(cost_circuit, parameter=Parameter('γ'))
 layout = res[filename]['rzz']['layout']
 
     
@@ -101,7 +86,7 @@ num_virtual_qubits: int = hamiltonian.num_qubits
 
 def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircuit]=None):
     phis = ParameterVector('ϕ', num_virtual_qubits)
-    fixed_qc, circuit = get_hardware_LR_qaoa_circuit(p, delta_b, delta_g, num_virtual_qubits, cost_circuit, layout, backend, circ, phis)
+    fixed_qc, circuit, _ = get_hardware_LR_qaoa_circuit(p, delta_b, delta_g, num_virtual_qubits, cost_circuit, layout, backend, circ, phis)
     history = []
     angles_history = [init_angles]
     angles = init_angles

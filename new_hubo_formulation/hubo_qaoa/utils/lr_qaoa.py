@@ -1,4 +1,5 @@
 import numpy as np
+import networkx as nx
 from typing import Optional
 
 from qiskit import QuantumCircuit
@@ -6,6 +7,7 @@ from qiskit.circuit import Parameter, ParameterVector
 from qiskit.transpiler import Layout
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 
+from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy
 from qiskit_ibm_runtime import IBMBackend
 
 from qiskit_qaoa.utils.logging import get_logger
@@ -156,10 +158,12 @@ def _hardware_circuit_construction(
         for i in range(num_virtual_qubits):
             qubit = layout.get_virtual_bits()[qubits[i]]
             qaoa_circuit.measure(qubit, i)
-    generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend , scheduling_method="alap")
+            
+    
+    generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend, scheduling_method="alap")
     backend_circ = generic_pm.run(qaoa_circuit)
         
-    return backend_circ
+    return backend_circ, qaoa_circuit
     
 
 def get_hardware_LR_qaoa_circuit(
@@ -172,14 +176,15 @@ def get_hardware_LR_qaoa_circuit(
     backend: IBMBackend,
     qaoa_circ: Optional[QuantumCircuit],
     phis: Optional[ParameterVector],
-) -> tuple[QuantumCircuit, QuantumCircuit]:
+) -> tuple[QuantumCircuit, QuantumCircuit, Optional[QuantumCircuit]]:
     x = np.array([(j-0.5)/p for j in range(1, p+1)])
     betas = delta_b * (1-x)
     gammas = delta_g * x
     fixed_params = list(betas) + list(gammas)
+    abstract_circuit = None
     
     if qaoa_circ is None:
-        circuit = _hardware_circuit_construction(
+        circuit, abstract_circuit = _hardware_circuit_construction(
             num_virtual_qubits, cost_circuit, layout, p, backend, phis
         )
         logger.info(f'p = {p}. Circuit depth: {circuit.depth()}')
@@ -188,4 +193,4 @@ def get_hardware_LR_qaoa_circuit(
         
     fixed_param_bind = {circuit.parameters[i]: fixed_params[i] for i in range(2*p)}
     fixed_qc = circuit.assign_parameters(fixed_param_bind)
-    return fixed_qc, circuit
+    return fixed_qc, circuit, abstract_circuit

@@ -4,12 +4,11 @@ import numpy as np
 from functools import reduce
 from itertools import combinations
 
-from qiskit import QuantumCircuit
+from qiskit import QuantumCircuit, transpile
 
 from qiskit.circuit import Gate
 from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.dagcircuit import DAGCircuit, DAGOpNode
-
 from qiskit.transpiler import TransformationPass, generate_preset_pass_manager
 from qiskit.transpiler.exceptions import TranspilerError
 from qiskit.transpiler.layout import Layout
@@ -162,21 +161,16 @@ class CommutingGateRouterRzz(TransformationPass):
 
         temp_dag = new_dag.copy_empty_like()
         temp_dag.compose(accumulator, qubits=order_bits)
-
         
         cm = swap_strategy._coupling_map
+        print('Transpiling accumulator')
+
         pm = generate_preset_pass_manager(
             optimization_level=3, 
             coupling_map=cm, 
-            basis_gates=['rz', 'cx', 'id', 'swap', 'u'],
             initial_layout=layout
         )
-        init = pm.init
-        # init.remove(3)
-        pm.init = init
         pm.layout = None
-        print('Transpiling accumulator')
-
         compiled_circuit_dag = circuit_to_dag(pm.run(dag_to_circuit(temp_dag)))
 
         new_dag.compose(compiled_circuit_dag, qubits=new_dag.qubits)
@@ -354,14 +348,14 @@ class CommutingGateRouterRzz(TransformationPass):
         
         while len(missing_information) > 0 and iter <= 10:
             new_cx_gates = []
-            candidates = [(q, x) for q in missing_information for x in rotation_site if self._is_connected(set([q, x]))]
+            candidates = [(q, x) for q in missing_information for x in rotation_site if not q == x and self._is_connected(set([q, x]))]
             if len(candidates) == 0:
                 print_error_and_raise(interaction, rotation_site, missing_information, currently_stored_info, cx_gates, None, None, 'No candidates to apply CX from')
             
             candidate, site_to_apply = candidates[0]
             new_cx_gates.append((candidate, site_to_apply))
             # stack = [(candidate, q) for q in missing_information.symmetric_difference(currently_stored_info[candidate]) if self._is_connected(set([q, candidate]))]
-            stack = [(candidate, q) for q in currently_stored_info.keys() if self._is_connected(set([q, candidate]))]
+            stack = [(candidate, q) for q in currently_stored_info.keys() if not candidate == q and self._is_connected(set([q, candidate]))]
             iiter = 0
             while len(stack):                   
                 previous, qubit = stack.pop()
@@ -376,7 +370,7 @@ class CommutingGateRouterRzz(TransformationPass):
                     new_cx_gates.append((qubit, previous))
                     # new_stack_entries = qubit_neighbours.intersection(info_missing_from_path.symmetric_difference(currently_stored_info[qubit]))
                     # stack.extend([(qubit, q) for q in info_missing_from_path.symmetric_difference(currently_stored_info[qubit]) if self._is_connected(set([qubit, q]))])
-                    stack.extend([(qubit, q) for q in currently_stored_info.keys() if self._is_connected((q, qubit))])
+                    stack.extend([(qubit, q) for q in currently_stored_info.keys() if not qubit == q and self._is_connected((q, qubit))])
                     
                 if iiter == 20:
                     print_error_and_raise(interaction, rotation_site, missing_information, currently_stored_info, None, info_missing_from_path, stack, 'Could not clear stack.')

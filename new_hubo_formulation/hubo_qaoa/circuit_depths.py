@@ -8,6 +8,7 @@ import argparse
 from typing import TypedDict
 
 from qiskit import QuantumCircuit, transpile
+from qiskit.circuit import Parameter
 from qiskit.circuit.library import CXGate, PauliEvolutionGate, QAOAAnsatz
 
 from qiskit_aer import AerSimulator
@@ -23,6 +24,8 @@ from hubo_qaoa.utils.gfa_utils import gfa_file_to_graph
 
 from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, FindCommutingPauliEvolutionsMulti
 from qiskit_qaoa.utils.commuting_gate_router_precompute_rzz import CommutingGateRouterPrecomputeRzz
+# from qiskit_qaoa.utils.commuting_gate_router_rzz import CommutingGateRouterRzz
+
 from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
 from qiskit_qaoa.utils.hamiltonian_utils import hamiltonian_to_interactions
 from qiskit_qaoa.utils.logging import get_logger
@@ -73,7 +76,7 @@ def sweep_swap_depths(layers: list[int], qubits: list, best_rzz: Best, swap_stra
             layout = Layout({qubits[key]: val for key, val in edge_map.items()})
 
         qc = QuantumCircuit(num_physical_qubits)
-        qc.append(PauliEvolutionGate(hamiltonian), [layout.get_virtual_bits()[qubits[i]] for i in range(num_virtual_qubits)])     
+        qc.append(PauliEvolutionGate(hamiltonian, time=Parameter('γ')), [layout.get_virtual_bits()[qubits[i]] for i in range(num_virtual_qubits)])     
             
         logger.info('Compiling with precompute Rzz')
         tqc_rzz = pm_rzz.run(qc)   
@@ -94,7 +97,7 @@ backend_options = dict(
     method=method,
     device='CPU',
     precision='single',
-    basis_gates=["sx", "x", "rz", "rzz", "cz", "id", "cx"]
+    basis_gates=["sx", "x", "rz", "rzz", "cz", "id", "cx", "swap"]
 )
 results = {}
 to_save = {}
@@ -103,34 +106,36 @@ mapper = HigherOrderSatMapper(timeout=args.timeout)
 
 for filename, copy_numbers in zip(
     [
-        # 'test_N2_W2', 
+        'test_N2_W2', 
         # 'trivial', 
         # 'test_N3_W4', 
-        # 'test_N4_W5', 
-        'test_N4_W6', 'test_N5_W6', 
+        'test_N4_W5', 
+        'test_N4_W6', 
+        #'test_N5_W6', 
         # 'test_N7_W2', 'test_N7_W3','test_N7_W4', 
         # 'test_N7_W5', 
-        # 'test_N8_W2', 
-        # 'test_N8_W3',
-        # 'test_N8_W4', 
-        # 'test_N8_W5', 
+        'test_N8_W2', 
+        'test_N8_W3',
+        'test_N8_W4', 
+        'test_N8_W5', 
         # 'test_N8_W6',
         # 'test_N9_W6', 
         # 'test_N10_W6',
         # 'test_N14_W7'
     ], 
     [
-        # [1,1],
+        [1,1],
         # [1,1,1], 
         # [2,1,1], 
-        # [2,1,1,1],
-        [2,2,1,1], [1,2,1,1,1], 
+        [2,1,1,1],
+        [2,2,1,1], 
+        #[1,2,1,1,1], 
         # [1,0,0,0,0,0,1], [1,1,0,0,0,0,1], [1,1,1,0,0,0,1], 
         # [1,1,1,0,1,0,1],
-        # [1,0,0,0,0,0,0,1],
-        # [1,1,0,0,0,0,0,1],
-        # [1,1,1,0,0,0,0,1],
-        # [1,1,1,1,0,0,0,1],
+        [1,0,0,0,0,0,0,1],
+        [1,1,0,0,0,0,0,1],
+        [1,1,1,0,0,0,0,1],
+        [1,1,1,1,0,0,0,1],
         # [1,1,0,1,1,1,0,1],
         # [1,1,0,0,1,0,1,1,1], 
         # [1,1,0,0,1,0,1,1,0,1],
@@ -168,7 +173,7 @@ for filename, copy_numbers in zip(
     if args.coupling == 'all':
         layers = [0]
     else:
-        layers = sorted(list(set([int(x) for x in np.linspace(0, len(extended_swap_strat._swap_layers), 10)])))
+        layers = sorted(list(set([int(x) for x in np.linspace(0, len(extended_swap_strat._swap_layers), 5)])))
         
     sweep_swap_depths(layers, donor_qc.qubits, best_rzz, extended_swap_strat)
 
@@ -177,7 +182,7 @@ for filename, copy_numbers in zip(
     if not args.coupling == 'all':
         best_rzz_index = layers.index(best_rzz['layers'])
         rzz_fine_layers = sorted(list(set([
-            int(x) for x in np.linspace(layers[max(best_rzz_index - 1, 0)] + 1, layers[min(best_rzz_index + 1, len(layers)-1)] - 1, 10)
+            int(x) for x in np.linspace(layers[max(best_rzz_index - 1, 0)] + 1, layers[min(best_rzz_index + 1, len(layers)-1)] - 1, 5)
         ]).difference(layers)))
 
         logger.info(f'Fine search.  Best rzz layers: {best_rzz["layers"]}. Searching: {rzz_fine_layers}')

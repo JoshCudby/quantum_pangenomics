@@ -96,11 +96,9 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         pm = generate_preset_pass_manager(
             optimization_level=3, 
             coupling_map=cm, 
-            basis_gates=['rz', 'cx', 'cz', 'id', 'swap', 'u'],
-            initial_layout=layout
+            basis_gates=['rz', 'cx', 'cz', 'id', 'swap','u'],
+            initial_layout=layout,
         )
-        init = pm.init
-        pm.init = init
         pm.layout = None
         print('Transpiling un-implemented gates')
 
@@ -173,7 +171,7 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
     
     def _make_op_layers(
         self, dag: DAGCircuit, op: CommutingBlock, layout: Layout, swap_strategy: ExtendedSwapStrategy
-    ) -> tuple[dict[int, dict[tuple[int,...], Gate]], dict[tuple, DAGOpNode]]:
+    ) -> tuple[dict[int, dict[tuple[int,...], Gate]], dict[tuple[int,...], DAGOpNode]]:
         """Creates layers of two-qubit gates based on the distance in the swap strategy."""
 
         gate_layers: dict[int, dict[tuple, Gate]] = defaultdict(dict)
