@@ -24,7 +24,7 @@ from hubo_qaoa.utils.gfa_utils import gfa_file_to_graph
 
 from qiskit_qaoa.utils.transpiler_passes import ExtendedSwapStrategy, FindCommutingPauliEvolutionsMulti
 from qiskit_qaoa.utils.commuting_gate_router_precompute_rzz import CommutingGateRouterPrecomputeRzz
-# from qiskit_qaoa.utils.commuting_gate_router_rzz import CommutingGateRouterRzz
+from qiskit_qaoa.utils.commuting_gate_router_rzz import CommutingGateRouterRzz
 
 from qiskit_qaoa.utils.sat_mapper import HigherOrderSatMapper
 from qiskit_qaoa.utils.hamiltonian_utils import hamiltonian_to_interactions
@@ -44,14 +44,19 @@ Best = TypedDict('Best', {'layout': Layout, 'depth': int, 'count': int, 'layers'
 
 def sweep_swap_depths(layers: list[int], qubits: list, best_rzz: Best, swap_strategy: ExtendedSwapStrategy):
     for layer in layers:
+        router = CommutingGateRouterPrecomputeRzz(
+            swap_strategy,
+            max_layers=layer,
+            perform_extra_swaps=True
+        ) if num_physical_qubits < 25 else CommutingGateRouterRzz(
+            swap_strategy,
+            max_layers=layer,
+            perform_extra_swaps=True
+        )
         pm_rzz = PassManager(
             [
                 FindCommutingPauliEvolutionsMulti(), 
-                CommutingGateRouterPrecomputeRzz(
-                    swap_strategy,
-                    max_layers=layer,
-                    perform_extra_swaps=True
-                ),
+                router,
                 SwapToFinalMapping(),
                 InverseCancellation(gates_to_cancel=[CXGate()]),
                 CommutativeCancellation(basis_gates=["cx", "swap", "rz", "rzz"]),
@@ -107,36 +112,36 @@ mapper = HigherOrderSatMapper(timeout=args.timeout)
 for filename, copy_numbers in zip(
     [
         'test_N2_W2', 
-        # 'trivial', 
-        # 'test_N3_W4', 
+        'trivial', 
+        'test_N3_W4', 
         'test_N4_W5', 
         'test_N4_W6', 
-        #'test_N5_W6', 
-        # 'test_N7_W2', 'test_N7_W3','test_N7_W4', 
-        # 'test_N7_W5', 
+        'test_N5_W6', 
+        'test_N7_W2', 'test_N7_W3','test_N7_W4', 
+        'test_N7_W5', 
         'test_N8_W2', 
         'test_N8_W3',
         'test_N8_W4', 
         'test_N8_W5', 
-        # 'test_N8_W6',
+        'test_N8_W6',
         # 'test_N9_W6', 
         # 'test_N10_W6',
         # 'test_N14_W7'
     ], 
     [
         [1,1],
-        # [1,1,1], 
-        # [2,1,1], 
+        [1,1,1], 
+        [2,1,1], 
         [2,1,1,1],
         [2,2,1,1], 
-        #[1,2,1,1,1], 
-        # [1,0,0,0,0,0,1], [1,1,0,0,0,0,1], [1,1,1,0,0,0,1], 
-        # [1,1,1,0,1,0,1],
+        [1,2,1,1,1], 
+        [1,0,0,0,0,0,1], [1,1,0,0,0,0,1], [1,1,1,0,0,0,1], 
+        [1,1,1,0,1,0,1],
         [1,0,0,0,0,0,0,1],
         [1,1,0,0,0,0,0,1],
         [1,1,1,0,0,0,0,1],
         [1,1,1,1,0,0,0,1],
-        # [1,1,0,1,1,1,0,1],
+        [1,1,0,1,1,1,0,1],
         # [1,1,0,0,1,0,1,1,1], 
         # [1,1,0,0,1,0,1,1,0,1],
         # [1,1,0,0,1,0,1,0,0,1,0,0,1,1]

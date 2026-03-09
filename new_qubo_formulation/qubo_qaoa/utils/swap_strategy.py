@@ -153,12 +153,12 @@ class QUBOSwapStrategy(SwapStrategy):
         swap_layer2 = tuple(
             (mapping[(row, col)], mapping[(row+1, col)]) 
             for col in range(cols)
-            for row in range(col % 2, rows - 1, 2)
+            for row in range(0, rows - 1, 2)
         )
         swap_layer3 = tuple(
             (mapping[(row, col)], mapping[(row+1, col)]) 
             for col in range(cols)
-            for row in range((col+1) % 2, rows - 1, 2)
+            for row in range(1, rows - 1, 2)
         )
 
         row_layers = [swap_layer0, swap_layer1]
@@ -166,9 +166,7 @@ class QUBOSwapStrategy(SwapStrategy):
         full_row_swap_layers = reduce(
             list.__add__,
             [
-                [row_layers[i % 2] for i in range(cols-1)] + col_layers for _ in range(int(np.ceil(rows/2)) - 1)
-            ] + [
-                [row_layers[i % 2] for i in range(cols-1)]
+                [row_layers[i % 2] for i in range(cols-1)] + col_layers for _ in range(int(np.ceil(rows/2)))
             ],
             []
         )

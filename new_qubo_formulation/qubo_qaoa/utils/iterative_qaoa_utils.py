@@ -9,6 +9,9 @@ from qiskit_ibm_runtime import Sampler
 from qiskit_aer.primitives import SamplerV2
 
 from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples
+from qubo_qaoa.utils.postprocess import postprocess
+
+from typing import Optional
 
 @dataclass()
 class IterativeQAOAData:
@@ -72,12 +75,16 @@ def iteration(
     angles: npt.NDArray,
     beta_T: float,
     data: IterativeQAOAData,
-    history: list
+    history: list,
+    T: Optional[int]=None
 ):
     sample_circuit = qc.assign_parameters(angles, inplace=False)
     sampler_job = sampler.run([sample_circuit], shots=shots)
     sampler_result = sampler_job.result()
     counts = sampler_result[0].data.c.get_counts()
+    
+    if T is not None:
+        counts = postprocess(counts, T)
     
     evals = evaluate_sparse_pauli_samples(counts.keys(), data.hamiltonian) + data.ising_offset
     samples, energies = [], []

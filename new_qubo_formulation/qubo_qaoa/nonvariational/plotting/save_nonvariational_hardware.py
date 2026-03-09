@@ -49,7 +49,7 @@ def compare_hardware_and_noiseless(
     legend_artists = {}
 
     if iters is None:
-        iters = [0, 5, 9]
+        iters = [0, 2, 4]
     
     cutoff = 25
     ax = axs[0]
@@ -150,12 +150,19 @@ eps = 0.15
 backend='ibm_boston'
 
 
+# for filename, qubits, N, n, alpha in zip(
+#     ["test_N3_W4", "test_N7_W2", "test_N4_W5"],
+#     [24, 28, 40],
+#     [3, 7, 4],
+#     [40000, 40000, 80000],
+#     [0.1, 0.1, 0.05]
+# ):
 for filename, qubits, N, n, alpha in zip(
-    ["test_N3_W4", "test_N7_W2", "test_N4_W5"],
-    [24, 28, 40],
-    [3, 7, 4],
-    [40000, 40000, 80000],
-    [0.1, 0.1, 0.05]
+    ["test_N4_W6"],
+    [48],
+    [4],
+    [160000],
+    [0.025]
 ):
     cols = int(np.ceil( (len(iters) + 1) ** 0.5 ))
     rows = int(np.floor( (len(iters) + 1) / cols ))

@@ -33,6 +33,7 @@ sampler = Sampler.from_backend(backend)
 parser = argparse.ArgumentParser()
 parser.add_argument('-f', '--filename', type=str)
 parser.add_argument('-N', '--nodes', type=int)
+parser.add_argument('-T', '--time', type=int)
 parser.add_argument('-n', '--shots', type=int)
 args = parser.parse_args()
 
@@ -65,7 +66,7 @@ def warm_start(
     iters = 5
     
     for i in range(iters):
-        angles = iteration(fixed_qc, sampler, shots, angles, get_beta_T(i, max_beta_T), data, history)
+        angles = iteration(fixed_qc, sampler, shots, angles, get_beta_T(i, max_beta_T), data, history, T=None)
         
     energy = history[-1][2]
     samples = [history[i][0] for i in range(len(history))]
@@ -78,7 +79,7 @@ delta_g_fixed = 0.16
 eta = 1
 eps = 0.15
 max_beta_T =  0.15
-alpha = 1.0
+alpha = 0.1
 
 data = IterativeQAOAData(
     hamiltonian=hamiltonian,

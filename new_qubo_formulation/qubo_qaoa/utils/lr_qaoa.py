@@ -58,6 +58,7 @@ def _hardware_circuit_construction(
     swap_strategy: QUBOSwapStrategy,
     phis: Optional[ParameterVector]
 ):
+    print('Constructing circuit')
     n = swap_strategy._num_vertices
 
     singles = cost_op[cost_op.paulis.z.sum(axis=-1) == 1]
@@ -79,6 +80,7 @@ def _hardware_circuit_construction(
     def get_permutation(pass_, dag, time, property_set, count):
         properties["virtual_permutation_layout"] = property_set["virtual_permutation_layout"]
     pm = qaoa_swap_strategy_pm(config)
+    print('Transpiling doubles')
     tdoubles_circ: QuantumCircuit = pm.run(doubles_circ, callback=get_permutation)
     
     singles_circ = QuantumCircuit(n)
@@ -157,8 +159,8 @@ def _hardware_circuit_construction(
         for cidx, qidx in sat_map.items():
             qaoa_circuit.measure(qidx, cidx)
             
-
-    generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend , scheduling_method="alap")
+    print('Transpiling circuit')
+    generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend, scheduling_method="alap")
     backend_circ = generic_pm.run(qaoa_circuit)
         
     return backend_circ

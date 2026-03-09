@@ -7,6 +7,7 @@ import pickle
 import argparse
 from typing import Optional
 from itertools import combinations
+import re
 
 from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterVector
@@ -39,6 +40,7 @@ parser.add_argument('-n', '--shots', type=int)
 parser.add_argument('--simulation', action='store_true')
 parser.add_argument('--error-mitigation', action='store_true')
 parser.add_argument('--heavy-hex', action='store_true')
+parser.add_argument('--grid', action='store_true')
 args = parser.parse_args()
 
 filename: str = args.filename
@@ -55,7 +57,7 @@ num_qubits: int = hamiltonian.num_qubits
 # service = QiskitRuntimeService(name='eu_test_instance')
 # backend = service.least_busy(min_num_qubits=num_qubits, operational=True, simulator=False) 
 service = QiskitRuntimeService(name='us_instance')
-backend = service.backend(name='ibm_boston')
+backend = service.backend(name='ibm_miami' if args.grid else'ibm_boston')
 
 if simulation:
     backend_options = dict(
@@ -78,14 +80,14 @@ logger.info(f'Backend: {backend}')
 logger.info(f'Num qubits in backend: {backend.configuration().to_dict()["n_qubits"]}')
 
 if args.heavy_hex:
-    print('Compiling with heavy-hex SWAP strategy')
+    logger.info('Compiling with heavy-hex SWAP strategy')
     rows, cols = 1, 1
     while 4 * (rows + cols + rows * cols) < num_qubits:
         if rows < cols:
             rows += 1
         else:
             cols += 1
-    print(f'Min size to support virtual qubits: {(rows, cols)}')
+    logger.info(f'Min size to support virtual qubits: {(rows, cols)}')
 
     swap_strat = QUBOSwapStrategy.from_heavy_hex(rows, cols)
     coupling_map = swap_strat._coupling_map
@@ -104,8 +106,33 @@ if args.heavy_hex:
         edge_colouring_copy[k] = v
         edge_colouring_copy[k[::-1]] = v
     edge_colouring = edge_colouring_copy
+elif args.grid:
+    logger.info('Compiling with grid SWAP strategy')
+    matches = re.findall(r'[0-9]+', filename)  
+    if len(matches) == 2:
+        rows, cols = 2*int(matches[0]), int(matches[1])
+    else:
+        raise Exception('No rows and cols')
+    swap_strat = QUBOSwapStrategy.from_grid(rows, cols)
+    qubits = [(row, col) for row in range(rows) for col in range(cols)]
+    mapping = {qubit: idx for idx, qubit in enumerate(qubits)}
+    edge_colouring = {}
+    for r in range(rows):
+        for c in range(cols):
+            if c + 1 < cols:
+                a = (r, c)
+                b = (r, c + 1)
+                layer = 0 if (c % 2 == 0) else 1  # horizontal: left column parity
+                edge_colouring[(mapping[a], mapping[b])] = layer
+                edge_colouring[(mapping[b], mapping[a])] = layer
+            if r + 1 < rows:
+                a = (r, c)
+                b = (r + 1, c)
+                layer = 2 if (r % 2 == 0) else 3  # vertical: top row parity
+                edge_colouring[(mapping[a], mapping[b])] = layer
+                edge_colouring[(mapping[b], mapping[a])] = layer
 else:
-    print('Compiling with line SWAP strategy')
+    logger.info('Compiling with line SWAP strategy')
     swap_strat = QUBOSwapStrategy.from_line(range(num_qubits))
     edge_colouring = {(i, i+1): i % 2 for i in range(num_qubits)}
     edge_colouring.update({(i+1, i): i % 2 for i in range(num_qubits)})
@@ -117,7 +144,7 @@ qc = QAOAAnsatz(
 )
 graph = circuit_to_graph(qc, qc.parameters[1])
 
-remapped_g, sat_map, min_sat_layers = SATMapper(timeout=30).remap_graph_with_sat(
+remapped_g, sat_map, min_sat_layers = SATMapper(timeout=60).remap_graph_with_sat(
     graph=graph, swap_strategy=swap_strat, max_layers = int(num_qubits + np.sqrt(num_qubits) + 61)
 )
 if remapped_g is None or sat_map is None:
@@ -143,7 +170,7 @@ def warm_start(
     history = []
     angles_history = [init_angles]
     angles = init_angles
-    iters = 5
+    iters = 10
 
     for i in range(iters):
         angles = iteration(fixed_qc, sampler, shots, angles, get_beta_T(i, max_beta_T), data, history)
@@ -161,9 +188,9 @@ delta_b_fixed = 0.63
 delta_g_fixed = 0.16
         
 eta = 1
-eps = 0.15
+eps = 0.05
 max_beta_T =  0.15
-alpha = 0.025
+alpha = 0.001
 
 data = IterativeQAOAData(
     hamiltonian=hamiltonian,

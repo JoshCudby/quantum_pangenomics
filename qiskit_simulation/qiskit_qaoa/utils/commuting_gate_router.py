@@ -235,7 +235,10 @@ class CommutingGateRouter(TransformationPass):
         for edge, gate in current_layer.items():
             if len(edge) == 2:
                 color = self._edge_coloring[tuple(sorted(edge))]
-                sub_layers[color][edge] = gate
+                try:
+                    sub_layers[color][edge] = gate
+                except IndexError as e:
+                    raise e
             else:
                 greedy_gates[edge] = gate
                 

@@ -22,6 +22,9 @@ while [ "$1" != "" ]; do
         -N | --nodes )          shift
                                 nodes="$1"
                                 ;;
+        -T | --time )           shift
+                                time="$1"
+                                ;;
         -h | --help )           usage
                                 exit
                                 ;;
@@ -40,7 +43,7 @@ outdir="$SCRATCH/new_qubo_formulation/oriented/nonvariational"
 echo "QUBO Nonvar"
 bsub -J "nonvar_qubo_$filename" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory"\
  -o "$outdir/nonvariational.$filename.%J" -e "$outdir/error.nonvariational.$filename.%J" -G "qpg" -q "qpg" \
- "python3 $WORKING_DIR/nonvariational.py -f $filename -N $nodes -n $shots"
+ "python3 $WORKING_DIR/nonvariational.py -f $filename -N $nodes -T $time -n $shots"
 
 exit 0
 

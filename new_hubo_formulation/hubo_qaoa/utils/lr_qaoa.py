@@ -96,7 +96,6 @@ def _hardware_circuit_construction(
     else:
         init_state.h([layout.get_virtual_bits()[qubits[i]] for i in range(num_virtual_qubits)])  
         
-        
     new_layout = layout.copy()
     for gate in cost_circuit:
         if gate.operation.name == 'swap':
@@ -160,7 +159,13 @@ def _hardware_circuit_construction(
             qaoa_circuit.measure(qubit, i)
             
     
-    generic_pm = generate_preset_pass_manager(optimization_level=3, backend=backend, scheduling_method="alap")
+    if qaoa_circuit.num_qubits < 25:
+        opt_level = 3
+    else:
+        opt_level = 1
+        print(qaoa_circuit.num_qubits, qaoa_circuit.count_ops())
+    print(f'Compiling to backend with opt {opt_level}')
+    generic_pm = generate_preset_pass_manager(optimization_level=opt_level, backend=backend, scheduling_method="alap")
     backend_circ = generic_pm.run(qaoa_circuit)
         
     return backend_circ, qaoa_circuit
