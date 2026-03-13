@@ -1,0 +1,129 @@
+
+import numpy as np
+import pickle
+import argparse
+from itertools import product
+
+from qiskit_aer import AerSimulator
+from qiskit_aer.primitives import SamplerV2 as Sampler
+
+from qubo_qaoa.utils.lr_qaoa import get_LR_qaoa_circuit
+
+from qiskit_qaoa.utils.string_utils import evaluate_sparse_pauli_samples_all, evaluate_sparse_pauli_samples
+from qiskit_qaoa.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-v', '--vertices', type=int)
+parser.add_argument('--measure', action='store_true', default=False)
+parser.add_argument('-n', '--shots', default=4000, type=int)
+args = parser.parse_args()
+logger.info(args)
+measure = args.measure
+
+if measure:
+    backend_options = dict(
+        method='matrix_product_state',
+        matrix_product_state_max_bond_dimension='32', 
+        # method='statevector',
+        device='CPU',
+        precision='single',
+        basis_gates = ['rx', 'ry', 'rz', 'cx']
+    )
+else:
+    backend_options = dict(
+        method='statevector',
+        device='GPU',
+        precision='single',
+        basis_gates = ['rx', 'ry', 'rz', 'cx']
+    ) 
+# fake_fez = FakeFez()
+backend = AerSimulator(**backend_options)
+sampler = Sampler.from_backend(backend)
+
+
+
+rng = np.random.default_rng()
+
+data_file = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/new_qubo_formulation/qubo_qaoa/nonvariational/phylogeny/{args.vertices}v_pauli.pickle'
+with open(data_file, 'rb') as f:
+    hamiltonian = pickle.load(f)
+num_qubits: int = hamiltonian.num_qubits
+ising_offset= 726/3 if int(args.vertices) == 64 else 812/3
+
+
+if not measure:
+    evals = evaluate_sparse_pauli_samples_all(hamiltonian) + ising_offset
+    opt_evals = np.nonzero(evals < 1e-5)
+    print(f'Opt evals: {opt_evals}')
+
+
+def get_energy_and_p_opt(qc):
+    job = sampler.run([qc], shots=args.shots)
+    sampler_result = job.result()
+    counts = sampler_result[0].data.c.get_counts()
+    
+    evals = evaluate_sparse_pauli_samples(counts.keys(), hamiltonian) + ising_offset
+    samples, energies = [], []
+    for idx, (sample, count) in enumerate(counts.items()):
+        samples.extend(count * [sample])
+        energies.extend(count * [evals[idx]])
+        
+    energies = np.array(energies)
+    energy = np.mean(energies)
+    p_opt = np.flatnonzero(energies < 1e-5).shape[0] / args.shots
+    return energy, p_opt
+
+
+def get_energy_and_p_opt_sv(qc):
+    result = backend.run([qc],shots=1).result()
+    data = result.results[0].data
+    sv = np.asarray(data.statevector)
+    energy = np.sum(np.abs(sv) ** 2 * evals)
+    p_opt = np.sum(np.abs(sv[opt_evals]) ** 2)
+    return energy, p_opt
+
+
+def LR_QAOA(p, delta_b, delta_g, circ):
+    fixed_qc, circuit = get_LR_qaoa_circuit(
+        p, delta_b, delta_g, num_qubits,
+        hamiltonian, circ, phis=None, measure=measure
+    )
+    
+    if measure:
+        energy, p_opt = get_energy_and_p_opt(fixed_qc)
+    else:
+        energy, p_opt = get_energy_and_p_opt_sv(fixed_qc)
+        
+    logger.info(f'delta_b:{np.round(delta_b, 2)}, delta_g:{np.round(delta_g, 2)}, p:{p}, energy:{np.round(energy, 2)}, p_opt: {np.round(p_opt, 4)}')
+    return energy, p_opt, circuit
+        
+        
+
+eps = 1e-2
+# delta_bs = np.logspace(-0.5, 0.5, 41, base=10)
+# delta_gs = np.logspace(-1.5, -0.5, 41, base=10)
+delta_bs = np.linspace(0.1, 1, 10) 
+delta_gs = np.linspace(0.1, 1, 10)
+
+
+# ps = sorted(set([int(x) for x in np.logspace(0, 2, 5, base=10)]))
+ps = [1,3,5]
+
+energies = np.zeros((len(ps), len(delta_bs), len(delta_gs)))
+p_opts = np.zeros((len(ps), len(delta_bs), len(delta_gs)))
+circuit = None
+for i, j, k in product(range(len(ps)), range(len(delta_bs)), range(len(delta_gs))):
+    if j == 0 and k == 0:
+        circuit = None
+    e, p_opt, circuit = LR_QAOA(ps[i], delta_bs[j], delta_gs[k], circuit)
+    energies[i, j, k] = e
+    p_opts[i, j, k] = p_opt
+
+to_save_name = f'/lustre/scratch127/qpg/jc59/phylogeny/LR_unequal.{args.vertices}v.db{np.round(delta_bs[-1],2)}.dg{np.round(delta_gs[-1],2)}.p{ps[-1]}.pkl'
+ret = dict(delta_bs=delta_bs, delta_gs=delta_gs, ps=ps, energies=energies, p_opts=p_opts)
+    
+    
+with open(to_save_name, 'wb') as f:
+    pickle.dump(ret, f)

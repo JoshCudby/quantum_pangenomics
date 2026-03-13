@@ -36,7 +36,7 @@ def compare_hardware_and_noiseless(
     with open(f'{base_file_name}{append_str}.pkl', 'rb') as f:
         res = pickle.load(f)
 
-    base_file_name = f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational/nonvariational.{filename}.db{db_fixed}.dg{dg_fixed}.shots{int(shots*alpha)}'
+    base_file_name = f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational/nonvariational.{filename}.db{db_fixed}.dg{dg_fixed}.shots{int(4000)}'
     append_str = (f'.betaT{max_beta_T}' if max_beta_T is not None else '') + (f'.eps{eps}' if eps is not None else '') + (f'.alpha1.0' if alpha is not None else '')
     with open(f'{base_file_name}{append_str}.pkl', 'rb') as f:
         simulation_res = pickle.load(f)
@@ -89,8 +89,14 @@ def compare_hardware_and_noiseless(
                     break
             if rescale_value is None:
                 raise Exception('Could not rescale value')
-
-            counter = Counter(samples_dicts[name][(p, rescale_value)][iters[i-1]])
+            try:
+                counter = Counter(samples_dicts[name][(p, rescale_value)][iters[i-1]])
+            except IndexError as e:
+                print(name)
+                print(i)
+                print(iters[i-1])
+                print(len(samples_dicts[name][(p, rescale_value)]))
+                raise e
             if i == len(axs) - 1:
                 print(p, counter.most_common(2))
             evals = np.round(ising_offset + evaluate_sparse_pauli_samples(list(counter.keys()), hamiltonian), 2)
@@ -120,8 +126,8 @@ def compare_hardware_and_noiseless(
         ax.xaxis.set_major_locator(MultipleLocator(10))
         ax.xaxis.set_minor_locator(AutoMinorLocator(10))
         
-        n_ticks = 1+np.floor(np.log10(shots))
-        ax.set_ylim(1/shots, 10**0)
+        n_ticks = 1+np.floor(np.log10(shots*alpha))
+        ax.set_ylim(1/(shots*alpha), 10**0)
         ax.yaxis.set_major_locator(LogLocator(numticks=n_ticks))
         ax.yaxis.set_major_formatter(LogFormatterSciNotation(base=10))
         minor_subs = range(2, 10)
@@ -146,7 +152,7 @@ delta_g_fixed = 0.16
 p = 1
 iters=range(0,5,2)
 max_beta_T = 0.15
-eps = 0.15
+eps = 0.05
 backend='ibm_boston'
 
 
@@ -158,11 +164,11 @@ backend='ibm_boston'
 #     [0.1, 0.1, 0.05]
 # ):
 for filename, qubits, N, n, alpha in zip(
-    ["test_N4_W6"],
-    [48],
-    [4],
-    [160000],
-    [0.025]
+    ["test_N4_W6", "test_N7_W4"], 
+    [48, 56],
+    [4, 7],
+    [400000, 400000],
+    [0.01, 0.001]
 ):
     cols = int(np.ceil( (len(iters) + 1) ** 0.5 ))
     rows = int(np.floor( (len(iters) + 1) / cols ))

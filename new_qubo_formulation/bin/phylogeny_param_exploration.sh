@@ -1,0 +1,49 @@
+#!/bin/bash
+
+usage()
+{
+    echo "usage: param_exploration.sh [[-f file -m memory ] | [-h]]"
+}
+
+memory="4000"
+shots="1"
+measure=""
+gpu_str="num=1"
+
+while [ "$1" != "" ]; do
+    case $1 in
+        -v | --vertices )       shift
+                                vertices="$1"
+                                ;;
+        -m | --memory )         shift
+                                memory="$1"
+                                ;;
+        -n | --shots )          shift
+                                shots="$1"
+                                ;;
+        --measure )             measure="--measure"
+                                gpu_str="num=1"
+                                ;;
+        -h | --help )           usage
+                                exit
+                                ;;
+        * )                     usage
+                                exit 1
+    esac
+    shift
+done
+
+## MAIN
+
+WORKING_DIR="/nfs/users/nfs_j/jc59/quantumwork/pangenome/new_qubo_formulation/qubo_qaoa/nonvariational/phylogeny"
+source "/nfs/users/nfs_j/jc59/quantumwork/pangenome/.venv/bin/activate"
+outdir="$SCRATCH/phylogeny"
+
+echo "QUBO Phylo param explor"
+bsub -J "phylo_param.$vertices" -R '"select[mem>'$memory'] rusage[mem='$memory']"' -M "$memory" \
+ -o "$outdir/param_exploration.$vertices.%J" -e "$outdir/error.param_exploration.$vertices.%J" -gpu "$gpu_str" -G "qpg" -q "qpg"  \
+ "python3 $WORKING_DIR/param_exploration_phylo.py -v $vertices -n $shots $measure"
+
+exit 0
+
+

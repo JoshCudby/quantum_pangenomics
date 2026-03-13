@@ -26,7 +26,6 @@ from qubo_qaoa.utils.iterative_qaoa_utils import IterativeQAOAData, iteration, g
 from qubo_qaoa.utils.lr_qaoa import get_hardware_LR_qaoa_circuit
 
 from qiskit_qaoa.utils.circuit_graph_utils import circuit_to_graph, graph_to_operator
-from qiskit_qaoa.utils.hamiltonian_utils import get_Q_and_hamiltonian
 from qiskit_qaoa.utils.logging import get_logger
 
 
@@ -34,30 +33,25 @@ logger = get_logger(__name__)
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-f', '--filename', type=str)
-parser.add_argument('-N', '--nodes', type=int)
+parser.add_argument('-v', '--vertices', type=str)
 parser.add_argument('-n', '--shots', type=int)
 parser.add_argument('--simulation', action='store_true')
 parser.add_argument('--error-mitigation', action='store_true')
-parser.add_argument('--heavy-hex', action='store_true')
-parser.add_argument('--grid', action='store_true')
 args = parser.parse_args()
 
-filename: str = args.filename
-N: int = args.nodes
 shots: int = args.shots
 error_mitigation = args.error_mitigation
 simulation = args.simulation
 
-data_file = f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/qubo_data/qubo_data_{filename}.gfa.pkl'
-
-Q, hamiltonian, offset, ising_offset = get_Q_and_hamiltonian(data_file)
+data_file = f'/nfs/users/nfs_j/jc59/quantumwork/pangenome/new_qubo_formulation/qubo_qaoa/nonvariational/phylogeny/{args.vertices}v_pauli.pickle'
+with open(data_file, 'rb') as f:
+    hamiltonian = pickle.load(f)
 num_qubits: int = hamiltonian.num_qubits
 
 # service = QiskitRuntimeService(name='eu_test_instance')
 # backend = service.least_busy(min_num_qubits=num_qubits, operational=True, simulator=False) 
 service = QiskitRuntimeService(name='us_instance')
-backend = service.backend(name='ibm_miami' if args.grid else'ibm_boston')
+backend = service.backend('ibm_boston')
 
 if simulation:
     backend_options = dict(
@@ -79,63 +73,11 @@ else:
 logger.info(f'Backend: {backend}')
 logger.info(f'Num qubits in backend: {backend.configuration().to_dict()["n_qubits"]}')
 
-if args.heavy_hex:
-    logger.info('Compiling with heavy-hex SWAP strategy')
-    rows, cols = 1, 1
-    while 4 * (rows + cols + rows * cols) < num_qubits:
-        if rows < cols:
-            rows += 1
-        else:
-            cols += 1
-    logger.info(f'Min size to support virtual qubits: {(rows, cols)}')
 
-    swap_strat = QUBOSwapStrategy.from_heavy_hex(rows, cols)
-    coupling_map = swap_strat._coupling_map
-    coupling_map_edge = list(coupling_map)
-    physical_qubits = list(coupling_map.physical_qubits)
-
-    dual_coupling_map = nx.Graph()
-
-    for qubit in physical_qubits:
-        edges = [edge for edge in coupling_map_edge if edge[0]==qubit]
-        for edge1, edge2 in combinations(edges, 2):
-            dual_coupling_map.add_edge(tuple(sorted(edge1)), tuple(sorted(edge2)))
-    edge_colouring = nx.greedy_color(dual_coupling_map, interchange=True)
-    edge_colouring_copy = {}
-    for k, v in edge_colouring.items():
-        edge_colouring_copy[k] = v
-        edge_colouring_copy[k[::-1]] = v
-    edge_colouring = edge_colouring_copy
-elif args.grid:
-    logger.info('Compiling with grid SWAP strategy')
-    matches = re.findall(r'[0-9]+', filename)  
-    if len(matches) == 2:
-        rows, cols = 2*int(matches[0]), int(matches[1])
-    else:
-        raise Exception('No rows and cols')
-    swap_strat = QUBOSwapStrategy.from_grid(rows, cols)
-    qubits = [(row, col) for row in range(rows) for col in range(cols)]
-    mapping = {qubit: idx for idx, qubit in enumerate(qubits)}
-    edge_colouring = {}
-    for r in range(rows):
-        for c in range(cols):
-            if c + 1 < cols:
-                a = (r, c)
-                b = (r, c + 1)
-                layer = 0 if (c % 2 == 0) else 1  # horizontal: left column parity
-                edge_colouring[(mapping[a], mapping[b])] = layer
-                edge_colouring[(mapping[b], mapping[a])] = layer
-            if r + 1 < rows:
-                a = (r, c)
-                b = (r + 1, c)
-                layer = 2 if (r % 2 == 0) else 3  # vertical: top row parity
-                edge_colouring[(mapping[a], mapping[b])] = layer
-                edge_colouring[(mapping[b], mapping[a])] = layer
-else:
-    logger.info('Compiling with line SWAP strategy')
-    swap_strat = QUBOSwapStrategy.from_line(range(num_qubits))
-    edge_colouring = {(i, i+1): i % 2 for i in range(num_qubits)}
-    edge_colouring.update({(i+1, i): i % 2 for i in range(num_qubits)})
+logger.info('Compiling with line SWAP strategy')
+swap_strat = QUBOSwapStrategy.from_line(range(num_qubits))
+edge_colouring = {(i, i+1): i % 2 for i in range(num_qubits)}
+edge_colouring.update({(i+1, i): i % 2 for i in range(num_qubits)})
 
 qc = QAOAAnsatz(
     cost_operator=hamiltonian,
@@ -145,7 +87,7 @@ qc = QAOAAnsatz(
 graph = circuit_to_graph(qc, qc.parameters[1])
 
 remapped_g, sat_map, min_sat_layers = SATMapper(timeout=60).remap_graph_with_sat(
-    graph=graph, swap_strategy=swap_strat, max_layers = int(num_qubits + np.sqrt(num_qubits) + 61)
+    graph=graph, swap_strategy=swap_strat, max_layers = int(num_qubits + 1)
 )
 if remapped_g is None or sat_map is None:
     raise Exception('Failed to find initial layout')
@@ -166,6 +108,7 @@ def warm_start(
         cost_op, sat_map, backend, edge_colouring, swap_strat,
         circ, phis=phis,
     )
+    logger.info(f'Circuit ops: {fixed_qc.count_ops()}')
     
     history = []
     angles_history = [init_angles]
@@ -173,7 +116,9 @@ def warm_start(
     iters = 5
 
     for i in range(iters):
+        logger.info(f'Iter: {i+1}')
         angles = iteration(fixed_qc, sampler, shots, angles, get_beta_T(i, max_beta_T), data, history)
+        logger.info(f'Energy: {history[-1][2]}')
         angles_history.append(angles)
         
 
@@ -188,10 +133,11 @@ delta_b_fixed = 0.63
 delta_g_fixed = 0.16
         
 eta = 1
-eps = 0.05
+eps = 0.15
 max_beta_T =  0.15
-alpha = 0.01
+alpha = 0.05
 
+ising_offset= 726/3 if int(args.vertices) == 64 else 812/3
 data = IterativeQAOAData(
     hamiltonian=hamiltonian,
     ising_offset=ising_offset,
@@ -200,7 +146,7 @@ data = IterativeQAOAData(
     alpha=alpha
 )
 
-prob = 1 / (2 * N)
+prob = 1 / 2
 theta = 2 * np.arcsin(np.sqrt(prob))
 init_angles: npt.NDArray = theta * np.ones((num_qubits,))
 
@@ -226,6 +172,6 @@ for i, j in product(range(len(ps)), range(len(rescaling))):
     angles_dict[(ps[i], np.round(rescaling[j], 3))] = angles
     
 to_save=dict(energies=energies, delta_b_fixed=delta_b_fixed, delta_g_fixed=delta_g_fixed, ps=ps, rescaling=rescaling, samples_dict=samples_dict, angles_dict=angles_dict)    
-append_str = f'.{filename}{".error_mit" if error_mitigation else ""}{".simulation" if simulation else ""}.backend{backend.name}.db{delta_b_fixed}.dg{delta_g_fixed}.shots{shots}.betaT{max_beta_T}.eps{eps}.alpha{alpha}'
-with open(f'/lustre/scratch127/qpg/jc59/new_qubo_formulation/oriented/nonvariational/hardware/hardware{append_str}.pkl', 'wb') as f:
+append_str = f'.{args.vertices}v{".error_mit" if error_mitigation else ""}{".simulation" if simulation else ""}.backend{backend.name}.shots{shots}.betaT{max_beta_T}.eps{eps}.alpha{alpha}'
+with open(f'/lustre/scratch127/qpg/jc59/phylogeny/iter_qaoa.hardware{append_str}.pkl', 'wb') as f:
     pickle.dump(to_save, f)
