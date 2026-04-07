@@ -68,7 +68,7 @@ def plot_several_p_dist(
 
     ax.xaxis.set_major_locator(MultipleLocator(10))
     ax.xaxis.set_minor_locator(AutoMinorLocator(10))
-    ax.text(.98, .97, 'Iter = 0', ha='right', va='top', transform=ax.transAxes)
+    ax.text(.98, .97, 'Iter = 0', ha='right', va='top', transform=ax.transAxes, fontsize=8)
 
     
     for i in range(1, len(iters) + 1):
@@ -117,7 +117,7 @@ def plot_several_p_dist(
         ax.xaxis.set_minor_locator(AutoMinorLocator(10))
         # ax.tick_params(axis='x', which='major', length=6)
         # ax.tick_params(axis='x', which='minor', length=2)
-        ax.text(.98, .97, f'Iter = {iters[i-1]+1}', ha='right', va='top', transform=ax.transAxes)
+        ax.text(.98, .97, f'Iter = {iters[i-1]+1}', ha='right', va='top', transform=ax.transAxes, fontsize=8)
           
     handles = list(legend_artists.values())
     labels = list(legend_artists.keys())
@@ -136,37 +136,45 @@ alpha = 0.1
 
 
 for filename, qubits, N in zip(
-    ["test_N3_W4", "test_N4_W5", "test_N4_W6", "test_N5_W6", "test_N7_W5", "test_N8_W5"],
-    [24, 40, 48, 60, 70, 80],
-    [3, 4, 4, 5, 7, 8]
+    ["test_N3_W4", 
+    #  "test_N4_W5", "test_N4_W6", "test_N5_W6", "test_N7_W5", 
+     "test_N8_W5"],
+    [24,
+    #  40, 48, 60, 70,
+     80],
+    [3,
+    #  4, 4, 5, 7, 
+     8]
 ):
     cols = int(np.ceil( (len(iters) + 1) ** 0.5 ))
     rows = int(np.floor( (len(iters) + 1) / cols ))
-    fig, axs = plt.subplots(rows, cols, figsize=(6.27, 2*rows), sharey='row', sharex='col')
+    fig, axs = plt.subplots(rows, cols, figsize=(3.375, 1.8*rows), sharey='row', sharex='col') # 6.27
     axs_flat = np.asarray(axs).flat
     axs_flat, legend_handles, legend_labels = plot_several_p_dist(axs_flat, filename, (2*N)**-1, delta_b_fixed, delta_g_fixed, n, ps, max_beta_T=max_beta_T, iters=iters, eps=eps, alpha=alpha)
 
 
-    fig.suptitle(f'${qubits}$ qubits', fontsize=16, x=0.555)
+    fig.suptitle(f'${qubits}$ qubits', fontsize=12, x=0.6)
 
-    fig.supylabel('Sample density', x=0.04, y=0.57)
+    fig.supylabel('Sample density', x=0.02, y=0.57, fontsize=9)
         
-    fig.supxlabel('Energy', y=0.12, x=0.555)
+    # fig.supxlabel('Energy', y=0.12, x=0.555)
+    fig.supxlabel('Energy', y=0.14, x=0.6, fontsize=9)
         
         
     fig.legend(
         legend_handles,
         legend_labels,
         loc="lower center",
-        ncol=len(legend_labels),  
+        ncol=len(legend_labels) // 2, 
         frameon=True,
-        bbox_to_anchor=(0.555, 0.02)  
+        bbox_to_anchor=(0.6, 0.0),
+        fontsize=8
     )
 
-    plt.tight_layout(rect=[0, 0.04, 1, 1.04])
+    plt.tight_layout(rect=[-0.06, 0.06, 1, 1.08])
 
     append_str = (f'.betaT{max_beta_T}' if max_beta_T is not None else '') + (f'.eps{eps}' if eps is not None else '') + (f'.alpha{alpha if alpha is not None else 1.0}')
-    figname = '/nfs/users/nfs_j/jc59/quantumwork/pangenome/new_qubo_formulation/out/save.iter_qaoa.{}.db{}.dg{}.p{}.n{}{}.png'.format(
+    figname = '/nfs/users/nfs_j/jc59/quantumwork/pangenome/new_qubo_formulation/out/tall_save.iter_qaoa.{}.db{}.dg{}.p{}.n{}{}.png'.format(
         filename,
         delta_b_fixed,
         delta_g_fixed,

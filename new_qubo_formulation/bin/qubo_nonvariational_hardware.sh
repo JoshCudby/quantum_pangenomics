@@ -5,7 +5,7 @@ usage()
     echo "usage: qubo_nonvariational_hardware.sh [[-f file -m memory -n shots -N nodes] | [-h]]"
 }
 
-memory="4000"
+memory="64000"
 shots=4000
 
 while [ "$1" != "" ]; do

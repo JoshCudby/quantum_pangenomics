@@ -79,7 +79,7 @@ def compare_hardware_and_noiseless(
     ax.set_ylim(1/shots, 10**0)
     ax.xaxis.set_major_locator(MultipleLocator(10))
     ax.xaxis.set_minor_locator(AutoMinorLocator(10))
-    ax.text(.98, .97, 'Iter = 0', ha='right', va='top', transform=ax.transAxes)
+    ax.text(.98, .97, 'Iter = 0', ha='right', va='top', transform=ax.transAxes, fontsize=8)
     
     
     for i in range(1, len(axs)):
@@ -137,7 +137,7 @@ def compare_hardware_and_noiseless(
         
         # ax.tick_params(axis='x', which='major', length=6)
         # ax.tick_params(axis='x', which='minor', length=2)
-        ax.text(.98, .97, f'Iter = {iters[i-1]+1}', ha='right', va='top', transform=ax.transAxes)
+        ax.text(.98, .97, f'Iter = {iters[i-1]+1}', ha='right', va='top', transform=ax.transAxes, fontsize=8)
           
     handles = list(legend_artists.values())
     labels = list(legend_artists.keys())
@@ -166,7 +166,7 @@ for filename, qubits, copy_numbers, n, alpha in zip(
 ):
     cols = int(np.ceil( (len(iters) + 1) ** 0.5 ))
     rows = int(np.floor( (len(iters) + 1) / cols ))
-    fig, axs = plt.subplots(rows, cols, figsize=(6.27, 2*rows), sharey='row', sharex='col')
+    fig, axs = plt.subplots(rows, cols, figsize=(3.375, 1.8*rows), sharey='row', sharex='col')
     axs_flat = np.asarray(axs).flat
     axs_flat, legend_handles, legend_labels = compare_hardware_and_noiseless(
         axs_flat, filename, copy_numbers, 1/2, 
@@ -177,26 +177,28 @@ for filename, qubits, copy_numbers, n, alpha in zip(
         error_mitigation=True, backend=backend,
     )
 
-    fig.suptitle(f'${qubits}$ qubits', fontsize=16, x=0.555)
+    fig.suptitle(f'${qubits}$ qubits', fontsize=12, x=0.6)
 
-    fig.supylabel('Sample density', x=0.04, y=0.57)
+    fig.supylabel('Sample density', x=0.02, y=0.57, fontsize=9)
         
-    fig.supxlabel('Energy', y=0.12, x=0.555)
+    # fig.supxlabel('Energy', y=0.12, x=0.555)
+    fig.supxlabel('Energy', y=0.18, x=0.6, fontsize=9)
         
         
     fig.legend(
         legend_handles,
         legend_labels,
         loc="lower center",
-        ncol=len(legend_labels),  
+        ncol=len(legend_labels)//2,  
         frameon=True,
-        bbox_to_anchor=(0.54, 0.02)  
+        bbox_to_anchor=(0.6, 0.00), 
+        fontsize=8
     )
 
-    plt.tight_layout(rect=[0, 0.04, 1, 1.04])
+    plt.tight_layout(rect=[-0.06, 0.10, 1, 1.08])
 
     append_str = (f'.betaT{max_beta_T}' if max_beta_T is not None else '') + (f'.eps{eps}' if eps is not None else '') + (f'.alpha{alpha if alpha is not None else 1.0}')
-    figname = '/nfs/users/nfs_j/jc59/quantumwork/pangenome/new_hubo_formulation/out/save.iter_qaoa.hardware.{}.db{}.dg{}.p{}.n{}{}.png'.format(
+    figname = '/nfs/users/nfs_j/jc59/quantumwork/pangenome/new_hubo_formulation/out/tall_save.iter_qaoa.hardware.{}.db{}.dg{}.p{}.n{}{}.png'.format(
         filename,
         delta_b_fixed,
         delta_g_fixed,
