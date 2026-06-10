@@ -113,8 +113,6 @@ max_beta_T = 0.25
 alpha = 0.05
 
 probs = 1 / 2 * np.ones((num_virtual_qubits,))
-#experimental
-probs[0] = eps 
 thetas = 2 * np.arcsin(np.sqrt(probs))
 init_angles = thetas
 

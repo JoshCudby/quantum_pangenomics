@@ -102,7 +102,7 @@ def qubo_matrix_from_graph(
     qubo_matrix = qubo_matrix.reshape((T * V * 2), (T * V * 2))
     qubo_matrix = 0.5 * (qubo_matrix + qubo_matrix.T)
     
-    offset += lambda_w * int(sum(graph.nodes[nodes[2 * i]]["weight"] ** 2 for i in range(V))) \
+    offset += lambda_w * int(sum(graph.nodes[nodes[2 * i]]["weight"] ** 2 for i in range(V)))
 
     
     # normalisation = np.max(np.abs(qubo_matrix))
