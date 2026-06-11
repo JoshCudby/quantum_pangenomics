@@ -1,3 +1,42 @@
+"""Warm-start iterative HUBO QAOA simulation using a pre-compiled circuit.
+
+Loads a compiled cost circuit from a previous ``circuit_depths.py`` run (all-to-all
+coupling, trivial layout) and runs the Boltzmann warm-start iterative QAOA procedure
+for a grid of ``(p, rescaling)`` values.
+
+The simulation backend is AerSimulator with the matrix-product-state (MPS) method
+(bond dimension 32, single precision, CPU) to keep memory usage tractable for
+multi-qubit HUBO circuits.
+
+CLI arguments:
+    -f / --filename: Base name of the ``.gfa`` file (without path or extension).
+    -n / --shots: Number of measurement shots per warm-start iteration.
+    -c / --copy-numbers: Comma-separated copy numbers for each GFA segment.
+
+Hyperparameters (fixed in-script):
+    delta_b_fixed: Mixer amplitude ``δ_β = 0.75``.
+    delta_g_fixed: Cost amplitude ``δ_γ = 0.30``.
+    eta: Bias direction ``η = 1``.
+    eps: Probability clipping threshold ``ε = 0.25``.
+    max_beta_T: Maximum Boltzmann inverse temperature ``β_T = 0.25``.
+    alpha: Sub-sampling fraction ``α = 1.0`` (all samples retained).
+    iters: Warm-start iterations per ``(p, rescaling)`` point ``= 5``.
+
+Output pickle schema (saved to
+``/lustre/scratch127/qpg/jc59/new_hubo_formulation/nonvariational/<filename>.pkl``):
+
+.. code-block:: python
+
+    {
+        'energies': np.ndarray,        # shape (len(ps), len(rescaling))
+        'delta_b_fixed': float,
+        'delta_g_fixed': float,
+        'ps': list[int],
+        'rescaling': list[float],
+        'samples_dict': dict,          # keyed by (p, rescaling), value is list of
+                                       # per-iteration sample lists
+    }
+"""
 
 import numpy as np
 import pickle
@@ -59,6 +98,38 @@ hamiltonian = hamiltonian * norm
 
 
 def warm_start(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircuit]=None):
+    """Run the Boltzmann warm-start iterative QAOA for a single ``(p, δ_β, δ_γ)`` point.
+
+    Constructs (or reuses) a ``p``-layer linear-ramp QAOA circuit built on top of the
+    pre-compiled cost circuit loaded from the ``circuit_depths.py`` output file.
+    Runs ``iters = 5`` warm-start iterations, each of which samples the circuit,
+    evaluates HUBO energies, and updates the ``Ry`` rotation angles via the Boltzmann
+    procedure.
+
+    The pre-compiled cost circuit is loaded once at module level from:
+    ``/lustre/scratch127/qpg/jc59/new_hubo_formulation/circuit_depths/
+    results.couplingall.precompute.0.pkl``
+
+    and re-parameterised via ``parameterise_circuit`` so that a scalar ``γ`` angle
+    can be swept.
+
+    Args:
+        p: Number of QAOA layers.
+        delta_b: Mixer amplitude ``δ_β`` for the linear-ramp schedule.
+        delta_g: Cost amplitude ``δ_γ`` for the linear-ramp schedule.
+        circ: Optional existing QAOA circuit to reuse (avoids rebuilding when only
+            angles change across warm-start iterations).  ``None`` triggers a fresh
+            circuit build.
+
+    Returns:
+        A three-tuple ``(energy, samples, circuit)`` where:
+
+        * ``energy`` (``float``) – mean Hamiltonian energy of the final iteration.
+        * ``samples`` (``list``) – list of per-iteration sample lists, one entry per
+          warm-start iteration.
+        * ``circuit`` (``QuantumCircuit``) – the abstract (unbound) QAOA circuit,
+          suitable for passing back as ``circ`` in the next call.
+    """
     phis = ParameterVector('ϕ', num_qubits)
     fixed_qc, circuit = get_LR_qaoa_circuit(p, delta_b, delta_g, num_qubits, cost_circuit, circ, phis, True)
     history = []

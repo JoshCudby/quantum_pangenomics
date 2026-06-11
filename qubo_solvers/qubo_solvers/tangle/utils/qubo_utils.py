@@ -1,3 +1,5 @@
+"""Utilities for building the QUBO matrix for the standard (unoriented) tangle formulation."""
+
 import networkx as nx
 import numpy as np
 from itertools import product
@@ -5,15 +7,44 @@ from math import floor
 
 
 def get_tangle_qubo_matrix(graph: nx.Graph) -> np.ndarray:
-    """Generates a matrix describing the max path problem qubo cost function.
-    The cost function is C(x) = x^T Q x, where Q is the matrix returned by this function.
+    """Build the QUBO matrix for the maximum-coverage path problem on an unoriented graph.
+
+    Binary variables are indexed as ``(t, i)`` where ``t = 0 .. T-1`` is the
+    timestep and ``i = 0 .. W`` is the node index.  Index ``i = W`` is a
+    sentinel "skip/end" node that absorbs the walk once it leaves the tangle.
+    The number of timesteps is ``T = floor(total_weight * 1.2)`` — a slack
+    factor of 1.2 above the total copy-number sum.
+
+    Four penalty terms are assembled into a 4-D tensor of shape
+    ``(T, W+1, T, W+1)`` before being flattened to a 2-D matrix:
+
+    * ``lambda_t = 10`` — one-hot constraint: exactly one node is active per
+      timestep.
+    * ``lambda_g = 10`` — edge constraint: consecutive active nodes must share a
+      graph edge (or transition to/from the sentinel).
+    * ``lambda_start = 5`` — boundary constraint: the first timestep must begin
+      at a designated start node (if present in the graph), and transitions to
+      the sentinel are forbidden unless the current node is an end node.
+    * ``lambda_w = 1`` — coverage objective: penalises deviation from target
+      copy numbers via
+      ``lambda_w * (sum_t x[t,i] - weight[i])^2``, which expands to
+      ``lambda_w * (1 - 2*weight[i]) * x[t,i]
+      + lambda_w * sum_{t1 != t2} x[t1,i] * x[t2,i] + const``.
+
+    The 4-D tensor is reshaped to ``(T*(W+1), T*(W+1))``, symmetrised as
+    ``0.5 * (Q + Q^T)``, then normalised by ``max(|Q|)`` so that all entries
+    lie in ``[-1, 1]``.  The offset is normalised by the same factor.
 
     Args:
-        graph (nx.DiGraph): the directed graph describing the max path problem.
-        penalty (int): the penalty for breaking constraints.
+        graph (nx.Graph): Node-weighted undirected graph.  Each node must have
+            a ``weight`` attribute (int copy number) and optionally a ``start``
+            attribute (``'start'``, ``'end'``, or ``None``).
 
     Returns:
-        np.ndarray: a 2D array Q representing the cost function.
+        tuple[np.ndarray, float, int, int]: ``(Q, offset, T, W)`` where
+            ``Q`` is the normalised 2-D QUBO matrix, ``offset`` is the
+            normalised constant energy term, ``T`` is the number of timesteps,
+            and ``W`` is the number of graph nodes.
     """
     nodes = list(graph.nodes)
     W = len(nodes)

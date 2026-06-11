@@ -1,3 +1,5 @@
+"""CLI tool that builds a QUBO matrix for the standard (unoriented) tangle formulation."""
+
 import numpy as np
 import os
 import pickle
@@ -13,6 +15,36 @@ logger = get_logger(__name__)
 
 
 def main():
+    """Build and serialise a QUBO matrix from a GFA tangle file.
+
+    Parses CLI arguments, optionally runs Pathfinder to obtain copy numbers,
+    constructs the NetworkX graph, computes the QUBO matrix, and writes two
+    output files to the data directory.
+
+    CLI arguments:
+        -f / --filepath: Path to the input ``.gfa`` file (default:
+            ``<DATA_DIR>/test.gfa``).
+        -c / --copy-numbers: Comma-separated list of integer copy numbers,
+            one per GFA segment.  If omitted, Pathfinder is invoked to derive
+            them automatically.
+        -d / --data-dir: Output directory (default: ``<OUT_DIR>/tangle``).
+
+    Workflow:
+        1. Load the GFA file and build a node-weighted graph.
+        2. If ``--copy-numbers`` is not provided, run Pathfinder to obtain per-node
+           copy numbers.
+        3. Call ``get_tangle_qubo_matrix`` to compute ``Q``, ``offset``,
+           ``T_max``, and ``V``.
+        4. Save a pickle file ``qubo_data_<filename>.pkl`` with keys:
+           ``Q`` (list), ``offset`` (float), ``T_max`` (int), ``V`` (int),
+           ``graph`` (nx.Graph).
+        5. Save an MQLib-format text file ``mqlib_input_<filename>.txt``:
+           first line is ``n_vars n_nonzero``; subsequent lines are
+           ``row col value`` (1-indexed, upper-triangular, values negated).
+
+    Returns:
+        int: 0 on success.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--filepath', default=f'{DATA_DIR}/test.gfa')
     parser.add_argument('-c', '--copy-numbers', help='delimited list input', 

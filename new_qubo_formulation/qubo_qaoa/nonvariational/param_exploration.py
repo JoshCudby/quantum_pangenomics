@@ -1,3 +1,41 @@
+"""Parameter sweep over (Δβ, Δγ, p) to find optimal LR-QAOA settings.
+
+This script performs a dense grid search over the linear-ramp QAOA parameter
+space to identify the amplitude pair (Δβ*, Δγ*) and circuit depth p* that
+minimise the mean QUBO energy (or maximise the probability of sampling an
+optimal solution, ``p_opt``).
+
+The sweep covers:
+
+* ``delta_bs``: 41 evenly-spaced values in [0, 1] (mixer amplitudes Δβ).
+* ``delta_gs``: 41 evenly-spaced values in [0, 1] (cost amplitudes Δγ).
+* ``ps``: p ∈ {1, 2, 3, 4, 5} (number of QAOA layers).
+
+For each triple ``(p, Δβ, Δγ)`` the script either runs the circuit with
+``--measure`` (MPS sampling) or evaluates the exact statevector (GPU
+statevector simulation), reporting both the mean energy and the probability of
+sampling an exact optimum (``p_opt``).
+
+CLI Arguments:
+    -f / --filename: Stem of the input ``.gfa`` file.
+    --measure: Flag.  If set, uses MPS sampling (CPU); otherwise uses exact
+        GPU statevector simulation.
+    -n / --shots: Number of shots per circuit evaluation (default 4000,
+        relevant only when ``--measure`` is set).
+
+Output:
+    A pickle file at
+    ``/lustre/.../param_exploration/LR_unequal.<filename>.db<Δβ_max>.dg<Δγ_max>.p<p_max>.pkl``
+    containing a dict with keys:
+
+    * ``delta_bs``: Array of Δβ values swept.
+    * ``delta_gs``: Array of Δγ values swept.
+    * ``ps``: List of p values swept.
+    * ``energies``: Array of shape ``(len(ps), len(delta_bs), len(delta_gs))``
+      with mean QUBO energy for each triple.
+    * ``p_opts``: Array of the same shape with the probability of sampling an
+      optimal bitstring.
+"""
 
 import numpy as np
 import pickle
@@ -63,6 +101,21 @@ if not measure:
 
 
 def get_energy_and_p_opt(qc):
+    """Sample a bound circuit and return mean energy and optimal-solution probability.
+
+    Runs ``args.shots`` shots via the module-level ``sampler``, evaluates each
+    unique bitstring against the module-level ``hamiltonian`` (plus
+    ``ising_offset``), then computes the mean energy and the fraction of shots
+    that hit an exact optimum (energy < 1e-5).
+
+    Args:
+        qc: A fully bound (parameter-free) ``QuantumCircuit`` ready to sample.
+
+    Returns:
+        A tuple ``(energy, p_opt)`` where ``energy`` is the mean QUBO energy
+        across all shots and ``p_opt`` is the fraction of shots with energy
+        below ``1e-5``.
+    """
     job = sampler.run([qc], shots=args.shots)
     sampler_result = job.result()
     counts = sampler_result[0].data.meas.get_counts()
@@ -80,6 +133,21 @@ def get_energy_and_p_opt(qc):
 
 
 def get_energy_and_p_opt_sv(qc):
+    """Evaluate mean energy and optimal probability from a statevector simulation.
+
+    Runs the circuit as a statevector (single-shot, GPU backend) and computes
+    the exact expectation value and exact optimal-solution probability using
+    the pre-computed ``evals`` array.
+
+    Args:
+        qc: A fully bound ``QuantumCircuit`` with a ``save_statevector``
+            instruction appended (produced by ``get_LR_qaoa_circuit`` when
+            ``measure=False``).
+
+    Returns:
+        A tuple ``(energy, p_opt)`` where ``energy`` is ``∑|ψ_i|² · evals_i``
+        and ``p_opt`` is ``∑_{i ∈ opt} |ψ_i|²``.
+    """
     result = backend.run([qc],shots=1).result()
     data = result.results[0].data
     sv = np.asarray(data.statevector)
@@ -89,6 +157,25 @@ def get_energy_and_p_opt_sv(qc):
 
 
 def LR_QAOA(p, delta_b, delta_g, circ):
+    """Evaluate the LR-QAOA energy and p_opt for a single (p, Δβ, Δγ) point.
+
+    Builds (or reuses) the parametrised circuit template ``circ``, binds the
+    linear-ramp parameters, and dispatches to either ``get_energy_and_p_opt``
+    (sampling) or ``get_energy_and_p_opt_sv`` (statevector) depending on the
+    ``--measure`` flag.
+
+    Args:
+        p: Number of QAOA layers.
+        delta_b: Mixer amplitude Δβ.
+        delta_g: Cost amplitude Δγ.
+        circ: Pre-built parametrised circuit template for reuse, or ``None``
+            to trigger fresh construction.
+
+    Returns:
+        A tuple ``(energy, p_opt, circuit)`` where ``energy`` is the mean
+        QUBO energy, ``p_opt`` is the probability of sampling an optimum, and
+        ``circuit`` is the (possibly freshly built) template for the next call.
+    """
     fixed_qc, circuit = get_LR_qaoa_circuit(
         p, delta_b, delta_g, num_qubits,
         hamiltonian, circ, phis=None, measure=measure

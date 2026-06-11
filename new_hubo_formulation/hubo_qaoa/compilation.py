@@ -1,3 +1,52 @@
+"""Full HUBO compilation pipeline: Hamiltonian construction, term selection, and circuit optimisation.
+
+Implements the offline compilation phase of the two-phase HUBO QAOA pipeline.  Given
+a GFA pangenome graph and compilation options, this script:
+
+1. Parses the graph via ``gfa_file_to_graph`` to obtain the number of binary-encoding
+   qubits ``n``, total timesteps ``T``, and the orientation-aware DiGraph.
+2. Builds the **full** HUBO Hamiltonian (all ``T−1`` consecutive-timestep constraint
+   pairs) and a **subset** Hamiltonian restricted to the timestep pairs selected by
+   ``--times-to-keep``.  The subset Hamiltonian is compiled to a circuit; the full
+   Hamiltonian is stored for energy evaluation at simulation time.
+3. Selects an initial qubit layout using ``HigherOrderSatMapper`` restricted to the
+   interaction terms at the fractions specified by ``--fraction-four`` and
+   ``--fraction-six``.
+4. Routes and compiles the circuit via ``CommutingGateRouterPrecomputeRzz`` over a
+   coarse then fine sweep of SWAP-layer counts.
+5. Saves results to a pickle file.
+
+CLI arguments:
+    -f / --filename: Base name of the ``.gfa`` file (without path or extension).
+    -e / --extra: Unused integer flag reserved for future use (default 1).
+    --fraction-four: Fraction of 4-body interaction terms passed to the SAT mapper
+        for layout optimisation.
+    --fraction-six: Fraction of 6-body interaction terms passed to the SAT mapper
+        for layout optimisation.
+    --times-to-keep: Comma-separated list of timestep-pair indices to include in the
+        compiled (subset) Hamiltonian, e.g. ``0,1,2``.
+    -t / --timeout: SAT solver timeout in seconds; ``0`` uses a trivial layout.
+    -C / --coupling-map: Physical topology (``'line'``, ``'grid'``, ``'heavy-hex'``,
+        ``'all'``).
+    -c / --copy-numbers: Comma-separated copy numbers for each GFA segment.
+
+Output pickle schema (saved to
+``/lustre/scratch127/qpg/jc59/new_hubo_formulation/compilation/<filename>.pkl``):
+
+.. code-block:: python
+
+    {
+        'full_hamiltonian': SparsePauliOp,   # unnormalised full Hamiltonian
+        'compiled_hamiltonian': SparsePauliOp,  # unnormalised subset Hamiltonian
+        'best_rzz': Best  # TypedDict with keys:
+                          #   'layout': Layout
+                          #   'depth': int   (two-qubit gate depth)
+                          #   'count': int   (total non-local gate count)
+                          #   'layers': int  (SWAP layers used)
+                          #   'circuit': QuantumCircuit  (compiled cost circuit)
+    }
+"""
+
 import numpy as np
 import pickle
 import argparse
@@ -32,11 +81,27 @@ from qiskit_qaoa.utils.logging import get_logger
 
 
 def two_qubit_count(qc: QuantumCircuit):
+    """Count the total number of two-qubit gates in a circuit.
+
+    Sums ``cz``, ``rzz``, ``cx``, and ``swap`` gate counts.
+
+    Args:
+        qc: The circuit to inspect.
+
+    Returns:
+        Total count of two-qubit gates.
+    """
     ops = qc.count_ops()
     return ops.get("cz", 0) + ops.get("rzz", 0) + ops.get("cx", 0) + ops.get("swap", 0)
-   
-    
+
+
 def print_circuit_info(qc: QuantumCircuit, circuit_name: str):
+    """Log a one-line summary of two-qubit gate count and depth for a circuit.
+
+    Args:
+        qc: The circuit to summarise.
+        circuit_name: Human-readable label used in the log message.
+    """
     logger.info(f'{circuit_name} has {two_qubit_count(qc)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
 
@@ -45,6 +110,29 @@ Best = TypedDict('Best', {'layout': Layout, 'depth': int, 'count': int, 'layers'
 
 
 def sweep_swap_depths(layers: list[int], qubits: list, best_rzz: Best, swap_strategy: ExtendedSwapStrategy):
+    """Sweep over SWAP-layer counts and update the best compiled circuit in place.
+
+    For each candidate ``layer`` count:
+
+    1. Builds the ``CommutingGateRouterPrecomputeRzz`` routing pass with the given
+       number of allowed SWAP layers.
+    2. Obtains a qubit layout via ``HigherOrderSatMapper.hubo_max_sat`` using the
+       interaction terms at the fractions specified by ``--fraction-four`` and
+       ``--fraction-six``; falls back to a trivial layout when ``--timeout 0``.
+    3. Runs the full routing and cancellation pass manager.
+    4. If the resulting two-qubit depth improves on the current best, updates
+       ``best_rzz`` in place.
+
+    Args:
+        layers: Candidate SWAP-layer counts to evaluate.
+        qubits: Physical qubit objects from the donor ``QuantumCircuit``.
+        best_rzz: Mutable ``Best`` dict tracking the current best circuit, updated
+            in place.
+        swap_strategy: ``ExtendedSwapStrategy`` for the chosen physical topology.
+
+    Returns:
+        ``None``.  Results are communicated via ``best_rzz`` mutation.
+    """
     for layer in layers:
         pm_rzz = PassManager(
             [

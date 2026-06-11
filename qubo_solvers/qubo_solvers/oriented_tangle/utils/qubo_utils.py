@@ -1,3 +1,5 @@
+"""Utilities for building QUBO matrices for the strand-aware (oriented) tangle formulation."""
+
 import numpy as np
 import networkx as nx
 from itertools import product
@@ -8,14 +10,38 @@ logger = get_logger(__name__)
 
 
 def edge2node_qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None, penalties: list | None=None) -> tuple[np.ndarray, float, int, int]:
-    """Constructs the QUBO matrix corresponding to a graph. Also returns the offset of the model, the max time and the number of nodes.
+    """Build the QUBO matrix for the oriented tangle with per-strand copy-number weights.
+
+    This is the edge-to-node converted variant of the oriented formulation.
+    Unlike :func:`qubo_matrix_from_graph`, the coverage target can differ
+    between the ``+`` and ``-`` strands of the same segment: ``i_+`` uses
+    ``copy_numbers[2*index]`` and ``i_-`` uses ``copy_numbers[2*index+1]``.
+
+    The 6-D tensor layout and penalty structure are otherwise identical to
+    :func:`qubo_matrix_from_graph`.  See that function for full details of the
+    variable indexing, sentinel node, symmetrisation, and deletion of the
+    extra parity-1 end-node rows/columns.
+
+    Note:
+        Normalisation is disabled in this variant (the commented-out block at
+        the end of the function); the raw integer matrix is returned.
 
     Args:
-        graph (nx.DiGraph): the node-weighted graph describing the problem.
-        alpha (float, optional): the proportion of extra time allowed to paths over the maximum weight.
+        graph (nx.DiGraph): Strand-aware directed graph produced by
+            :func:`~qubo_solvers.oriented_tangle.utils.graph_utils.edge2node_oriented_graph`.
+            Each node must have a ``weight`` attribute giving its individual
+            (strand-specific) copy number.
+        alpha (float | None): Slack factor for computing ``T_max``
+            (``T_max = floor(total_weight * alpha)``).  Defaults to ``1.1``.
+        penalties (list | None): Override penalty weights as
+            ``[lambda_t, lambda_g, lambda_w]``.  Defaults to
+            ``[100, 50, 1]``.
 
     Returns:
-        tuple[np.ndarray, float, int, int]: qubo_matrix, offset, T_max, V
+        tuple[np.ndarray, float, int, int]: ``(qubo_matrix, offset, T_max, V)``
+            where ``qubo_matrix`` is a 2-D integer array, ``offset`` is the
+            constant energy term, ``T_max`` is the number of timesteps, and
+            ``V`` is the number of unoriented nodes (len(nodes) / 2).
     """
     nodes = list(graph.nodes)
     V = int(len(nodes) / 2)
@@ -117,14 +143,53 @@ def edge2node_qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None
 
 
 def qubo_matrix_from_graph(graph: nx.DiGraph, alpha: float | None=None, penalties: list | None=None) -> tuple[np.ndarray, float, int, int]:
-    """Constructs the QUBO matrix corresponding to a graph. Also returns the offset of the model, the max time and the number of nodes.
+    """Build the QUBO matrix for the oriented tangle with shared per-segment copy-number weights.
+
+    Binary variables are indexed as ``(t, i, b)`` where ``t = 0 .. T_max-1``
+    is the timestep, ``i = 0 .. V`` is the node index (``V`` is the sentinel
+    end-node), and ``b in {0, 1}`` is the strand (0 = ``+``, 1 = ``-``).
+    The internal tensor has shape ``(T_max, V+1, 2, T_max, V+1, 2)`` — the
+    ``"+1"`` accommodates the sentinel end-node, and the factor of 2 encodes
+    strand orientation.
+
+    The sentinel end-node is added with both parities; parity-1 copies
+    (``b=1``) are deleted at the end by removing the corresponding
+    rows/columns from the flattened matrix (indexed via
+    ``np.ravel_multi_index``), leaving only the parity-0 sentinel.
+
+    Coverage targets apply per segment (not per strand): for node ``i`` the
+    weight is taken from ``graph.nodes[nodes[2*i]]["weight"]``, so both
+    ``i_+`` and ``i_-`` contribute to the same coverage penalty.
+
+    Three penalty terms are used (defaults: ``lambda_t=100``,
+    ``lambda_g=50``, ``lambda_w=1``):
+
+    * ``lambda_t``: one-hot constraint — exactly one ``(i, b)`` pair is active
+      per timestep.
+    * ``lambda_g``: edge constraint — consecutive ``(i, b)`` pairs must be
+      connected by a directed edge in the graph.
+    * ``lambda_w``: coverage objective — penalises deviation from the segment's
+      copy-number target.
+
+    The matrix is symmetrised as ``0.5 * (Q + Q^T)`` after reshaping.
+    Normalisation is currently disabled.
 
     Args:
-        graph (nx.DiGraph): the node-weighted graph describing the problem.
-        alpha (float, optional): the proportion of extra time allowed to paths over the maximum weight.
+        graph (nx.DiGraph): Strand-aware directed graph produced by
+            :func:`~qubo_solvers.oriented_tangle.utils.graph_utils.oriented_graph_with_copy_numbers`.
+            Each node must have a ``weight`` attribute (copy number shared
+            between strands).
+        alpha (float | None): Slack factor for computing ``T_max``
+            (``T_max = floor(total_weight * alpha)``).  Defaults to ``1.1``.
+        penalties (list | None): Override penalty weights as
+            ``[lambda_t, lambda_g, lambda_w]``.  Defaults to
+            ``[100, 50, 1]``.
 
     Returns:
-        tuple[np.ndarray, float, int, int]: qubo_matrix, offset, T_max, V
+        tuple[np.ndarray, float, int, int]: ``(qubo_matrix, offset, T_max, V)``
+            where ``qubo_matrix`` is a 2-D integer array, ``offset`` is the
+            constant energy term, ``T_max`` is the number of timesteps, and
+            ``V`` is the number of unoriented nodes (len(nodes) / 2).
     """
     nodes = list(graph.nodes)
     V = int(len(nodes) / 2)

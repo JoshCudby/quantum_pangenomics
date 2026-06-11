@@ -1,3 +1,36 @@
+"""Assembles a complete p-layer QAOA circuit with hardware swap routing.
+
+This module provides ``circuit_construction``, which builds a parametrised
+QAOA circuit suitable for both simulator use and hardware deployment on IBM
+devices.  The key steps performed are:
+
+1. **Cost-layer routing**: The QUBO cost operator is split into single-qubit
+   (Z) and two-qubit (ZZ) terms.  The ZZ terms are routed through the
+   provided ``QUBOSwapStrategy`` via ``qaoa_swap_strategy_pm``, and the
+   resulting qubit permutation is captured for later measurement remapping.
+
+2. **Alternating cost layers**: Even-indexed QAOA layers append the cost
+   circuit in forward order; odd-indexed layers append it in reversed order
+   (``reverse_ops``).  This cancels the net qubit permutation accumulated by
+   the swap network over even numbers of layers.
+
+3. **Warm-start mixer**: If warm-start angles ``phis`` are provided, the
+   mixer per qubit is ``RY(-phis[i]) · RZ(-2β) · RY(phis[i])``; otherwise
+   the standard ``RX(-2β)`` X-mixer is used.  After an odd number of layers
+   the permutation is tracked to route mixer gates to their physically correct
+   qubits.
+
+4. **Measurement remapping**: Classical bit indices are assigned by inverting
+   the combined ``sat_map`` and ``virtual_permutation_layout`` so that
+   bitstring bit ``i`` always corresponds to QUBO variable ``i``.
+
+5. **Optional backend compilation**: If ``backend`` is supplied, the circuit
+   is further compiled with Qiskit's ``optimization_level=3`` preset pass
+   manager (ALAP scheduling).
+
+The function returns a dict with key ``"circuit_to_sample"`` (abstract
+circuit) and, if a backend is supplied, ``"backend"`` (compiled circuit).
+"""
 from typing import Optional
 
 from qiskit import QuantumCircuit, transpile
@@ -22,6 +55,51 @@ def circuit_construction(
     swap_strategy: QUBOSwapStrategy,
     phis: Optional[ParameterVector]
 ) -> dict[str, QuantumCircuit]:
+    """Build a parametrised p-layer QAOA circuit with hardware-aware swap routing.
+
+    Constructs the full QAOA ansatz (initialisation + p × (cost + mixer) layers
+    + measurements) for a QUBO Hamiltonian encoded as a ``SparsePauliOp``.
+    Routing of the two-qubit cost terms is handled by ``QUBOSwapStrategy``;
+    the resulting qubit permutation is tracked and inverted when constructing
+    measurements and mixer layers.
+
+    The returned circuits use ``ParameterVector("γ", p)`` for cost-layer
+    angles and ``ParameterVector("β", p)`` for mixer angles, laid out so
+    that ``circuit.parameters[0..p-1]`` are the gammas and
+    ``circuit.parameters[p..2p-1]`` are the betas.
+
+    Args:
+        num_qubits: Number of logical QUBO variables.  Must equal
+            ``len(sat_map)``.
+        cost_op: Full QUBO cost Hamiltonian as a ``SparsePauliOp`` over
+            ``swap_strategy._num_vertices`` qubits.
+        sat_map: Mapping ``{virtual_qubit_index: physical_qubit_index}``
+            specifying which physical qubits carry QUBO variables (ancilla /
+            bridge qubits are not included).
+        p: Number of QAOA layers.
+        backend: IBM backend for the optional final compilation pass.  Pass
+            ``None`` to skip hardware compilation.
+        edge_colouring: Edge colouring dict ``{(qubit_i, qubit_j): colour}``
+            partitioning ZZ interactions into parallel sets for the swap
+            strategy pass manager.
+        swap_strategy: ``QUBOSwapStrategy`` instance encoding the hardware
+            topology and SWAP-layer schedule used to route ZZ interactions.
+        phis: Warm-start rotation angles of length ``num_qubits`` as a
+            ``ParameterVector``, or ``None`` for equal-superposition
+            initialisation and the standard X-mixer.
+
+    Returns:
+        A dict with the following keys:
+
+        * ``"circuit_to_sample"``: The abstract parametrised QAOA circuit
+          (not yet compiled for any specific backend).
+        * ``"backend"`` *(present only when* ``backend`` *is not* ``None``):
+          The circuit compiled with ``optimization_level=3`` and ALAP
+          scheduling for the provided backend.
+
+    Raises:
+        Exception: If ``phis`` is provided but ``len(phis) != num_qubits``.
+    """
     circuits_dict = {}    
     n = swap_strategy._num_vertices
 

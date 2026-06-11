@@ -1,4 +1,6 @@
-import pickle 
+"""CLI tool that loads a pre-built QUBO pickle and solves it with the chosen backend."""
+
+import pickle
 import os
 import argparse
 from collections import Counter
@@ -21,6 +23,27 @@ parser.add_argument('-d', '--data-dir', default=f"{OUT_DIR}/tangle")
 
 
 def setup() -> QuboDescription:
+    """Parse CLI arguments, load the QUBO pickle, and return a QuboDescription.
+
+    CLI arguments:
+        -f / --filepath: Path to the original ``.gfa`` file whose base name is
+            used to locate the pre-built pickle (default: ``<DATA_DIR>/test.gfa``).
+        -t / --times: Comma-separated list of integer solver time limits in
+            seconds.
+        -j / --jobs: Number of independent solver runs per time limit.
+        -s / --solver: Solver name (required); must be a member of
+            ``Solver`` (``dwave``, ``mqlib``, or ``gurobi``).
+        -d / --data-dir: Directory containing the QUBO pickle (default:
+            ``<OUT_DIR>/tangle``).
+
+    Returns:
+        QuboDescription: Fully populated descriptor ready to pass to a solver.
+
+    Raises:
+        Exception: If the solver name is not recognised.
+        Exception: If the pickle file does not exist (``build_tangle_qubo_matrix``
+            has not been run).
+    """
     args = parser.parse_args()
     
     if args.solver in set(item.value for item in Solver):
@@ -43,6 +66,21 @@ def setup() -> QuboDescription:
 
 
 def main():
+    """Dispatch to the chosen solver, validate results, and write output files.
+
+    Calls ``setup()`` to obtain a ``QuboDescription``, then routes to the
+    appropriate sampling function (``dwave_sample_qubo``, ``mqlib_sample_qubo``,
+    or ``gurobi_sample_qubo``).  Each returned path is validated against the
+    graph topology via ``validate_path``, and the per-run energies are logged.
+
+    Two files are written to ``qubo_description.data_dir``:
+
+    * A pickle named ``<solver>_<filename>_<timestamp>`` containing the full
+      ``paths`` dict mapping time limit → list of (sample, energy, path) tuples.
+    * A compiled summary text file ``<solver>.<filename>.compiled.txt`` with
+      lines of the form ``<time_limit>: Counter({energy: count, ...}),`` appended
+      on each run.
+    """
     qubo_description = setup()
 
     if qubo_description.solver == Solver.DWAVE:

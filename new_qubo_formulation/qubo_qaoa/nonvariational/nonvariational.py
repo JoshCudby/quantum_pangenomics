@@ -1,3 +1,46 @@
+"""Iterative warm-start QAOA with fixed linear-ramp parameters.
+
+This script runs the full Iter-QAOA procedure on a pre-built QUBO Hamiltonian
+using the non-variational linear-ramp (LR) parameter schedule.  Parameters
+are **not** optimised variationally; instead, fixed amplitudes ``delta_b`` and
+``delta_g`` define the schedule via:
+
+    β_j = Δβ · (1 − (j − 0.5) / p)
+    γ_j = Δγ · (j − 0.5) / p,   j = 1, …, p
+
+After fixing the circuit, ``max_iterations`` (= 10) Boltzmann warm-start
+iterations are performed, each refining the single-qubit initialisation angles
+``ϕ_i`` based on the weighted biases of the previous sample set.  The inverse
+temperature β_T used for Boltzmann weighting follows a quadratic schedule from
+``max_beta_T / max_iterations`` up to ``max_beta_T`` (see ``get_beta_T``).
+
+Hyperparameters used:
+
+* ``delta_b = 0.63`` — mixer schedule amplitude.
+* ``delta_g = 0.16`` — cost schedule amplitude.
+* ``max_beta_T = 0.15`` — maximum Boltzmann inverse temperature.
+* ``eta = 1`` — bias sign convention (warm-start towards low-energy |0⟩ states).
+* ``eps = 0.05`` — probability clamp for ``arcsin`` stability.
+* ``alpha = 1.0`` — no subsampling (all shots used for bias computation).
+* ``max_iterations = 10`` — number of warm-start refinement steps.
+
+The Aer simulator uses matrix-product-state (MPS) simulation with bond
+dimension 32 for memory-efficient simulation of large qubit counts.
+
+CLI Arguments:
+    -f / --filename: Stem of the input ``.gfa`` file (the script appends
+        ``.gfa.pkl`` and looks in a fixed Lustre path).
+    -N / --nodes: Number of nodes N in the pangenome graph.  Used to set the
+        initial warm-start angle ``ϕ = 2·arcsin(√(1/(2N)))``.
+    -T / --time: (Unused placeholder; reserved for future timestep argument.)
+    -n / --shots: Number of measurement shots per warm-start iteration.
+
+Output:
+    A pickle file at
+    ``/lustre/.../nonvariational/nonvariational.<filename>.db<Δβ>.dg<Δγ>.shots<n>.betaT<β_T>.eps<ε>.alpha<α>.pkl``
+    containing a dict with keys ``energies``, ``delta_b_fixed``,
+    ``delta_g_fixed``, ``ps``, ``rescaling``, ``samples_dict``.
+"""
 
 import numpy as np
 import numpy.typing as npt
@@ -50,11 +93,45 @@ num_qubits: int = hamiltonian.num_qubits
 
 
 def warm_start(
-    p: int, 
-    delta_b: float, 
-    delta_g: float, 
+    p: int,
+    delta_b: float,
+    delta_g: float,
     circ: Optional[QuantumCircuit]=None
 ) -> tuple[float, list[list[str]], QuantumCircuit]:
+    """Run iterative Boltzmann warm-start QAOA for a single (p, Δβ, Δγ) point.
+
+    Builds a p-layer LR-QAOA circuit with warm-start angle parameters ``ϕ``,
+    fixes the circuit parameters to the linear-ramp schedule determined by
+    ``delta_b`` and ``delta_g``, then performs ``iters=10`` warm-start
+    iterations.  Each iteration:
+
+    1. Samples ``shots`` bitstrings from the current warm-start circuit.
+    2. Evaluates energies via the module-level ``hamiltonian`` and
+       ``ising_offset``.
+    3. Updates ``ϕ`` via Boltzmann-weighted biases (see ``iteration`` in
+       ``iterative_qaoa_utils``).
+
+    The Boltzmann inverse temperature ``β_T`` follows the quadratic schedule
+    ``get_beta_T(i, max_beta_T)`` across iterations.
+
+    Args:
+        p: Number of QAOA layers.
+        delta_b: Mixer amplitude Δβ for the LR schedule.
+        delta_g: Cost amplitude Δγ for the LR schedule.
+        circ: Optional pre-built parametrised circuit template.  If ``None``,
+            a new circuit is constructed (which involves Aer transpilation).
+            Reusing ``circ`` across calls with the same ``p`` avoids redundant
+            transpilation.
+
+    Returns:
+        A tuple ``(energy, samples, circuit)`` where:
+
+        * ``energy`` is the mean QUBO energy over the final iteration's shots.
+        * ``samples`` is a list (length ``iters``) of per-iteration bitstring
+          lists.
+        * ``circuit`` is the (possibly freshly built) parametrised circuit
+          template for reuse.
+    """
     phis = ParameterVector('ϕ', num_qubits)
     fixed_qc, circuit = get_LR_qaoa_circuit(
         p, delta_b, delta_g, num_qubits,

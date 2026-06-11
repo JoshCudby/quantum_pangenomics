@@ -1,3 +1,26 @@
+"""Circuit depth analysis tool for HUBO QAOA compilation.
+
+Sweeps over a range of SWAP-layer counts for each test-case graph and records the
+minimum-depth compiled circuit obtained by the HUBO-aware routing pipeline.  Results
+are accumulated in a pickle file so that partial runs can be resumed.
+
+The compilation pipeline used here is:
+
+1. ``HigherOrderSatMapper`` – SAT-based qubit layout optimiser that finds an initial
+   qubit assignment minimising the number of SWAPs required for the higher-order
+   Pauli interactions.
+2. ``CommutingGateRouterPrecomputeRzz`` (or ``CommutingGateRouterRzz`` for larger
+   circuits) – routes commuting Pauli-evolution gates by inserting at most
+   ``max_layers`` SWAP layers.
+3. Post-routing cancellation passes (``InverseCancellation``,
+   ``CommutativeCancellation``) to reduce the final two-qubit gate count.
+
+CLI arguments:
+    -C / --coupling: Coupling-map topology for the swap strategy
+        (``'line'``, ``'grid'``, ``'all'``, ``'heavy-hex'``).
+    -t / --timeout: SAT solver timeout in seconds; ``0`` forces a trivial layout.
+"""
+
 import numpy as np
 import pickle
 
@@ -43,6 +66,38 @@ Best = TypedDict('Best', {'layout': Layout, 'depth': int, 'count': int, 'layers'
 
 
 def sweep_swap_depths(layers: list[int], qubits: list, best_rzz: Best, swap_strategy: ExtendedSwapStrategy):
+    """Sweep over SWAP-layer counts and update the best compiled circuit in place.
+
+    For each candidate ``layer`` count:
+
+    1. Attempts a SAT-based qubit layout via ``HigherOrderSatMapper.hubo_max_sat``
+       (skipped if ``--timeout 0`` is passed, in which case a trivial layout is used).
+    2. Wraps the Hamiltonian in a ``PauliEvolutionGate`` placed at the SAT-optimal
+       layout positions.
+    3. Runs the routing pass manager:
+
+       * ``FindCommutingPauliEvolutionsMulti`` – identifies commuting groups.
+       * ``CommutingGateRouterPrecomputeRzz`` (circuits with fewer than 25 physical
+         qubits) or ``CommutingGateRouterRzz`` (larger circuits) – routes Pauli
+         evolutions using at most ``layer`` SWAP layers with extra SWAPs enabled.
+       * ``SwapToFinalMapping`` – converts trailing SWAPs into a final qubit
+         permutation.
+       * ``InverseCancellation`` / ``CommutativeCancellation`` – algebraic
+         simplification.
+
+    4. If the resulting two-qubit gate depth is less than the current best, updates
+       ``best_rzz`` in place.
+
+    Args:
+        layers: List of SWAP-layer counts to try, in any order.
+        qubits: Physical qubit objects from the donor ``QuantumCircuit``.
+        best_rzz: Mutable ``Best`` dict tracking the current best circuit.  Updated
+            in place when a lower two-qubit depth is found.
+        swap_strategy: ``ExtendedSwapStrategy`` describing the physical coupling graph.
+
+    Returns:
+        ``None``.  Results are communicated via ``best_rzz`` mutation.
+    """
     for layer in layers:
         router = CommutingGateRouterPrecomputeRzz(
             swap_strategy,

@@ -1,3 +1,13 @@
+"""Utilities for constructing orientation-aware pangenome graphs from GFA files.
+
+A pangenome tangle graph in GFA format encodes sequence segments (nodes) and
+their directed links (edges).  This module converts such graphs into
+``networkx.DiGraph`` instances where every segment appears as two nodes —
+``<name>_+`` (forward orientation) and ``<name>_-`` (reverse complement) —
+with copy numbers stored as node weights.  Each GFA link becomes two directed
+edges: one in the given orientation and one in the reverse-complement
+orientation, preserving strand symmetry.
+"""
 import gfapy
 import networkx as nx
 

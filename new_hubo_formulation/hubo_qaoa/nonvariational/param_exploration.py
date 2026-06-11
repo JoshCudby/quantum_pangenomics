@@ -1,3 +1,41 @@
+"""Parameter landscape sweep for HUBO QAOA.
+
+Evaluates the HUBO QAOA energy and optimal-state overlap ``p_opt`` over a dense grid
+of ``(δ_β, δ_γ, p)`` values using statevector simulation (GPU, single precision).
+This is used to identify good linear-ramp QAOA hyperparameters before committing to
+more expensive shot-based or hardware runs.
+
+The ``--normalise`` flag controls which Hamiltonian is used to evaluate energies in
+the statevector inner product:
+
+* Without ``--normalise`` (default): energies are evaluated against the **full**
+  unnormalised Hamiltonian ``H = λ · H_constraint + H_objective``, giving energies
+  in physical units.
+* With ``--normalise``: energies are evaluated against the **normalised** Hamiltonian
+  (coefficients in ``[−1, 1]``) as used during circuit compilation.  This allows
+  direct comparison with compiled-Hamiltonian energy landscapes when the normalisation
+  constant changes between runs.
+
+CLI arguments:
+    -f / --filename: Base name of the ``.gfa`` file (without path or extension).
+    -c / --copy-numbers: Comma-separated copy numbers for each GFA segment.
+    --normalise: If set, evaluate against the normalised (compiled) Hamiltonian.
+
+Output pickle schema (saved to
+``/lustre/scratch127/qpg/jc59/new_hubo_formulation/nonvariational/param_exploration/
+LR_unequal.<filename>.db<delta_bs[-1]>.dg<delta_gs[-1]>.p<ps[-1]>.pkl``):
+
+.. code-block:: python
+
+    {
+        'delta_bs': np.ndarray,   # shape (41,), linspace(0, 1, 41)
+        'delta_gs': np.ndarray,   # shape (41,), linspace(0, 2, 41)
+        'ps': list[int],          # [1, 2, 3, 4, 5]
+        'energies': np.ndarray,   # shape (len(ps), 41, 41)
+        'p_opts': np.ndarray,     # shape (len(ps), 41, 41)
+    }
+"""
+
 import numpy as np
 from typing import Optional
 import pickle
@@ -64,6 +102,23 @@ print(f'Opt evals: {opt_evals}')
 
 
 def get_energy_and_p_opt(qc) -> tuple[float, float]:
+    """Evaluate the expected energy and optimal-state overlap for a statevector circuit.
+
+    Runs the circuit with ``shots=1`` on the statevector backend (which returns an
+    exact statevector regardless of shot count) and computes:
+
+    * ``energy = ∑_x |⟨x|ψ⟩|² · E(x)`` – expected Hamiltonian energy under the
+      full unnormalised Hamiltonian eigenvalues.
+    * ``p_opt = ∑_{x: E(x)<10⁻⁵} |⟨x|ψ⟩|²`` – total probability weight on
+      computational basis states with near-zero energy (optimal solutions).
+
+    Args:
+        qc: A fully bound (no free parameters) ``QuantumCircuit`` ending with a
+            ``save_statevector`` instruction.
+
+    Returns:
+        A two-tuple ``(energy, p_opt)`` where both are real scalars.
+    """
     job = backend.run([qc],shots=1)
     result = job.result()
     data = result.results[0].data
@@ -76,6 +131,31 @@ def get_energy_and_p_opt(qc) -> tuple[float, float]:
 
 
 def LR_QAOA(p: int, delta_b: float, delta_g: float, circ: Optional[QuantumCircuit]):
+    """Evaluate energy and ``p_opt`` for a single LR-QAOA ``(p, δ_β, δ_γ)`` point.
+
+    Constructs (or reuses) a ``p``-layer linear-ramp QAOA circuit without
+    warm-start angles (standard Hadamard initial state, standard Rx mixer), binds
+    the LR-schedule parameters, and evaluates the statevector via
+    ``get_energy_and_p_opt``.
+
+    Unlike ``warm_start`` in ``nonvariational.py``, no Boltzmann iteration is
+    performed here; this is a single-shot statevector evaluation for landscape
+    mapping.
+
+    Args:
+        p: Number of QAOA layers.
+        delta_b: Mixer amplitude ``δ_β``.
+        delta_g: Cost amplitude ``δ_γ``.
+        circ: Optional existing abstract QAOA circuit to reuse.  ``None`` triggers
+            a fresh build.
+
+    Returns:
+        A three-tuple ``(energy, p_opt, circuit)`` where:
+
+        * ``energy`` (``float``) – expected Hamiltonian energy.
+        * ``p_opt`` (``float``) – total probability on near-zero-energy states.
+        * ``circuit`` (``QuantumCircuit``) – abstract (unbound) circuit for reuse.
+    """
     fixed_qc, circuit = get_LR_qaoa_circuit(p, delta_b, delta_g, num_qubits, cost_circuit, circ, None, None)
 
     energy, p_opt = get_energy_and_p_opt(fixed_qc)
