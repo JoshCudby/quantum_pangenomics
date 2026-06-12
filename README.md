@@ -110,16 +110,6 @@ dwave config create
 | `new_hubo_formulation/` | same as above | HUBO formulation using binary-encoded node indices; circuit compilation and simulation |
 | `qiskit_simulation/` | same + `qiskit-aer-gpu` | Full Qiskit QAOA simulation stack: standard QUBO, HUBO, CVaR variants, GPU-accelerated simulation |
 
-### Frozen requirements
-
-`qubo_solvers/qubo_requirements.txt` is a fully-pinned snapshot of a known-good environment. Use it when you need exact version parity:
-
-```bash
-pip install -r qubo_solvers/qubo_requirements.txt
-```
-
-This is not the primary install path — prefer the editable installs above for day-to-day development.
-
 ## Quick Start
 
 Build a QUBO matrix from a GFA file and solve with MQLib:
