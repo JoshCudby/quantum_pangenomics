@@ -1,5 +1,12 @@
 # bin/
 
+## Legacy
+
+Most of these scripts are superseded by the overall pipeline from the QPG or schizophrenia repos.
+Each directory contains /bin subdirectories containing relevant orchestration scripts for that directory.
+
+## Summary
+
 HPC benchmark orchestration scripts for the tangle resolution pipeline. Scripts use LSF (`bsub`) for job submission and GNU parallel for local parallelism. They are written in Bash and Perl and are designed to run on the Sanger Institute compute cluster with Lustre scratch storage.
 
 ## Typical Pipeline
