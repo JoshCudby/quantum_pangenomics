@@ -12,15 +12,12 @@ Pangenome assembly graphs produced by tools like [syncasm](https://github.com/c-
 GFA file (assembly graph)
     │
     ▼
-Pathfinder  ──── extract per-node copy numbers
-    │
-    ▼
 build_*_qubo_matrix.py  ──── encode path problem as QUBO/HUBO matrix
     │
     ├──► D-Wave quantum annealer   (dwave-ocean-sdk)
     ├──► MQLib classical QUBO solver
-    ├──► Gurobi MILP solver
-    └──► QAOA simulation  (Qiskit / QOKit / OpenQAOA)
+    ├──► Gurobi classical MILP solver - used here only for QUBO problems
+    └──► QAOA simulation or experiments (Qiskit)
     │
     ▼
 path solution  ──── scored by coverage, breaks, identity
@@ -36,18 +33,20 @@ path solution  ──── scored by coverage, breaks, identity
 | `new_hubo_formulation/` | HUBO formulation using binary-encoded node indices; circuit compilation and simulation |
 | `qiskit_simulation/` | Qiskit-based QAOA simulation: standard QUBO, HUBO, CVaR variants, circuit compilation and parameter optimisation |
 | `pytket_simulation/` | PyTket-based QAOA simulation (legacy)|
+| `sat/` | SAT solver approaches |
+| `data/` | Test GFA datasets (Arabidopsis, Daphnia, HLA, PhiX174, synthetic) |
+| `utils/` | Shared utilities (GFA subgraph cropper, plotting notebooks) |
+| `modules/` | Git submodules (MQLib, QOKit, qpg, oatk, etc.) |
+|-----------|-------------|
 | `qokit_simulation/` | QOKit tensor-network simulation (legacy)|
 | `openqaoa_simulation/` | OpenQAOA framework integration (legacy)|
 | `cotengra_tensor_networks/` | Tensor network contraction experiments (legacy)|
 | `prog_qaoa/` | Programmable QAOA parameter experiments (legacy)|
 | `pathfinder/` | Classical exhaustive path finder (baseline) |
-| `sat/` | SAT solver approaches |
-| `data/` | Test GFA datasets (Arabidopsis, Daphnia, HLA, PhiX174, synthetic) |
-| `utils/` | Shared utilities (GFA subgraph cropper, plotting notebooks) |
-| `modules/` | Git submodules (MQLib, QOKit, qpg, oatk, etc.) |
 
 ## Installation
 
+#### TODO: check this works!
 Clone with submodules:
 
 ```bash
@@ -78,7 +77,6 @@ gurobipy        # Gurobi solver (requires licence)
 qiskit          # Quantum circuit simulation
 ```
 
-A full conda environment export is available in `environment_from_history.yml`.
 
 ### Solver credentials
 
@@ -112,10 +110,10 @@ For a complete benchmark across all solvers and multiple seeds, see `bin/full_be
 
 ## Data Format
 
-Input: GFA (Graph Fragment Assembly) files. Nodes must carry an `ec` tag for coverage, e.g.:
+Input: GFA (Graph Fragment Assembly) files. Nodes should carry an `SC` tag for coverage, e.g.:
 
 ```
-S  node1  ACGT...  ec:f:42.0
+S  node1  ACGT...  SC:f:42.0
 L  node1  +  node2  +  *
 ```
 
