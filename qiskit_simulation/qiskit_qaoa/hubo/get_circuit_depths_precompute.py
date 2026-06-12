@@ -1,3 +1,36 @@
+"""Circuit depth analysis using precomputed commuting-gate routers.
+
+Variant of ``get_circuit_depths.py`` that uses the precomputed routing
+algorithms (``CommutingGateRouterPrecompute`` and
+``CommutingGateRouterPrecomputeRzz``) which cache intermediate results for
+faster repeated compilation.  Supports both grid and all-to-all
+(``--coupling all2all``) topologies.
+
+The precomputed routers allow efficient exploration of many SWAP-layer budgets
+without recomputing the interaction schedule from scratch each time.
+
+For each test instance the script:
+
+1. Builds the HUBO Hamiltonian via ``graph_to_hubo_hamiltonian``.
+2. Constructs the coupling topology (grid or all-to-all).
+3. Runs a coarse sweep of 10 SWAP-layer budgets via ``sweep_swap_depths``.
+4. For grid topologies, performs a fine neighbourhood search around the best
+   coarse result (5 additional points per router type).
+5. Records the best 2-qubit depth, count, layout, and compiled circuit for
+   each of the two router variants (Rz / Rzz).
+
+Results are saved (with merge/update semantics) to::
+
+    /lustre/scratch127/qpg/jc59/circuit_depths/
+        results[.all2all].precompute.<timeout>.pkl
+
+as a dict mapping filename → {'default': (count, depth), 'rz': [layout, depth,
+count, layers, circuit], 'rzz': [...]}.
+
+CLI arguments:
+    -C / --coupling:   Coupling topology: ``grid`` (default) or ``all2all``.
+    -t / --timeout:    SAT solver timeout in seconds; 0 uses trivial layout.
+"""
 import numpy as np
 import pickle
 
@@ -39,6 +72,24 @@ Best = TypedDict('Best', {'layout': Layout, 'depth': int, 'count': int, 'layers'
 
 
 def sweep_swap_depths(layers: list[int], best_rz: Best, best_rzz: Best):
+    """Compile the cost circuit at multiple SWAP-layer budgets and update bests.
+
+    For each ``layer`` in ``layers``, obtains a SAT layout (or trivial layout
+    when ``--timeout 0``), then compiles the cost circuit using both
+    ``CommutingGateRouterPrecompute`` (Rz) and
+    ``CommutingGateRouterPrecomputeRzz`` (Rzz).  Mutates ``best_rz`` and
+    ``best_rzz`` in-place if a lower 2-qubit depth is found.
+
+    Relies on the module-level ``ess``, ``donor_qc``, ``num_physical_qubits``,
+    ``program_interactions``, ``hamiltonian``, and ``mapper`` variables.
+
+    Args:
+        layers: Sorted list of SWAP-layer budgets to evaluate.
+        best_rz: TypedDict tracking the best Rz-router result so far.  Keys:
+            ``layout``, ``depth``, ``count``, ``layers``, ``circuit``.
+        best_rzz: TypedDict tracking the best Rzz-router result so far.
+            Same keys as ``best_rz``.
+    """
     for layer in layers:
         pm = PassManager(
             [

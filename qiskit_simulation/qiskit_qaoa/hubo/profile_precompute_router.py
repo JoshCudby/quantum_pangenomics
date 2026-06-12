@@ -1,3 +1,14 @@
+"""Profile the CommutingGateRouterPrecompute transpiler pass on a small instance.
+
+Minimal script for timing and debugging ``CommutingGateRouterPrecompute`` on
+a hard-coded test instance (``test_N3_W4``, copy numbers [2, 1, 1]).  Builds
+the HUBO Hamiltonian, constructs a grid ``ExtendedSwapStrategy``, and runs the
+pass manager pipeline with a fixed SWAP-layer budget (``layer = 10``) using a
+trivial identity layout.
+
+Intended for interactive profiling (e.g. cProfile or line_profiler) rather
+than production use.  No output is written to disk.
+"""
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import CXGate, PauliEvolutionGate
 

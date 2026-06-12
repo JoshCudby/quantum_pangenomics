@@ -1,3 +1,27 @@
+"""Generate publication-quality hardware QAOA plots for the paper.
+
+Loads a pickled hardware CVaR-QAOA result (``test_N2_W2`` instance, fixed
+init, p=4) and produces two compact (3×2 inch) PNG figures at 300 dpi:
+
+1. **Convergence figure** (``qaoa_hardware_convergence.png``) — CVaR objective
+   value per COBYLA iteration with small-font axis labels.
+2. **Histogram figure** (``qaoa_hardware_histogram.png``) — QAOA vs. random
+   sample density on a log-scale x-axis (range 1–500), with 2-decimal-place
+   y-axis tick labels and a compact legend.
+
+Source pickle:
+    ``/lustre/.../hardware/test_N2_W2_cvar.p4.shots256.methodCOBYLA.max_iter120.initfixed.pkl``
+
+Output directory:
+    ``/nfs/.../pangenome/out/paper/``
+
+CLI usage::
+
+    python paper_plot.py -f <filename> [-p <reps>] [-N <nodes>] [-T <time>]
+                         [-m <memory>] [-M <method>] [-n <shots>] [-a <alpha>]
+                         [--hardware] [--noisy] [--init {ramp,random,fixed}]
+"""
+
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt

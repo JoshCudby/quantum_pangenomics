@@ -1,3 +1,57 @@
+"""Full HUBO compilation pipeline for hardware-targeted execution.
+
+This script converts a GFA pangenome graph into a compiled QAOA cost-layer
+circuit suitable for execution on real quantum hardware (IBM heavy-hex
+topology).  The pipeline proceeds as follows:
+
+1. **Hamiltonian construction** — calls ``graph_to_hubo_hamiltonian`` to
+   produce both a full and a (optionally subsampled) compiled SparsePauliOp
+   over n*T qubits.
+
+2. **Topology selection** — chooses the smallest heavy-hex patch that can
+   accommodate the n*T virtual qubits and wraps it in an
+   ``ExtendedSwapStrategy``.
+
+3. **Interaction extraction** — ``hamiltonian_to_interactions`` decomposes the
+   Hamiltonian into a list of multi-qubit interaction sets, optionally
+   restricting 4-body and 6-body terms via ``--fraction-four`` and
+   ``--fraction-six``.
+
+4. **SAT layout** — ``HigherOrderSatMapper.hubo_max_sat`` finds the qubit
+   mapping that maximises the fraction of interactions satisfiable within a
+   given number of SWAP layers, looping over 10 evenly-spaced SWAP-layer
+   budgets.
+
+5. **Circuit compilation** — ``get_hubo_pass_manager`` applies
+   ``FindCommutingPauliEvolutionsMulti`` followed by
+   ``CommutingGateRouterPrecomputeRzz`` and cancellation passes to produce the
+   compiled cost layer.
+
+6. **Serialisation** — results are pickled to::
+
+       <basepath>/compilation.<filename>.extra<e>.times<t>.four<f>.six<s>.pkl
+
+   The pickle contains::
+
+       {
+           'full_hamiltonian':     SparsePauliOp,   # all constraint terms
+           'compiled_hamiltonian': SparsePauliOp,   # subsampled constraint
+           <num_layers: int>:      Layout,           # best layout per SWAP budget
+       }
+
+CLI arguments:
+    -f / --filename:       GFA file stem (resolved relative to a hard-coded
+                           data directory).
+    -e / --extra:          Extra SWAP layers passed to the pass manager
+                           (default 1).
+    --fraction-four:       Fraction of 4-body interaction terms to retain.
+    --fraction-six:        Fraction of 6-body interaction terms to retain.
+    --times-to-keep:       Comma-separated list of timestep-transition indices
+                           t for which the (t, t+1) constraint term is kept.
+    -t / --timeout:        SAT solver timeout in seconds.
+    -c / --copy-numbers:   Comma-separated node copy numbers (overrides GFA
+                           weights).
+"""
 import numpy as np
 import networkx as nx
 import pickle
@@ -41,11 +95,27 @@ args = parser.parse_args()
 logger.info(args)
 
 def two_qubit_count(qc: QuantumCircuit):
+    """Count the total number of 2-qubit gates in a circuit.
+
+    Counts CZ, RZZ, CX, and SWAP gates.
+
+    Args:
+        qc: The quantum circuit to inspect.
+
+    Returns:
+        Total number of 2-qubit gates as an integer.
+    """
     ops: dict[str, int] = qc.count_ops()
     return ops.get("cz", 0) + ops.get("rzz", 0) + ops.get("cx", 0) + ops.get("swap", 0)
-   
-    
+
+
 def print_circuit_info(qc: QuantumCircuit, circuit_name: str):
+    """Log the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: The quantum circuit to summarise.
+        circuit_name: A human-readable label included in the log message.
+    """
     logger.info(f'{circuit_name} has {two_qubit_count(qc)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
     

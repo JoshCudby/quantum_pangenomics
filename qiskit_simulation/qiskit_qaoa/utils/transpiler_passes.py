@@ -1,3 +1,17 @@
+"""Custom transpiler passes for grouping and decomposing commuting Pauli evolutions.
+
+Provides three passes used in the HUBO QAOA compilation pipeline:
+
+- ``CommutingBlock``: a ``Gate`` subclass that wraps a set of commuting
+  ``PauliEvolutionGate`` nodes so the routing passes can treat them as a unit.
+- ``FindCommutingPauliEvolutionsMulti``: identifies ``PauliEvolutionGate``
+  instructions whose summands all commute qubit-wise and replaces them with
+  ``CommutingBlock`` gates.
+- ``DecomposePauliZEvolution``: decomposes multi-qubit all-Z
+  ``PauliEvolutionGate`` nodes into CX ladders and a single ``RZZGate`` using
+  the backend coupling map to determine connectivity.
+"""
+
 from __future__ import annotations
 
 import numpy as np

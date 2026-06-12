@@ -1,3 +1,12 @@
+"""EstimatorV2 wrapper that records all circuit evaluations during optimisation.
+
+Provides ``EstimatorWithHistory``, a drop-in replacement for Aer's
+``EstimatorV2`` that saves the raw measurement counts alongside the expectation
+value for every pub evaluated.  The extra data is exposed through
+``PubResult.data.counts`` and is used for debugging optimisation convergence
+and performing post-hoc solution analysis without re-running the circuit.
+"""
+
 from qiskit_aer.primitives import EstimatorV2
 import numpy as np
 from qiskit.primitives.containers import DataBin, PubResult, PrimitiveResult
@@ -8,10 +17,56 @@ from qiskit_qaoa.utils.logging import get_logger
 logger = get_logger(__name__)
 
 class EstimatorWithHistory(EstimatorV2):
+    """Aer EstimatorV2 subclass that attaches raw counts to every PubResult.
+
+    During QAOA parameter optimisation the cost function is evaluated many
+    times.  This class stores the measurement counts for every circuit
+    execution so that:
+
+    - Convergence can be diagnosed by inspecting the energy trajectory.
+    - The best bitstrings seen across all iterations can be retrieved without
+      re-running the circuit at the final parameters.
+
+    The ``counts`` field is injected into the returned ``DataBin`` alongside
+    the standard ``evs`` (expectation values) and ``stds`` arrays.
+    """
+
     def _run(self, pubs: list[EstimatorPub]) -> PrimitiveResult[PubResult]:
+        """Run a list of estimator pubs and collect history for each.
+
+        Args:
+            pubs: A list of ``EstimatorPub`` objects, each specifying a
+                circuit, observables, parameter values, and precision.
+
+        Returns:
+            A ``PrimitiveResult`` containing one ``PubResult`` per pub with
+            ``evs``, ``stds``, and ``counts`` populated in its ``DataBin``.
+        """
         return PrimitiveResult([self._run_pub_with_history(pub) for pub in pubs], metadata={"version": 2})
-    
+
     def _run_pub_with_history(self, pub: EstimatorPub) -> PubResult:
+        """Run a single pub and attach measurement counts to the result.
+
+        Saves expectation values via Aer's ``save_expectation_value`` snapshot
+        instruction for each Pauli in the observable, then broadcasts parameter
+        and observable shapes to produce the full ``evs`` array.  If
+        ``precision > 0`` Gaussian noise is added to simulate shot noise.
+
+        Args:
+            pub: The ``EstimatorPub`` to evaluate.
+
+        Returns:
+            A ``PubResult`` whose ``DataBin`` contains:
+
+            - ``evs``: Numpy array of expectation values with shape matching
+              the broadcast of ``parameter_values`` and ``observables``.
+            - ``stds``: Array filled with ``pub.precision``.
+            - ``counts``: Raw measurement counts dict from the Aer backend.
+
+        Raises:
+            ValueError: If the operator is non-Hermitian and noise is
+                requested (``precision > 0``).
+        """
         circuit = pub.circuit.copy()
         observables = pub.observables
         parameter_values = pub.parameter_values

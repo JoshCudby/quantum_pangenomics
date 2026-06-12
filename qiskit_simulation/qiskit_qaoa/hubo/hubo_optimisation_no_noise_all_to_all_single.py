@@ -1,4 +1,45 @@
+"""Single-shot refinement of a known near-optimal HUBO QAOA parameter point.
 
+Variant of ``hubo_optimisation_no_noise_all_to_all.py`` for local refinement
+starting from a previously identified good parameter point.  Instead of
+basin-hopping with many random restarts, this script performs a single local
+optimisation (scipy ``minimize``) initialised from a hard-coded warm-start
+parameter vector (``param``), corresponding to a p=3 solution found in an
+earlier global search.
+
+The objective minimises the probability of measuring zero-energy (valid
+solution) bitstrings::
+
+    objective(x) = -sum_{k: h_k = 0} |psi_k(x)|^2
+
+This maximises the weight of the statevector on correct-solution states
+directly, without using shot noise.
+
+Serialisation:
+    The result is pickled to::
+
+        /lustre/scratch127/qpg/jc59/out/qiskit/hubo_no_shot_noise_optimum/
+            single.<filename>.p<p>.pkl
+
+    The pickle contains::
+
+        {
+            'result':      scipy.optimize.OptimizeResult,
+            'history':     list of (energy, params, statevector),
+            't_qaoa_circ': QuantumCircuit,
+            'hamiltonian': SparsePauliOp,
+        }
+
+CLI arguments:
+    -f / --filename:       GFA file stem.
+    -M / --method:         scipy optimiser name (default ``COBYLA``).
+    -p / --reps:           Number of QAOA layers p (default 4; overridden to
+                           3 internally to match the warm-start vector).
+    -m / --memory:         GPU memory limit in MB (default 16000).
+    -N / --nodes:          Number of graph nodes N.
+    -T / --time:           Number of timesteps T.
+    -c / --copy-numbers:   Comma-separated node copy numbers.
+"""
 import numpy as np
 import pickle
 import argparse
@@ -28,9 +69,15 @@ from qiskit_qaoa.utils.logging import get_logger
 
 
 def print_circuit_info(qc, circuit_name):
+    """Log the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: The quantum circuit to summarise.
+        circuit_name: A human-readable label included in the log message.
+    """
     logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
-    
+
 
 logger = get_logger(__name__)
 
@@ -130,15 +177,37 @@ zero_eval_indexs = np.nonzero(evals == 0)
 
 
 def callback_cobyla(xk: np.ndarray):
+    """Log the current parameter vector for COBYLA/SLSQP/TNC optimisers.
+
+    Args:
+        xk: Current parameter vector.
+    """
     logger.info(f'Current params: {xk}.')
 
 
 def callback(intermediate_result: OptimizeResult):
+    """Log the current optimiser state for gradient-based optimisers.
+
+    Args:
+        intermediate_result: Current optimiser state from scipy.
+    """
     logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
 
 
-
 def objective(x: np.ndarray):
+    """Evaluate the zero-energy probability objective for local refinement.
+
+    Runs the parameterised QAOA circuit on the AerSimulator statevector
+    backend and returns the negative total probability weight on bitstrings
+    with zero Hamiltonian energy (i.e. valid tangle-resolution solutions).
+    Also records the expected energy in ``history``.
+
+    Args:
+        x: Parameter array of length 2*p.
+
+    Returns:
+        Negative probability on zero-energy states (float), to be minimised.
+    """
     assigned_circuit = t_qaoa_circ.assign_parameters(x, inplace=False)
     assigned_circuit.save_statevector()
     job = backend.run([assigned_circuit])
@@ -146,7 +215,7 @@ def objective(x: np.ndarray):
     data = result.results[0].data
     sv = np.asarray(data.statevector)
     energy = np.sum(np.abs(sv) ** 2 * evals)
-    
+
     history.append((energy, x.tolist(), sv))
     # return energy
     return -np.sum(np.abs(sv[zero_eval_indexs]) ** 2)

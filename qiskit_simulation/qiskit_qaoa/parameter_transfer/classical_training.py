@@ -1,10 +1,45 @@
+"""Classical pre-training of QAOA parameters using MPS simulation.
+
+Pre-trains QAOA variational parameters on a classical simulator before
+transferring them to quantum hardware execution.  The training uses an MPS
+(matrix product state) evaluator from the ``qaoa_training_pipeline`` library
+with a COBYLA inner optimiser (up to 1000 iterations).  After training:
+
+1. A parameter-trajectory plot is saved (beta_j and gamma_j vs. iteration).
+2. The optimised parameters are bound to a QAOAAnsatz circuit, which is
+   transpiled and executed on a GPU statevector Aer backend (10,000 shots).
+3. The resulting sample distribution is plotted as a histogram (QAOA vs.
+   random) with approximation ratios annotated in the legend.
+4. The optimised parameters, final energy, sample counts, and Ising offset are
+   pickled for downstream analysis or hardware upload.
+
+CLI usage::
+
+    python classical_training.py -f <filename> [-p <reps>]
+
+Args:
+    -f / --filename (str): Base name of the QUBO data ``.pkl`` file under
+        ``/lustre/.../tangle/qubo_data_<filename>.gfa.pkl``.
+    -p / --reps (int): QAOA circuit depth (default: 2).
+
+Output:
+    - Parameter trajectory PNG at
+      ``plots/<filename>.depth<p>.trained_parameters.png``.
+    - Sample histogram PNG at
+      ``plots/<filename>.depth<p>.histogram.png``.
+    - Results pickle at
+      ``plots/<filename>.depth<p>.results_mps.pkl`` containing
+      ``optimized_params``, ``energy``, ``result_samples``, and
+      ``ising_offset``.
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 
 import argparse
 from qaoa_training_pipeline.evaluation import MPSEvaluator
-from qaoa_training_pipeline.training import ScipyTrainer 
+from qaoa_training_pipeline.training import ScipyTrainer
 
 from qiskit import transpile
 from qiskit.circuit.library import QAOAAnsatz

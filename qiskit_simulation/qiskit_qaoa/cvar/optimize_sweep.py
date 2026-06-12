@@ -1,3 +1,30 @@
+"""Grid sweep over initial parameters for CVaR-QAOA (shot-based objective).
+
+Performs an exhaustive grid search over (beta, gamma) initial parameter
+combinations using a reduced Cartesian grid whose resolution is automatically
+shrunk so that the total number of starting points stays below 100.  Each
+grid point is locally refined with COBYLA (or another configurable method).
+The best result across all starting points is retained.
+
+This script uses a shot-based CVaR objective (α = 1.0, i.e., full expectation)
+rather than statevector probabilities.  See ``optimize_no_shot_noise_sweep.py``
+for the shot-noise-free variant.
+
+CLI usage::
+
+    python optimize_sweep.py -f <filename> [-p <reps>] [-n <shots>]
+                             [-M <method>]
+
+Args:
+    -f / --filename (str): Base name of the QUBO data ``.pkl`` file.
+    -p / --reps (int): QAOA circuit depth (default: 4).
+    -n / --shots (int): Shots per objective evaluation (default: 10000).
+    -M / --method (str): scipy optimisation method (default: ``"COBYLA"``).
+
+Output:
+    Saves a pickle file containing the best result, full history, circuit
+    graph artefacts, and best samples to the experiments output directory.
+"""
 
 import numpy as np
 import argparse
@@ -38,9 +65,15 @@ seed = 1
 rng = np.random.default_rng()
 
 def print_circuit_info(qc, circuit_name):
+    """Print the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: A Qiskit ``QuantumCircuit`` to inspect.
+        circuit_name (str): Label to include in the output.
+    """
     print(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
-    
+
 
 data_file = f'/lustre/scratch127/qpg/jc59/out/oriented/qubo_data_{filename}.gfa.pkl'
 
@@ -101,35 +134,75 @@ best_samples = []
 best_res = None
 
 def callback(intermediate_result: OptimizeResult):
+    """Log the current parameter vector and objective value (gradient-based solvers).
+
+    Args:
+        intermediate_result: scipy ``OptimizeResult`` with ``.x`` and ``.fun``.
+    """
     logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
-    
+
 
 def callback_cobyla(xk: np.ndarray):
+    """Log the current parameter vector (COBYLA callback interface).
+
+    Args:
+        xk: Current parameter array passed by COBYLA at each iteration.
+    """
     logger.info(f'Current params: {xk}.')
 
+
 def callback_basinhopping(x: np.ndarray, f: float, accept: bool):
+    """Log the current parameters and objective value (basin-hopping callback).
+
+    Args:
+        x: Current parameter array.
+        f: Current objective value.
+        accept: Whether the step was accepted by the basin-hopping criterion.
+    """
     logger.info(f'Current params: {x}. Current func value: {f}')
 
 
 def cvar(energies, alpha=1.0):
+    """Compute the Conditional Value-at-Risk (CVaR) of an energy distribution.
+
+    Args:
+        energies: Iterable of scalar energy values from circuit measurements.
+        alpha (float): CVaR threshold in (0, 1].  Default is 1.0 (full mean).
+
+    Returns:
+        float: Mean energy of the ``floor(alpha * len(energies))`` lowest-
+        energy samples.
+    """
     sorted_energies = sorted(energies)
     end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx
 
 
-
 def objective(x: np.ndarray):
+    """Evaluate the CVaR-QAOA objective (α = 1.0) for a given parameter vector.
+
+    Samples the circuit at parameters ``x``, evaluates each bitstring against
+    the cost operator with Ising offset, and returns the full-mean energy
+    (CVaR at α = 1.0).  Updates module-level best tracking.
+
+    Args:
+        x: 1-D parameter array (betas then gammas) of length
+            ``2 * qaoa_depth``.
+
+    Returns:
+        float: Mean energy over all measurement samples.
+    """
     assigned_circuit = circuit.assign_parameters(x, inplace=False)
     sampler_job = sampler.run([assigned_circuit], shots=args.shots)
     sampler_result = sampler_job.result()
     counts = sampler_result[0].data.c.get_counts()
-    
+
     energies = []
     evals = evaluate_sparse_pauli_samples(counts.keys(), cost_op) + ising_offset
     energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
     flat_energies = [x for xs in energies for x in xs]
     energy = cvar(flat_energies, 1.0)
-    
+
     global best_func_val
     global best_params
     global best_samples

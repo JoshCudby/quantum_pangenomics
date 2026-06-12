@@ -1,21 +1,40 @@
 #!/usr/bin/env python3
-"""
-Find a subset W of at most n sets from a collection S (list of sets of ints)
-such that XOR (symmetric difference) of sets in W equals target T, if exists.
+"""XOR/symmetric-difference subset problem for qubit interaction implementability.
 
-Adaptive strategies:
- - If m = len(S) <= 40: meet-in-the-middle (fast and exact).
- - Else: try solving A x = t over GF(2) (Gaussian elimination on bitmasks).
-         If nullity (free variables) small, brute-force free variable combinations.
- - Else if n is small (<= 6): depth-first search enumerating up to n sets.
- - Otherwise: report that the problem is hard for these parameters (NP-hard
-   in general for weight-constrained solutions); you can increase thresholds.
+Determines which qubit interactions can be implemented without additional SWAP
+gates by solving the following problem: given a collection ``S`` of sets
+(representing parity information currently stored in each qubit) and a target
+set ``T`` (representing the desired interaction), find a subset ``W`` of at
+most ``n`` elements of ``S`` whose symmetric difference equals ``T``.
+
+Adaptive strategy selection:
+
+- If ``m = len(S) <= 40``: meet-in-the-middle (fast and exact).
+- Else: solve ``A x = t`` over GF(2) via Gaussian elimination; if the
+  nullspace is small, brute-force all nullspace combinations.
+- Else if ``n <= 6``: depth-first search enumeration up to ``n`` sets.
+- Otherwise: report that the problem is hard (NP-hard in general for
+  weight-constrained solutions) and return ``None``.
 """
 
 from typing import List, Set, Optional, Tuple, Dict
 import itertools
 
 def compress_universe(sets: List[Set[int]], target: Set[int]):
+    """Map all elements across ``sets`` and ``target`` to compact integer indices.
+
+    Args:
+        sets: A list of sets of integers (the collection ``S``).
+        target: The target set ``T``.
+
+    Returns:
+        A tuple ``(masks, tmask, mapping, inv_map)`` where:
+
+        - ``masks``: A list of integer bitmasks, one per set in ``sets``.
+        - ``tmask``: The bitmask for ``target``.
+        - ``mapping``: A dict mapping original elements to bit positions.
+        - ``inv_map``: The inverse of ``mapping``.
+    """
     # map element -> index
     elems = set()
     for s in sets:
@@ -33,10 +52,34 @@ def compress_universe(sets: List[Set[int]], target: Set[int]):
     return masks, tmask, mapping, inv_map
 
 def popcount(x: int) -> int:
+    """Return the number of set bits (1-bits) in the integer ``x``.
+
+    Args:
+        x: A non-negative integer.
+
+    Returns:
+        The population count (Hamming weight) of ``x``.
+    """
     return x.bit_count()
 
 # Strategy 1: meet-in-the-middle for m <= 40
 def meet_in_the_middle_find(masks: List[int], target: int, n: int) -> Optional[List[int]]:
+    """Find a subset of at most ``n`` bitmasks whose XOR equals ``target``.
+
+    Uses meet-in-the-middle: enumerates all XOR combinations of the left half
+    into a hash map, then matches right-half XOR values against the complement
+    ``target ^ left_xor``.
+
+    Args:
+        masks: List of integer bitmasks (the ``S`` collection after compression).
+        target: The target bitmask.
+        n: Maximum subset size allowed.
+
+    Returns:
+        A list of indices into ``masks`` forming a subset of size ``<= n``
+        whose XOR equals ``target``, or ``None`` if no such subset exists
+        within size ``n``.
+    """
     m = len(masks)
     half = m // 2
     left_idx = list(range(0, half))
@@ -241,6 +284,21 @@ def dfs_combinations_find(masks: List[int], target: int, n: int, max_explore: in
 
 # Top-level function that selects strategy
 def find_subset_with_symmetric_difference(S: List[Set[int]], T: Set[int], n: int) -> Optional[List[Set[int]]]:
+    """Find a subset of ``S`` of size at most ``n`` whose symmetric difference equals ``T``.
+
+    Applies adaptive strategy selection (meet-in-the-middle, GF(2) Gaussian
+    elimination + nullspace search, or DFS) based on the size of ``S`` and
+    ``n``.
+
+    Args:
+        S: A list of sets of integers (the available parity sets).
+        T: The target set (the desired interaction).
+        n: Maximum number of sets that may be included in the subset.
+
+    Returns:
+        A list of sets from ``S`` (not indices) whose symmetric difference
+        equals ``T``, or ``None`` if no such subset of size ``<= n`` exists.
+    """
     masks, tmask, mapping, inv_map = compress_universe(S, T)
     m = len(masks)
     # Quick checks

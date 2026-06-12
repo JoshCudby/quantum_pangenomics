@@ -1,3 +1,20 @@
+"""Updated routing implementation using greedy parity networks.
+
+Provides ``CommutingGateRouterNew``, an updated alternative to
+``CommutingGateRouter`` that replaces the chain-based CX+RZ decomposition with
+the explicit parity-network approach from ``routing_utils``:
+
+- ``greedy_parity_network`` computes the CX-and-RZ sequence that implements
+  all gates in the current layer, building a GF(2) parity matrix.
+- ``greedy_gaussian_elimination`` then uncomputes the parity matrix back to
+  the identity.
+
+This differs from ``commuting_gate_router.py`` in that it does not maintain a
+running ``currently_stored_info`` dict between gates; instead it resets parity
+tracking to the identity at the start of every layer.  The approach is more
+transparent but may produce longer CX sequences for large interaction sets.
+"""
+
 import numpy as np
 from collections import defaultdict
 
@@ -18,6 +35,15 @@ from qiskit_qaoa.utils.routing_utils import greedy_parity_network, greedy_gaussi
 
 
 class CommutingGateRouterNew(TransformationPass):
+    """Updated router using explicit greedy parity networks and Gaussian elimination.
+
+    Routes commuting Pauli-Z evolution gates by encoding the current layer as a
+    parity-vector dict and calling ``greedy_parity_network`` to decompose it
+    into CX + RZ gates, followed by ``greedy_gaussian_elimination`` to uncompute
+    the parity transformation.  Unlike the chain-based routers this approach
+    resets parity state fully between layers.
+    """
+
     def __init__(
         self,
         swap_strategy: ExtendedSwapStrategy,
@@ -34,6 +60,25 @@ class CommutingGateRouterNew(TransformationPass):
         
         
     def run(self, dag: DAGCircuit) -> DAGCircuit:
+        """Apply the greedy-parity-network routing pass to the DAG.
+
+        Iterates topologically over ``dag``.  Each ``CommutingBlock`` is
+        replaced by its routed CX/RZ decomposition (via ``swap_decompose``).
+        Non-block nodes accumulate in a side DAG; if ``perform_extra_swaps`` is
+        True those are compiled with a Qiskit preset pass manager at
+        optimisation level 3 and appended to the output.
+
+        Args:
+            dag: Input ``DAGCircuit`` with a single quantum register.
+
+        Returns:
+            A new ``DAGCircuit`` with ``CommutingBlock`` nodes replaced by
+            native CX/RZ gate sequences.
+
+        Raises:
+            TranspilerError: If the circuit has more than one quantum register
+                or contains qubits outside the register.
+        """
         if len(dag.qregs) != 1:
             raise TranspilerError(
                 f"{self.__class__.__name__} runs on circuits with one quantum register."
@@ -107,6 +152,25 @@ class CommutingGateRouterNew(TransformationPass):
     def swap_decompose(
         self, dag: DAGCircuit, node: DAGOpNode, current_layout: Layout, swap_strategy: ExtendedSwapStrategy
     ) -> DAGCircuit:
+        """Decompose a single ``CommutingBlock`` node using greedy parity networks.
+
+        Builds swap-layer-indexed gate layers from the block, then for each
+        layer calls ``_build_sub_layers`` (which invokes ``greedy_parity_network``
+        and ``greedy_gaussian_elimination``) to emit CX/RZ gates, followed by
+        SWAP gates to advance the layout.
+
+        Args:
+            dag: The parent ``DAGCircuit`` (used for qubit look-ups).
+            node: The ``DAGOpNode`` whose ``op`` is a ``CommutingBlock``.
+            current_layout: Virtual-to-physical qubit mapping; updated in-place
+                by each SWAP gate applied.
+            swap_strategy: The ``ExtendedSwapStrategy`` supplying swap-layer
+                sequences and distance information.
+
+        Returns:
+            A ``DAGCircuit`` implementing the block under the current layout via
+            CX/RZ and SWAP gates.
+        """
         trivial_layout = Layout.generate_trivial_layout(*dag.qregs.values())
         gate_layers, impossible_nodes = self._make_op_layers(dag, node.op, current_layout, swap_strategy)
 

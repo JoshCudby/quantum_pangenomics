@@ -1,3 +1,11 @@
+"""Circuit-to-graph conversions and QAOA ansatz construction.
+
+Provides utilities for extracting the weighted interaction graph from a QAOA
+cost-layer circuit, converting that graph back to a ``SparsePauliOp``
+operator, and building the full multi-layer QAOA circuit (cost + mixer + initial
+state) with optional backend-specific transpilation.
+"""
+
 import copy
 import networkx as nx
 from qiskit.quantum_info import SparsePauliOp
@@ -15,7 +23,27 @@ logger = get_logger(__name__)
 
 
 def circuit_to_graph(qc: QuantumCircuit, parameter) -> nx.Graph:
-    """"QAOA Cost operator as a circuit to a graph"""
+    """Extract the weighted interaction graph from a QAOA cost-layer circuit.
+
+    Iterates over the circuit's instruction data and collects every gate whose
+    parameter expression depends on ``parameter``.  One- and two-qubit gates
+    become self-loop and edge entries respectively.  The edge weight is derived
+    by evaluating the parameter expression at ``parameter=1`` and dividing by 2.
+
+    Args:
+        qc: A QAOA cost-layer ``QuantumCircuit`` containing parameterised
+            gates.
+        parameter: The ``ParameterExpression`` (typically a ``Parameter``
+            object named ``gamma``) to filter on.
+
+    Returns:
+        A ``networkx.Graph`` whose nodes are qubit indices and whose edges
+        carry a ``weight`` attribute equal to the scaled gate coefficient.
+
+    Raises:
+        ValueError: If a gate in the circuit acts on more than two qubits.
+        ValueError: If the same edge appears more than once in the circuit.
+    """
     qreg = qc.qregs[0]
     graph, edges = nx.Graph(), []
     graph.add_nodes_from(range(len(qreg)))
@@ -52,6 +80,22 @@ def circuit_to_graph(qc: QuantumCircuit, parameter) -> nx.Graph:
 
 
 def graph_to_operator(graph: nx.Graph, physical_qubits=None, prefactor: float = 1.0) -> SparsePauliOp:
+    """Convert a weighted interaction graph to a SparsePauliOp ZZ Hamiltonian.
+
+    Each edge ``(i, j, weight)`` in the graph becomes a ``Z_i Z_j`` term with
+    coefficient ``prefactor * weight``.  The Pauli strings are in little-endian
+    Qiskit ordering (qubit 0 at rightmost character).
+
+    Args:
+        graph: A ``networkx.Graph`` with optional ``weight`` edge data.
+            Nodes must be integer qubit indices.
+        physical_qubits: Total number of qubits for the operator.  Defaults
+            to ``len(graph)`` (i.e. the number of nodes).
+        prefactor: A global scalar multiplied into every coefficient (default 1.0).
+
+    Returns:
+        A ``SparsePauliOp`` representing the ZZ Ising Hamiltonian.
+    """
     pauli_list = []
     if physical_qubits is None:
         physical_qubits = len(graph)
@@ -79,6 +123,41 @@ def circuit_construction(
         init_state=None,
         mixer_layer=None
 ):
+    """Build the full multi-layer QAOA circuit from single-qubit and two-qubit Hamiltonians.
+
+    The doubles (ZZ) Hamiltonian is compiled using the swap-strategy pass
+    manager; the singles (single-qubit Z) Hamiltonian is transpiled to RZ gates
+    and prepended to form the combined cost layer.  The ``QAOAConstructionPass``
+    then appends the initial state and mixer layers and handles layout-aware
+    measurement assignment.  Optionally, the resulting circuit is also
+    transpiled for a specific backend at optimisation level 3.
+
+    Args:
+        singles: A ``SparsePauliOp`` containing only single-qubit Z terms of
+            the Hamiltonian.
+        doubles: A ``SparsePauliOp`` containing only ZZ (two-qubit) terms.
+        backend: A Qiskit backend to transpile for, or ``None`` to skip
+            backend-specific transpilation.
+        swap_strat: An ``ExtendedSwapStrategy`` (or compatible) swap strategy
+            for routing ZZ gates.
+        edge_coloring: Edge-coloring dict for the swap strategy coupling map.
+        metadata: Metadata dict attached to the backend-compiled circuit.
+        reps: Number of QAOA layers (p).
+        init_state: Optional ``QuantumCircuit`` for the initial state.
+            Defaults to an empty circuit (all-zero state).
+        mixer_layer: Optional ``QuantumCircuit`` for the mixer layer.
+            Defaults to the standard X-rotation mixer.
+
+    Returns:
+        A dict with the following keys:
+
+        - ``'doubles'``: The QAOAAnsatz circuit built from ``doubles`` only.
+        - ``'tdoubles'``: The swap-strategy-compiled doubles circuit.
+        - ``'cost_circuit'``: Singles prepended to ``tdoubles``.
+        - ``'circuit_to_sample'``: Full QAOA circuit ready for sampling.
+        - ``'backend'`` (only if ``backend`` is not ``None``): The backend-
+          transpiled circuit with ``metadata`` attached.
+    """
     circuits_dict = {}
     n = len(doubles[0].paulis[0])
 

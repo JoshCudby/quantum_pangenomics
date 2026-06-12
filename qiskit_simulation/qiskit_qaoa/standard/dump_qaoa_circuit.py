@@ -1,3 +1,24 @@
+"""Export a QAOA circuit to OpenQASM 3 format.
+
+Builds a QAOAAnsatz from a QUBO data file, then serialises the unparameterised
+(symbolic-parameter) circuit to an OpenQASM 3 string and writes it to a
+``.qasm`` file.  The output is useful for sharing circuits, inspecting gate
+counts, or importing into other quantum software stacks.
+
+CLI usage::
+
+    python dump_qaoa_circuit.py [data_file] [p]
+
+Args:
+    data_file (str): Path to the ``.npy`` QUBO data file
+        (default: ``qubo_data_trivial.gfa.npy``).
+    p (int): QAOA circuit depth / number of repetitions (default: 4).
+
+Output:
+    Writes ``qaoa_n<n>_p<p>_depth<depth>_size<size>.qasm`` to the qiskit
+    output directory.
+"""
+
 import numpy as np
 import sys
 from qiskit_optimization import QuadraticProgram

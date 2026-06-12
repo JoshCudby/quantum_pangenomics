@@ -1,3 +1,38 @@
+"""Visualise HUBO QAOA hardware-run optimisation results.
+
+Loads an optimisation pickle produced by ``hubo_optimisation.py`` (from the
+``hubo_hardware/`` scratch directory) and generates two plots:
+
+1. **Convergence plot**: objective value (CVaR energy) versus optimiser
+   iteration, saved as ``<filename>.times<t>.convergence.png``.
+
+2. **Energy histogram**: density histogram of bitstring energies evaluated at
+   the *final* iteration of the optimiser, compared against a random baseline.
+   Vertical lines mark the optimal energy (0) and the minimum energies
+   achieved by QAOA and random sampling.  Saved as
+   ``<filename>.times<t>.histogram.png``.
+
+Plots are written to::
+
+    /nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/hubo/hardware/
+
+The CLI arguments mirror those of ``hubo_optimisation.py`` and are used to
+reconstruct the exact pickle filename from the optimisation run parameters.
+
+CLI arguments:
+    -f / --filename:       GFA file stem of the original instance.
+    -p / --reps:           Number of QAOA layers p.
+    -d / --swap-depth:     SWAP-layer budget index used during optimisation.
+    -m / --memory:         (Unused; kept for CLI consistency.)
+    -M / --method:         Optimiser method name used.
+    -n / --shots:          Shots per evaluation used.
+    --init:                Initialisation strategy used.
+    -e / --extra:          Extra SWAP layers used during compilation.
+    --fraction-four:       4-body term fraction used.
+    --fraction-six:        6-body term fraction used.
+    --times-to-keep:       Timestep-transition indices used.
+    -a / --alpha:          CVaR tail fraction used.
+"""
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt

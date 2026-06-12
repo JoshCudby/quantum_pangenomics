@@ -1,3 +1,23 @@
+"""Plot CVaR-QAOA convergence and sample-energy histograms.
+
+Loads a pickled CVaR-QAOA optimisation result and generates two plots:
+
+1. **Convergence plot** — objective value vs. optimiser iteration, saved as a
+   PNG to the experiments output directory.
+2. **Histogram** — normalised density of sample energies (QAOA and random
+   baseline) with log-scale x-axis, including post-processed variants where
+   each bitstring is locally improved.  Saved as a PNG alongside the
+   convergence plot.
+
+Source pickle: ``experiments/<filename>_cvar.<suffix>.pkl``
+
+CLI usage::
+
+    python plot_cvar.py -f <filename> [-p <reps>] [-N <nodes>] [-T <time>]
+                        [-m <memory>] [-M <method>] [-n <shots>] [-a <alpha>]
+                        [--hardware] [--noisy] [--init {ramp,random,fixed}]
+"""
+
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt

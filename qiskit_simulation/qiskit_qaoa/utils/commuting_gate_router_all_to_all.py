@@ -1,3 +1,16 @@
+"""All-to-all topology specialisation of the commuting gate router.
+
+Provides ``CommutingGateRouterAllToAll``, which routes commuting Pauli-Z
+evolution gates on an all-to-all connected topology.  Because all qubit pairs
+are directly adjacent in an all-to-all coupling map, no SWAP layers are needed
+and every interaction can be implemented at swap depth 0.
+
+The router still uses the chain-based CX + RZ decomposition to amortise gate
+overhead for higher-order (>2 qubit) interactions, but it never inserts SWAP
+gates and raises an error if a gate is assigned distance ``-1`` (which cannot
+happen on a fully connected graph).
+"""
+
 from __future__ import annotations
 
 import numpy as np
@@ -22,6 +35,15 @@ from qiskit_qaoa.utils.swap_strategy import ExtendedSwapStrategy
 
 
 class CommutingGateRouterAllToAll(TransformationPass):
+    """Routes commuting Pauli-Z evolution gates on an all-to-all topology.
+
+    Specialises ``CommutingGateRouter`` for the case where all qubit pairs are
+    directly connected.  Because the swap strategy has no SWAP layers, every
+    interaction has distance 0 and the circuit requires only CX + RZ gates
+    (no SWAPs).  Raises an exception if any gate is assigned distance ``-1``
+    (unreachable), which should never occur on a fully-connected graph.
+    """
+
     def __init__(
         self,
         swap_strategy: ExtendedSwapStrategy,

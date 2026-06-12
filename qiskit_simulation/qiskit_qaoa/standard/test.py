@@ -1,3 +1,16 @@
+"""GPU vs cuStateVec performance benchmarking for Qiskit-Aer.
+
+Sweeps qubit counts from 15 to 29 using a QuantumVolume circuit and measures
+wall-clock simulation time for two Aer GPU backends:
+
+* **ThrustGPU** — the default Aer GPU statevector implementation.
+* **cuStateVec** — NVIDIA's cuStateVec library (``cuStateVec_enable=True``).
+
+Results are saved as a log-scale PNG plot to the qiskit output directory,
+making it straightforward to identify the crossover point where cuStateVec
+outperforms the Thrust backend.
+"""
+
 from qiskit.circuit.library import QuantumVolume
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_aer import AerSimulator

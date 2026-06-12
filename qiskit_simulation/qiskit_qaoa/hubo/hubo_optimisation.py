@@ -1,4 +1,58 @@
+"""HUBO QAOA parameter optimisation targeting real IBM quantum hardware.
 
+Loads a compiled HUBO circuit produced by ``hubo_circuit_compilation.py``,
+wraps it in a full QAOA ansatz (p repetitions), transpiles to the least-busy
+IBM backend via QiskitRuntimeService, then optimises the beta/gamma parameters
+using ``scipy.optimize.minimize``.
+
+Objective function:
+    The CVaR (Conditional Value-at-Risk) of the bitstring energies evaluated
+    against the remapped full Hamiltonian, controlled by the ``--alpha``
+    parameter.  CVaR with alpha < 1 focuses the objective on the lowest-energy
+    tail of the sample distribution.
+
+Parameter initialisation:
+    - ``ramp``:   linearly spaced schedule based on QAOA annealing heuristic.
+    - ``random``: uniform random in [0, 1].
+    - ``warm``:   not yet implemented.
+
+Serialisation:
+    The optimisation result is pickled to::
+
+        <basepath>/optimisation.<f>.extra<e>.times<t>.four<frac4>.six<frac6>
+            .method<M>.cvar<a>.p<p>.shots<n>.init<init>.d<d>.pkl
+
+    The pickle contains::
+
+        {
+            'result':                   scipy.optimize.OptimizeResult,
+            'history':                  list of (sampling_time, energy, params,
+                                                 counts, post_process_time),
+            'remapped_full_hamiltonian': SparsePauliOp,
+            't_qaoa_circ':              QuantumCircuit,
+            'compiled_hamiltonian':     SparsePauliOp,
+            'layout':                   Layout,
+        }
+
+CLI arguments:
+    -f / --filename:       GFA file stem (used to locate the compilation
+                           pickle).
+    -p / --reps:           Number of QAOA layers p (default 4).
+    -d / --swap-depth:     SWAP-layer budget index to use from the compilation
+                           pickle (default 0).
+    -m / --memory:         GPU memory limit in MB (default 16000).
+    -M / --method:         scipy optimiser name (e.g. ``COBYLA``, ``L-BFGS-B``).
+    -n / --shots:          Shots per circuit evaluation (default 1000).
+    --init:                Parameter initialisation strategy: ``ramp``,
+                           ``random``, or ``warm``.
+    -e / --extra:          Extra SWAP layers used during compilation (default 1).
+    --fraction-four:       Fraction of 4-body terms retained at compilation.
+    --fraction-six:        Fraction of 6-body terms retained at compilation.
+    --times-to-keep:       Timestep-transition indices used at compilation.
+    -N / --nodes:          Number of graph nodes (used to derive n).
+    -T / --time:           Number of timesteps T.
+    -a / --alpha:          CVaR tail fraction in (0, 1] (default 0.25).
+"""
 import numpy as np
 import networkx as nx
 from itertools import combinations
@@ -26,6 +80,12 @@ from qiskit_qaoa.utils.logging import get_logger
 
 
 def print_circuit_info(qc, circuit_name):
+    """Log the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: The quantum circuit to summarise.
+        circuit_name: A human-readable label included in the log message.
+    """
     logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
         
@@ -185,12 +245,39 @@ logger.info(f'Noise model: {getattr(backend.options, "noise_model", "Ideal noise
 history = []
 
 def cvar(energies, alpha=1.0):
+    """Compute the Conditional Value-at-Risk (CVaR) of a list of energies.
+
+    Returns the mean of the lowest ``alpha`` fraction of energies, focusing
+    the objective signal on the lowest-energy tail of the distribution.
+
+    Args:
+        energies: Sequence of energy values (floats).
+        alpha: Tail fraction in (0, 1].  alpha=1.0 returns the plain mean;
+            alpha=0.25 returns the mean of the bottom 25%.
+
+    Returns:
+        CVaR estimate as a float.
+    """
     sorted_energies = sorted(energies)
     end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx
 
 
 def objective(x: np.ndarray):
+    """Evaluate the CVaR objective for a given parameter vector.
+
+    Submits the parameterised QAOA circuit to the IBM Sampler, collects
+    bitstring counts, evaluates each bitstring against the remapped full
+    Hamiltonian, and returns the CVaR of the resulting energy distribution.
+    Appends a record to the module-level ``history`` list.
+
+    Args:
+        x: 1-D parameter array of length 2*p, ordered as
+           [beta_0, ..., beta_{p-1}, gamma_0, ..., gamma_{p-1}].
+
+    Returns:
+        CVaR energy (float) to be minimised.
+    """
     start = time()
     assigned_circuit = t_qaoa_circ.assign_parameters(x, inplace=False)
     sampler_job = sampler.run([assigned_circuit], shots=shots)
@@ -210,12 +297,28 @@ def objective(x: np.ndarray):
 
 
 def callback(intermediate_result: OptimizeResult):
+    """Log the current optimiser state; raise StopIteration if optimal found.
+
+    Used with gradient-based scipy optimisers that pass an OptimizeResult.
+
+    Args:
+        intermediate_result: Current optimiser state provided by scipy.
+
+    Raises:
+        StopIteration: When the objective reaches -1 (used as an early-exit
+            sentinel).
+    """
     logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
     if intermediate_result.fun == -1:
         raise StopIteration
-    
+
 
 def callback_cobyla(xk: np.ndarray):
+    """Log the current parameter vector for COBYLA/SLSQP/TNC optimisers.
+
+    Args:
+        xk: Current parameter vector provided by the optimiser.
+    """
     logger.info(f'Current params: {xk}.')
     
     

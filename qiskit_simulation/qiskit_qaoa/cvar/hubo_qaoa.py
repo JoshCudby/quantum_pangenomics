@@ -1,3 +1,30 @@
+"""CVaR-QAOA applied to a HUBO (Higher-Order Unconstrained Binary Optimisation) cost Hamiltonian.
+
+Unlike standard QUBO, where the cost function contains at most pairwise
+interactions, HUBO allows higher-order terms (degree > 2) in the polynomial
+objective.  This module constructs the HUBO cost Hamiltonian directly from a
+pangenome GFA file by:
+
+1. Building a directed graph of segment nodes and copy-number weights.
+2. Formulating a binary polynomial objective (path-cover constraint + copy-
+   number matching) using symbolic arithmetic (sympy).
+3. Converting the polynomial to an Ising (Z-basis) Hamiltonian via the
+   substitution x_i = 0.5 - Z_i/2.
+4. Applying SAT-mapped SWAP routing and the QAOA ansatz swap-strategy pass
+   manager to compile an efficient p=1 circuit.
+5. Reporting 2-qubit gate counts and depths for multiple transpilation levels.
+
+CLI usage::
+
+    python hubo_qaoa.py -f <filename> -c <copy_numbers>
+
+Args:
+    -f / --filename (str): Base name (without path/extension) of the GFA file
+        under ``/nfs/.../pangenome/data/<filename>.gfa``.
+    -c / --copy-numbers (str): Comma-separated list of float copy numbers,
+        one per GFA segment.
+"""
+
 import numpy as np
 import re
 import gfapy
@@ -24,11 +51,31 @@ from qiskit_ibm_runtime.fake_provider import FakeFez
 from qiskit_qaoa.utils.logging import get_logger
 
 class Binary(Symbol):
+    """A sympy Symbol that squares to itself, modelling binary (0/1) variables.
+
+    Overrides ``_eval_power`` so that ``x**k == x`` for any power ``k``,
+    which is the idempotent property of binary variables (x^2 = x).
+    """
+
     def _eval_power(self, other):
         return self
-    
-    
+
+
 def monomial_to_pauli(monomial):
+    """Convert a sympy monomial of Binary symbols to a Z-basis Pauli string.
+
+    Identifies all variable indices appearing in the monomial (from symbol
+    names of the form ``Z[i]``) and places a ``'Z'`` at the corresponding
+    positions in an all-``'I'`` Pauli string of length ``n * T``.
+
+    Args:
+        monomial: A sympy expression whose atoms are ``Binary`` symbols with
+            names parseable as integers via regex.
+
+    Returns:
+        str: A Pauli string of length ``n * T`` with ``'Z'`` at each qubit
+        index present in the monomial and ``'I'`` elsewhere.
+    """
     indices = [int(re.search(r'[0-9]+', atom.name).group(0)) for atom in monomial.atoms()]
     pauli_str = ['I'] * n * T
     for i in indices:
@@ -37,14 +84,40 @@ def monomial_to_pauli(monomial):
 
 
 def two_qubit_count(qc):
+    """Count the total number of 2-qubit gates in a circuit.
+
+    Counts CZ, RZZ, and CX gates.
+
+    Args:
+        qc: A Qiskit ``QuantumCircuit``.
+
+    Returns:
+        int: Total 2-qubit gate count.
+    """
     return qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)
 
 
 def depth(qc):
+    """Compute the 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: A Qiskit ``QuantumCircuit``.
+
+    Returns:
+        int: Depth considering only gates acting on 2 or more qubits.
+    """
     return qc.depth(lambda instr: len(instr.qubits) > 1)
 
 
 def bin_rep(k):
+    """Return the little-endian binary representation of integer ``k``.
+
+    Args:
+        k (int): Non-negative integer to represent.
+
+    Returns:
+        list[int]: List of ``n`` bits, least-significant bit first.
+    """
     return [int(x) for x in np.binary_repr(k, n)[::-1]]
 
 
@@ -238,6 +311,19 @@ remapped_qc = QAOAAnsatz(
 properties = {}
 
 def get_permutation(pass_, dag, time, property_set, count):
+    """Transpiler callback that captures the virtual-to-physical qubit mapping.
+
+    Registered as a pass-manager callback to record the
+    ``virtual_permutation_layout`` after the layout pass completes.  The
+    result is stored in the module-level ``properties`` dict.
+
+    Args:
+        pass_: The transpiler pass that just ran.
+        dag: The current DAG circuit.
+        time: Elapsed time for the pass.
+        property_set: Dictionary of properties set by transpiler passes.
+        count: Pass execution count.
+    """
     properties["virtual_permutation_layout"] = property_set["virtual_permutation_layout"]
     
     

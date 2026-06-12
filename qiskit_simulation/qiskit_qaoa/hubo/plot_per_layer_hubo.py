@@ -1,3 +1,39 @@
+"""Visualise HUBO per-layer QAOA optimisation results.
+
+Loads an optimisation pickle produced by ``hubo_optimisation_per_layer.py``
+and generates three plots:
+
+1. **Convergence plot**: objective value (CVaR energy) versus optimiser
+   iteration.  Saved as ``<filename>.convergence.png``.
+
+2. **Final-iteration histogram**: density histogram of bitstring energies at
+   the last optimiser step, compared against random samples.  Saved as
+   ``<filename>.histogram.png``.
+
+3. **Pre-QAOA histogram**: same histogram but using counts from the *first*
+   optimiser iteration (before significant parameter tuning), to illustrate
+   the initial state quality.  Saved as ``<filename>.pre_qaoa.histogram.png``.
+
+All plots are written to::
+
+    /nfs/users/nfs_j/jc59/quantumwork/pangenome/qiskit_simulation/out/hubo/
+
+The CLI arguments mirror those of ``hubo_optimisation_per_layer.py`` and are
+used to reconstruct the exact pickle filename.
+
+CLI arguments:
+    -f / --filename:       GFA file stem of the original instance.
+    -p / --reps:           Number of QAOA layers p.
+    -m / --memory:         (Unused; kept for CLI consistency.)
+    -M / --method:         Optimiser method name used.
+    -n / --shots:          Shots per evaluation used.
+    --init:                Initialisation strategy used.
+    -e / --extra:          Extra SWAP layers used during compilation.
+    --fraction-four:       4-body term fraction used.
+    --fraction-six:        6-body term fraction used.
+    -a / --alpha:          CVaR tail fraction used.
+    -C / --coupling-map:   Topology used: ``line`` or ``grid``.
+"""
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt

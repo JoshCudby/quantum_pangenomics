@@ -1,3 +1,19 @@
+"""Masked variant of the precompute+RZZ router.
+
+Provides a ``CommutingGateRouterPrecomputeRzz`` specialisation that routes
+only a controlled subset of interactions (the "mask").  Interactions outside
+the mask are placed in the ``impossible_gates`` dict at the start of each swap
+layer and may be opportunistically implemented if they fall naturally within
+the CX chains chosen for the in-mask interactions.
+
+This is useful when only a subset of Hamiltonian terms need to be routed at
+high accuracy (e.g. the dominant terms for a truncated HUBO) while the rest
+are handled by a fallback.  The implementation uses the same bitmask-based
+chain precomputation as ``commuting_gate_router_precompute_rzz.py`` but adds
+an explicit ``_adj`` adjacency list built at construction time for fast
+connectivity queries.
+"""
+
 import numpy as np
 from typing import Optional, Tuple, List
 from collections import defaultdict
@@ -20,6 +36,25 @@ from qiskit_qaoa.utils.shortest_sequence_graph_reset import heuristic_spanning_t
 
 
 class CommutingGateRouterPrecomputeRzz(TransformationPass):
+    """Masked variant of the precompute+RZZ router for HUBO QAOA.
+
+    Routes only the interactions specified by a mask, placing all other
+    interactions into an ``impossible_gates`` dict that may be opportunistically
+    resolved if they happen to align with the CX chains generated for the
+    in-mask terms.  Uses the same bitmask-based chain precomputation and RZZ
+    gate emission as ``commuting_gate_router_precompute_rzz.py``, extended with
+    an explicit ``_adj`` adjacency list for fast connectivity lookups.
+
+    Args:
+        swap_strategy: The ``ExtendedSwapStrategy`` describing the hardware
+            topology and precomputed swap-layer sequences.
+        max_layers: Maximum number of swap layers to consider when routing an
+            interaction; interactions that require more layers are classified as
+            impossible.
+        perform_extra_swaps: If True, impossible interactions are forwarded to a
+            standard Qiskit preset pass manager after the main routing phase.
+    """
+
     def __init__(
         self,
         swap_strategy: ExtendedSwapStrategy,
@@ -37,6 +72,26 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
         
         
     def run(self, dag: DAGCircuit) -> DAGCircuit:
+        """Apply the masked precompute+RZZ routing pass to the DAG.
+
+        Iterates over all topological nodes of ``dag``.  Each
+        ``CommutingBlock`` is replaced by its routed CX/RZZ decomposition via
+        ``swap_decompose``; all other nodes are deferred to the accumulator.
+        After the main pass, if ``perform_extra_swaps`` is True the
+        accumulated impossible gates are compiled with a Qiskit preset pass
+        manager at optimisation level 3.
+
+        Args:
+            dag: The input ``DAGCircuit`` containing one quantum register.
+
+        Returns:
+            A new ``DAGCircuit`` with all ``CommutingBlock`` nodes replaced by
+            native CX/RZZ gate sequences.
+
+        Raises:
+            TranspilerError: If the circuit has more than one quantum register
+                or contains qubits outside the register.
+        """
         if len(dag.qregs) != 1:
             raise TranspilerError(
                 f"{self.__class__.__name__} runs on circuits with one quantum register."
@@ -112,6 +167,26 @@ class CommutingGateRouterPrecomputeRzz(TransformationPass):
     def swap_decompose(
         self, dag: DAGCircuit, node: DAGOpNode, current_layout: Layout, swap_strategy: ExtendedSwapStrategy
     ) -> DAGCircuit:
+        """Decompose a single ``CommutingBlock`` node into a routed CX/RZZ circuit.
+
+        Partitions the gates in the block into swap layers according to their
+        distance in ``swap_strategy``, emits CX/RZZ sub-layers for each swap
+        step via ``_build_chain_sub_layers``, and inserts SWAP gates between
+        layers to advance the virtual layout.  Any interactions that cannot be
+        routed within ``max_layers`` are stored in ``self._cannot_implement``.
+
+        Args:
+            dag: The parent ``DAGCircuit`` (used for qubit look-ups).
+            node: The ``DAGOpNode`` whose ``op`` is a ``CommutingBlock``.
+            current_layout: The current virtual-to-physical qubit mapping;
+                updated in-place by each SWAP gate applied.
+            swap_strategy: The ``ExtendedSwapStrategy`` supplying swap-layer
+                sequences and distance information.
+
+        Returns:
+            A ``DAGCircuit`` containing the routed CX/RZZ and SWAP gates that
+            implement the block under the current layout.
+        """
         trivial_layout = Layout.generate_trivial_layout(*dag.qregs.values())
         gate_layers, impossible_nodes = self._make_op_layers(dag, node.op, current_layout, swap_strategy)
 

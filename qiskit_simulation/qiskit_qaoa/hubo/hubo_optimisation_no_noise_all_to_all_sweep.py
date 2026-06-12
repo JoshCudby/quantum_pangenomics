@@ -1,4 +1,52 @@
+"""Parameter sweep for no-noise HUBO QAOA on an all-to-all topology.
 
+Exhaustive grid-search variant of ``hubo_optimisation_no_noise_all_to_all.py``.
+Constructs a dense grid over the (beta, gamma) search space and launches a
+local COBYLA optimisation from each grid point, enabling thorough exploration
+of the QAOA landscape without relying on a single random initialisation.
+
+Grid construction:
+    Beta values are sampled uniformly in (0, pi) and gamma values in (-pi, pi).
+    The resolution is chosen adaptively: starting from (30, 30), both
+    ``beta_resolution`` and ``gamma_resolution`` are decremented until the
+    total number of grid points satisfies::
+
+        (beta_resolution^p) * (gamma_resolution^p) <= 1000
+
+    ensuring tractable runtime.
+
+Objective function:
+    Negative probability on zero-energy bitstrings::
+
+        objective(x) = -sum_{k: h_k = 0} |psi_k(x)|^2
+
+    This directly maximises overlap with correct-solution states.
+
+Serialisation:
+    The sweep results are pickled to::
+
+        /lustre/scratch127/qpg/jc59/out/qiskit/hubo_no_shot_noise_optimum/
+            sweep.<filename>.p<p>.pkl
+
+    The pickle contains::
+
+        {
+            'results':        list of scipy.optimize.OptimizeResult,
+            'history':        list of (energy, score, params),
+            't_qaoa_circ':    QuantumCircuit,
+            'hamiltonian':    SparsePauliOp,
+            'best_sv':        np.ndarray,
+            'best_func_val':  float,
+            'best_params':    np.ndarray,
+        }
+
+CLI arguments:
+    -f / --filename:       GFA file stem.
+    -M / --method:         scipy optimiser name (default ``COBYLA``).
+    -p / --reps:           Number of QAOA layers p (default 4).
+    -m / --memory:         GPU memory limit in MB (default 16000).
+    -c / --copy-numbers:   Comma-separated node copy numbers.
+"""
 import numpy as np
 import pickle
 import argparse
@@ -30,9 +78,15 @@ from qiskit_qaoa.utils.logging import get_logger
 
 
 def print_circuit_info(qc, circuit_name):
+    """Log the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: The quantum circuit to summarise.
+        circuit_name: A human-readable label included in the log message.
+    """
     logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
-    
+
 
 logger = get_logger(__name__)
 
@@ -138,15 +192,37 @@ zero_eval_indexs = np.nonzero(evals == 0)
 
 
 def callback_cobyla(xk: np.ndarray):
+    """Log the current parameter vector for COBYLA/SLSQP/TNC optimisers.
+
+    Args:
+        xk: Current parameter vector.
+    """
     logger.info(f'Current params: {xk}.')
 
 
 def callback(intermediate_result: OptimizeResult):
+    """Log the current optimiser state for gradient-based optimisers.
+
+    Args:
+        intermediate_result: Current optimiser state from scipy.
+    """
     logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
 
 
-
 def objective(x: np.ndarray):
+    """Evaluate the zero-energy probability objective for the parameter sweep.
+
+    Runs the parameterised QAOA circuit on the AerSimulator statevector
+    backend and returns the negative total probability weight on bitstrings
+    with zero Hamiltonian energy (valid solutions).  Updates the module-level
+    best-found solution and appends a record to ``history``.
+
+    Args:
+        x: Parameter array of length 2*p.
+
+    Returns:
+        Negative probability on zero-energy states (float), to be minimised.
+    """
     assigned_circuit = t_qaoa_circ.assign_parameters(x, inplace=False)
     assigned_circuit.save_statevector()
     job = backend.run([assigned_circuit])
@@ -155,7 +231,7 @@ def objective(x: np.ndarray):
     sv = np.asarray(data.statevector)
     energy = np.sum(np.abs(sv) ** 2 * evals)
     score = -np.sum(np.abs(sv[zero_eval_indexs]) ** 2)
-    
+
     global best_func_val
     global best_params
     global best_sv

@@ -1,3 +1,23 @@
+"""Routes commuting Pauli evolution gates using a swap strategy.
+
+Provides ``CommutingGateRouter``, a ``TransformationPass`` that takes a DAG
+containing ``CommutingBlock`` gates (produced by
+``FindCommutingPauliEvolutionsMulti``) and routes their constituent Pauli Z
+evolution gates to hardware by interleaving SWAP layers from an
+``ExtendedSwapStrategy``.
+
+Because all terms in a ``CommutingBlock`` are mutually commuting Pauli-Z
+evolutions, they can be freely reordered among the swap layers to minimise the
+total number of swaps required.  The router groups gates by the swap depth at
+which they become implementable (``_make_op_layers``) and decomposes each
+group using a chain-based CX ladder (``_build_chain_sub_layers``) that
+amortises the CX overhead across multiple gates by reusing accumulated parity
+information.
+
+This is the original (non-precomputing, non-RZZ) variant.  See
+``commuting_gate_router_precompute_rzz.py`` for the default production router.
+"""
+
 from __future__ import annotations
 
 import numpy as np
@@ -22,6 +42,25 @@ from qiskit_qaoa.utils.swap_strategy import ExtendedSwapStrategy
 
 
 class CommutingGateRouter(TransformationPass):
+    """Routes commuting Pauli-Z evolution gates using an ``ExtendedSwapStrategy``.
+
+    Processes each ``CommutingBlock`` in the DAG by:
+
+    1. Checking which gates can be implemented within ``max_layers`` swap steps.
+    2. Grouping gates by the swap depth at which they become implementable.
+    3. For each depth group, applying a chain-based CX + RZ decomposition that
+       accumulates parity information to avoid redundant CX gates.
+    4. Inserting SWAP layers between groups.
+
+    Gates that cannot be implemented within ``max_layers`` are optionally
+    appended at the end using Qiskit's preset pass manager
+    (``perform_extra_swaps=True``) or silently dropped.
+
+    Unlike ``CommutingGateRouterPrecomputeRzz``, this variant uses single-qubit
+    RZ rotations rather than native RZZ gates, and does not precompute the CX
+    sequences.
+    """
+
     def __init__(
         self,
         swap_strategy: ExtendedSwapStrategy | None = None,

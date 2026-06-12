@@ -1,3 +1,34 @@
+"""Circuit depth and width analysis for CVaR QAOA circuits.
+
+For a given QUBO data file and circuit depth ``p``, this script:
+
+1. Constructs the Ising Hamiltonian from the QUBO matrix.
+2. Transpiles the raw QAOAAnsatz circuit to a generic heavy-hex backend
+   (17 qubits, heavy-hex coupling map).
+3. Applies SAT-mapped SWAP routing from qopt-best-practices.
+4. Reports and appends to a results file: qubit count, ``T_max``, graph
+   vertex count ``V``, and the 2-qubit gate counts and depths for both the
+   naively transpiled and SWAP-mapped circuits.
+
+Intended to be called in a batch loop over many problem instances to build
+up a ``results.txt`` table for scaling analysis.
+
+CLI usage::
+
+    python qaoa_depth_width.py -f <filename> [-p <reps>] [-m <memory>]
+                               [-d <data-dir>]
+
+Args:
+    -f / --filename (str): Base name of the QUBO data ``.pkl`` file.
+    -p / --reps (int): QAOA circuit depth (default: 4).
+    -m / --memory (int): Simulator memory limit in MB (default: 4000).
+    -d / --data-dir (str): Directory containing the QUBO ``.pkl`` files
+        (default: ``/lustre/.../oriented``).
+
+Output:
+    Appends a single CSV line to ``/lustre/.../qaoa_depth_width/results.txt``
+    and logs the same line.
+"""
 
 import numpy as np
 import pickle
@@ -79,6 +110,16 @@ def mod_to_ising(quad_prog: QuadraticProgram) -> Tuple[SparsePauliOp, float]:
             coeff_dict[(i, j)] = coeff_dict.get((i, j), 0) + weight
 
     def key_to_pauli(key: tuple):
+        """Convert a tuple of variable indices to a Pauli Z operator.
+
+        Args:
+            key: Tuple of integer variable indices where Z operators should
+                be placed.
+
+        Returns:
+            Pauli: A Pauli operator with Z at each index in ``key`` and I
+            elsewhere.
+        """
         z_p = np.zeros(num_vars, dtype=bool)
         for idx in key:
             z_p[idx] = True
@@ -172,9 +213,26 @@ backend_circ = circ_dict["backend"]
 
 
 def two_qubit_count(qc):
+    """Count the total number of CZ, RZZ, and CX gates in a circuit.
+
+    Args:
+        qc: A Qiskit ``QuantumCircuit``.
+
+    Returns:
+        int: Total 2-qubit gate count.
+    """
     return qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)
 
+
 def depth(qc):
+    """Compute the 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: A Qiskit ``QuantumCircuit``.
+
+    Returns:
+        int: Depth considering only gates acting on 2 or more qubits.
+    """
     return qc.depth(lambda instr: len(instr.qubits) > 1)
 
 logger.info(f'{Q.shape[0]}, {data["T_max"]}, {data["V"]}, {two_qubit_count(transpiled_qc)}, {depth(transpiled_qc)}, {two_qubit_count(backend_circ)}, {depth(backend_circ)}')

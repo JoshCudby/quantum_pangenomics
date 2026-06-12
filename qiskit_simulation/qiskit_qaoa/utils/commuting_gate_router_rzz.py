@@ -1,3 +1,15 @@
+"""RZZ-gate variant of the commuting Pauli evolution router.
+
+Provides ``CommutingGateRouterRzz``, which is functionally identical to
+``CommutingGateRouter`` but emits native ``RZZ`` gates instead of the CX + RZ
+decomposition for two-qubit interactions.  On hardware or simulators where RZZ
+is a basis gate this produces lower circuit depth and fewer two-qubit gate
+layers compared to the CX-based approach.
+
+Multi-qubit (order > 2) interactions are still decomposed via CX ladders,
+with the final two-qubit rotation expressed as ``RZZ``.
+"""
+
 from __future__ import annotations
 
 import numpy as np
@@ -36,6 +48,18 @@ def print_error_and_raise(site, rotation_site, missing_information, currently_st
 
 
 class CommutingGateRouterRzz(TransformationPass):
+    """Routes commuting Pauli-Z evolution gates, emitting native RZZ gates.
+
+    Extends the chain-based routing approach of ``CommutingGateRouter`` by
+    replacing two-qubit CX+RZ decompositions with single ``RZZ`` gates where
+    the rotation site consists of exactly two adjacent qubits.  This reduces
+    circuit depth on backends that support RZZ natively.
+
+    Gates that cannot be implemented within ``max_layers`` swap steps are
+    tracked in ``self._cannot_implement`` and optionally appended at the end
+    using Qiskit's preset pass manager when ``perform_extra_swaps=True``.
+    """
+
     def __init__(
         self,
         swap_strategy: ExtendedSwapStrategy | None = None,

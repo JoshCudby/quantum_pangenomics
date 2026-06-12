@@ -1,9 +1,42 @@
+"""CX-sequence solvers for resetting qubit parity to the identity.
+
+After a chain of CX gates accumulates parity information across qubits, the
+parity matrix must be reset to the identity (each qubit again stores only its
+own information) before the next chain can begin.  This module provides several
+algorithms for finding the shortest such reset sequence:
+
+- ``enumerate_removal_pair_sequences``: generates all valid CX sequences that
+  reduce a connected qubit graph by one vertex at a time while maintaining
+  connectivity, up to ``max_solutions``.
+- ``bfs_shortest_sequence``: BFS over the GF(2) row-operation state space to
+  find the globally shortest sequence of adjacency CX operations that transform
+  the current parity rows into the identity.
+- ``heuristic_spanning_tree_solver``: translates standard Gaussian-elimination
+  row operations to adjacency-graph CX operations via a spanning tree, providing
+  a fast approximate solution when BFS is too expensive.
+- ``sort_by_length``: helper to sort interaction tuples by length for chain
+  ordering.
+
+Also provides lower-level GF(2) utilities: ``gf2_rank``, ``labels_to_bitrows``,
+``bitrows_to_labels``, ``gaussian_elimination_record_ops``, and BFS/tree path
+helpers.
+"""
+
 from collections import deque, OrderedDict
 from typing import Dict, Set, Iterable, List, Generator, Optional, Tuple
 
 
 
 def sort_by_length(items, ascending: bool = True):
+    """Sort interaction tuples by length, breaking ties lexicographically.
+
+    Args:
+        items: An iterable of tuples (or other sized sequences).
+        ascending: If ``True`` (default), shorter tuples come first.
+
+    Returns:
+        A sorted list of the input items.
+    """
     def key_fn(e):
         return (len(e), tuple(sorted(e)))
     return sorted(items, key=key_fn, reverse=not ascending)
@@ -39,6 +72,33 @@ def enumerate_removal_pair_sequences(
     neighbor_order: Optional[Dict[int, Iterable[int]]] = None,
     max_solutions: Optional[int] = None,
 ) -> Generator[List[Tuple[int, int]], None, None]:
+    """Enumerate sequences of (vertex, neighbour) CX pairs that reduce a connected graph.
+
+    At each step, a vertex ``v`` is removed from the remaining set and
+    "merged" into a neighbour ``u`` (meaning CX(v, u) is applied: row_u ^=
+    row_v).  Only removals that leave the remaining graph connected are
+    considered.  The generator yields all valid sequences until the graph is
+    reduced to ``stop_at`` vertices or ``max_solutions`` sequences have been
+    found.
+
+    Args:
+        vertices: The initial vertex set.
+        edges: Undirected edges as iterables of two vertex labels.
+        stop_at: The target number of remaining vertices.  Must satisfy
+            ``1 <= stop_at <= len(vertices)``.
+        order: Optional preferred ordering of vertices to try first.
+        neighbor_order: Optional per-vertex preferred ordering of neighbours.
+        max_solutions: Maximum number of sequences to yield before stopping.
+            If ``None``, all sequences are yielded.
+
+    Yields:
+        Lists of ``(source, target)`` CX gate tuples in application order.
+
+    Raises:
+        ValueError: If ``stop_at`` is out of range or the initial graph is
+            not connected.
+        KeyError: If an edge references a vertex not in ``vertices``.
+    """
     """
     Enumerate sequences of (removed_vertex, neighbor) pairs where removing removed_vertex
     and merging into neighbor keeps the rest of the graph connected.
@@ -128,7 +188,20 @@ def enumerate_removal_pair_sequences(
 # Labels <-> bitrows mapping
 # -----------------------
 def labels_to_bitrows(vertices: List, labels: Dict) -> List[int]:
-    """Map labels (sets of vertices) to bitmask rows using vertex order indexing."""
+    """Convert a per-vertex label dict (sets of vertices) to a list of integer bitmasks.
+
+    Args:
+        vertices: Ordered list of vertex labels defining the bit positions.
+        labels: A dict mapping each vertex to the set of vertices whose parity
+            it currently stores (i.e. the ``currently_stored_info`` dict).
+
+    Returns:
+        A list of integers (one per vertex) where bit ``j`` is set if vertex
+        ``vertices[j]`` is in ``labels[vertices[i]]``.
+
+    Raises:
+        KeyError: If a label contains a vertex not in ``vertices``.
+    """
     index = {v: i for i, v in enumerate(vertices)}
     rows = []
     for v in vertices:
@@ -440,6 +513,29 @@ def heuristic_spanning_tree_solver(
     max_local_bfs_states: int = 50_000,
     spanning_tree_edges: Optional[List[Tuple[int,int]]] = None
 ) -> Optional[List[Tuple[int,int]]]:
+    """Find a CX sequence that resets qubit parity to the identity using a spanning tree.
+
+    Translates Gaussian-elimination row operations (swaps and XOR) into
+    adjacency-graph CX operations by routing along shortest paths in the
+    spanning tree.  Faster than full BFS but may produce longer sequences for
+    non-tree edges.
+
+    Args:
+        vertices: List of integer qubit labels.
+        edges: Undirected edges (pairs of vertex labels) defining the
+            adjacency graph for CX operations.
+        labels: The current ``currently_stored_info`` dict mapping each vertex
+            to the set of vertices whose parity it stores.
+        max_local_bfs_states: BFS state budget for synthesising individual
+            row operations along a path (default 50 000).
+        spanning_tree_edges: Optional pre-computed spanning tree edges.
+            If ``None``, a BFS spanning tree rooted at vertex 0 is used.
+
+    Returns:
+        A list of ``(source, target)`` CX gate tuples (in vertex-label space)
+        that transform ``labels`` to the identity, or ``None`` if the solver
+        cannot find a valid sequence.
+    """
     n = len(vertices)
     adj = build_adjacency(vertices, edges)
     rows = labels_to_bitrows(vertices, labels)

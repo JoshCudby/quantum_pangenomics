@@ -1,3 +1,34 @@
+"""Standard QUBO QAOA optimisation using Qiskit-Aer.
+
+Builds a QAOAAnsatz circuit from a QUBO cost Hamiltonian loaded from a ``.npy``
+data file and optimises the variational parameters (beta, gamma) using either
+basin-hopping (scipy) or Bayesian (scikit-optimize) search.  The simulator
+backend can be a GPU statevector, multi-GPU statevector with cache-blocking, or
+an MPS (matrix product state) backend.
+
+CLI usage::
+
+    python optimize_qaoa.py <seed> [data_file] [method] [p] [use_gpu] [cpu_mem] [optimization_method]
+
+Args:
+    seed (int): Random seed (required, positional argv[1]).
+    data_file (str): Path to the ``.npy`` QUBO data file
+        (default: ``qubo_data_trivial.gfa.npy``).
+    method (str): Aer simulation method, e.g. ``"automatic"``,
+        ``"statevector"``, ``"matrix_product_state"`` (default:
+        ``"automatic"``).
+    p (int): QAOA circuit depth / number of repetitions (default: 4).
+    use_gpu (int): Non-zero to enable GPU device (default: 0 / CPU).
+    cpu_mem (int): CPU memory limit in MB for the simulator (default: 4000).
+    optimization_method (str): Parameter search strategy — ``"scipy"`` for
+        basin-hopping or ``"scikit"`` for Bayesian optimisation
+        (default: ``"scipy"``).
+
+Output:
+    Saves the optimised parameter vector as a ``.npy`` file at
+    ``qaoa_params_n<qubits>_p<p>_seed<seed>.npy``.
+"""
+
 import numpy as np
 import sys
 from qiskit.circuit.library import QAOAAnsatz

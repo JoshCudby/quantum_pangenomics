@@ -1,3 +1,22 @@
+"""Plot CVaR-QAOA convergence and histogram for the phylogenetic (Orson) dataset.
+
+Loads a phylo CVaR-QAOA result pickle and generates:
+
+1. **Convergence plot** (2 panels) — objective value per iteration and
+   cumulative quantum/classical runtimes vs. total sample count.
+2. **Energy histogram** — QAOA samples vs. random samples density plot,
+   with vertical lines for the CPLEX optimal and best QAOA/random solutions.
+   Approximation ratios for both QAOA and random search are annotated in the
+   legend.
+
+Source pickle: ``/lustre/.../orson/phylo.cvar.<suffix>.pkl``
+
+CLI usage::
+
+    python plot_cvar2.py [-p <reps>] [-n <shots>] [--hardware] [--noisy]
+                         [--init {ramp,random}]
+"""
+
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt

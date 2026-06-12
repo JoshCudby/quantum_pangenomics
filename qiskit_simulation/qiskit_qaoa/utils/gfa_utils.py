@@ -1,3 +1,11 @@
+"""GFA file parsing for qiskit_simulation.
+
+Converts a GFA (Graphical Fragment Assembly) pangenome graph into a
+``networkx.DiGraph`` suitable for QUBO problem construction, computing
+the number of binary variables (``n``) and the QAOA walk length (``T``)
+from the segment copy numbers.
+"""
+
 import gfapy
 import networkx as nx
 import numpy as np
@@ -5,6 +13,35 @@ from typing import Sequence
 
 
 def gfa_file_to_graph(filepath: str, copy_numbers: Sequence[float | int]):
+    """Parse a GFA file and build a directed segment graph with copy-number weights.
+
+    Each GFA segment becomes two nodes (``<name>_+`` and ``<name>_-``)
+    representing the forward and reverse orientations.  Each GFA edge creates
+    directed arcs between the appropriate orientation nodes and their reverse-
+    complement counterparts.
+
+    Args:
+        filepath: Path to the ``.gfa`` file.
+        copy_numbers: A sequence of numeric copy numbers, one per segment in
+            the GFA file (in the order they appear).  Must have the same
+            length as the number of segments.
+
+    Returns:
+        A tuple ``(graph, n, V, T)`` where:
+
+        - ``graph``: A ``networkx.DiGraph`` with nodes labelled
+          ``'<seg>_+'`` / ``'<seg>_-'`` carrying ``weight`` (copy number)
+          and ``start`` (segment start position) attributes.
+        - ``n``: Number of bits required to represent any node index
+          (``ceil(log2(V+1))``).
+        - ``V``: Total number of nodes in the graph.
+        - ``T``: Upper-bound walk length, set to ``ceil(1.1 * total_weight)``
+          where ``total_weight`` is half the sum of all copy numbers.
+
+    Raises:
+        Exception: If ``len(copy_numbers)`` does not match the number of
+            segments in the GFA file.
+    """
     gfa = gfapy.Gfa.from_file(filepath, vlevel=0)
 
     graph = nx.DiGraph()

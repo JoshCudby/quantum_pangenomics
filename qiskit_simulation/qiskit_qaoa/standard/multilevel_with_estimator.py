@@ -1,3 +1,25 @@
+"""Multi-level QAOA using EstimatorWithHistory for convergence tracking.
+
+Variant of the hierarchical QAOA approach (see ``multi_level_experiment.py``)
+that replaces the raw AerSimulator shot-based objective with a Qiskit
+``EstimatorWithHistory`` primitive, enabling direct energy-expectation
+evaluation and recording of the full convergence history.  Parameters are
+extrapolated from depth p to p+1 using DCT-IV/DST-IV frequency-domain
+interpolation, and ``R`` perturbed candidates are seeded at each step.
+
+CLI usage::
+
+    python multilevel_with_estimator.py <filename>
+
+Args:
+    filename (str): Base name (without path or extension) of the QUBO data
+        file under ``/lustre/.../qubo_data_<filename>.gfa.npy``.
+
+Output:
+    A PNG convergence plot (cost vs. number of measurements) saved to the
+    multilevel_estimator output directory.
+"""
+
 import numpy as np
 import sys
 from qiskit.circuit.library import QAOAAnsatz
@@ -32,6 +54,23 @@ v_objective_evaluate = np.vectorize(objective.evaluate, signature='(i)->()')
 
 
 def get_perturbed_next_layer_params(params, R, alpha):
+    """Generate R+1 candidate parameter sets for the next QAOA layer.
+
+    Extrapolates the current parameters to depth p+1 via zero-padded DCT-IV/
+    DST-IV frequency interpolation and produces ``R`` additional perturbed
+    candidates by adding Gaussian noise scaled to the frequency-coefficient
+    magnitudes.
+
+    Args:
+        params: 1-D array of length ``2*p`` (betas then gammas).
+        R: Number of perturbed candidate initialisation points to generate.
+        alpha: Perturbation strength relative to each frequency-coefficient
+            magnitude.
+
+    Returns:
+        np.ndarray: Array of shape ``(R+1, 2*(p+1))`` where row 0 is the
+        unperturbed extrapolation and rows 1..R are perturbed variants.
+    """
     p = int(len(params) / 2)
     beta, gamma = params[:p], params[p:]
     u, v = idst(gamma, type=4), idct(beta, type=4)
@@ -43,6 +82,16 @@ def get_perturbed_next_layer_params(params, R, alpha):
 
 
 def callback(intermediate_result):
+    """Log the current objective value and signal convergence if near zero.
+
+    Passed to the local optimiser as its ``callback`` argument.  Raises
+    ``StopIteration`` when the global minimum cost history drops below 1e-6,
+    causing scipy to terminate the optimisation early.
+
+    Args:
+        intermediate_result: Optimisation result object exposing a ``.fun``
+            attribute with the current objective value.
+    """
     logger.info(f'Inter result: {intermediate_result.fun}')
     if np.min(costs_history) < 1e-6 == 0:
         raise StopIteration

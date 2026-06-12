@@ -1,8 +1,33 @@
+"""Bitstring filtering using Gosper's hack.
+
+Post-processes QAOA measurement outcomes to enforce a fixed Hamming-weight
+constraint (exactly ``T`` ones).  For each sample that has more than ``T``
+ones, the full set of bitstrings that can be formed by choosing exactly ``T``
+of those one-positions is enumerated using Gosper's hack for iterating over
+k-bit combinations.
+"""
+
+
 def postprocess(samples: list[str], T: int) -> list[list[str]]:
-    """
-    For each bitstring in `samples`, if it has more than T ones,
-    return a list of all bitstrings formed by selecting exactly T of those '1' positions
-    (zeros elsewhere). Optimized using integer bitmasks and Gosper's hack.
+    """Filter each sample to all length-T subsets of its set bits.
+
+    For each bitstring in ``samples``, if it has strictly more than ``T`` ones
+    (and no more than ``2.5 * T``), produces all bitstrings formed by choosing
+    exactly ``T`` of those one-positions and setting the rest to zero.  If the
+    sample already has at most ``T`` ones it is returned unchanged.  The
+    enumeration uses integer bitmasks and Gosper's hack for efficiency.
+
+    Args:
+        samples: A list of binary strings, each of the same length, whose
+            entries are ``'0'`` or ``'1'``.
+        T: The target Hamming weight.  Samples with exactly ``T`` ones pass
+            through unchanged.
+
+    Returns:
+        A list (one entry per input sample) of lists of binary strings.
+        Each inner list contains the filtered variants of the corresponding
+        input sample; if the sample was not filtered it contains the original
+        string as a single-element list.
     """
     results = []
 

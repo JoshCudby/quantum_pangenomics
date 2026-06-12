@@ -1,3 +1,21 @@
+"""Plot hardware CVaR-QAOA convergence and energy histogram.
+
+Loads a pickled result from ``optimize_hardware.py`` and generates:
+
+1. **Convergence plot** — CVaR objective value per COBYLA iteration.
+2. **Energy histogram** — QAOA vs. random sample density on a log-scale
+   x-axis, with vertical lines marking the optimal solution and best samples.
+
+Source pickle:
+    ``cvar_new/hardware/<filename>_cvar.error_miti.<suffix>.pkl``
+
+CLI usage::
+
+    python plot_hardware.py -f <filename> -p <reps> -n <shots> -i <max_iter>
+                            [-M <method>] [-a <alpha>]
+                            [--init {ramp,random,fixed}]
+"""
+
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt

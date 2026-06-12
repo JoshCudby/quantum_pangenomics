@@ -1,3 +1,28 @@
+"""Post-optimisation sampling of a standard QAOA circuit.
+
+Loads a previously optimised parameter vector, reconstructs the QAOAAnsatz
+circuit from the same QUBO data file, samples the bound circuit using
+Qiskit-Aer's SamplerV2, and scores each bitstring against the cost
+Hamiltonian.  For well-known test instances the optimal solution is printed
+alongside the most-probable bitstring for comparison.
+
+CLI usage::
+
+    python sample_qaoa_circuit.py [data_file] [p] [use_gpu] [seed]
+
+Args:
+    data_file (str): Path to the ``.npy`` QUBO data file.
+    p (int): QAOA circuit depth matching the optimised parameters (default: 4).
+    use_gpu (int): Non-zero to run on GPU device (default: 0 / CPU).
+    seed (int): Seed used when the parameters were saved, used to locate the
+        parameter file (default: 0).
+
+Output:
+    Logs the most-likely bitstring, its probability, and its cost-Hamiltonian
+    energy.  If the data file is one of the recognised test instances, also
+    logs optimal-solution properties (probability, energy, approximation ratio).
+"""
+
 import numpy as np
 import sys
 from qiskit.circuit.library import QAOAAnsatz

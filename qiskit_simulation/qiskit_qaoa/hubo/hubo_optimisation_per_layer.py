@@ -1,3 +1,72 @@
+"""HUBO QAOA optimisation with greedy layer-by-layer circuit construction.
+
+Optimises the beta/gamma QAOA parameters using an independent per-layer
+compilation strategy: the T-1 timestep-transition constraints are partitioned
+evenly across the p QAOA repetitions, each repetition receives its own
+dedicated SAT layout and cost-layer circuit optimised for minimum 2-qubit
+depth.  Between consecutive layers a swap circuit (``swap_between_circuit_layouts``)
+re-aligns the qubit permutation.
+
+Workflow:
+
+1. **Per-layer compilation** (cached as a pickle):
+   For each QAOA layer l in {0, ..., p-1}:
+
+   a. Build ``hamiltonian_l`` from the l-th partition of timestep constraints.
+   b. Search over 10 evenly-spaced SWAP-layer budgets using
+      ``HigherOrderSatMapper.hubo_max_sat`` and ``get_hubo_pass_manager``.
+   c. Select the layout + compiled circuit with the smallest 2-qubit depth;
+      break early if SAT cost reaches 0 (all interactions satisfied).
+
+2. **Circuit assembly**:
+   Stitch the per-layer cost circuits together with H (Hadamard) state
+   preparation, Rx mixer layers, and inter-layer SWAP sequences.  Measurements
+   are wired to virtual qubits by tracking SWAP-induced permutations through
+   the final cost layer.
+
+3. **Optimisation**:
+   Minimises the CVaR objective using basin-hopping (``basinhopping``) or a
+   direct scipy ``minimize`` call, depending on ``--method``.
+
+Serialisation:
+    Per-layer compilation cache::
+
+        /lustre/scratch127/qpg/jc59/hubo/per_layer_results.<f>.reps<p>.pkl
+
+    Optimisation result::
+
+        <basepath>/simulation.<C>.per_layer.<f>.extra<e>.four<frac4>.six<frac6>
+            .method<M>.cvar<a>.p<p>.shots<n>.init<init>.pkl
+
+    The optimisation pickle contains::
+
+        {
+            'result':            OptimizeResult or basinhopping result,
+            'history':           list of (sampling_time, energy, params,
+                                          counts, post_process_time),
+            'full_hamiltonian':  SparsePauliOp,
+            'qaoa_circuit':      QuantumCircuit,
+            'hamiltonians':      dict[int, SparsePauliOp],
+            'swap_depths':       dict[int, int],
+            'layouts':           dict[int, Layout],
+            'compiled_circuits': dict[int, QuantumCircuit],
+        }
+
+CLI arguments:
+    -f / --filename:       GFA file stem.
+    -e / --extra:          Extra SWAP layers for the pass manager (default 1).
+    --fraction-four:       Fraction of 4-body terms to retain.
+    --fraction-six:        Fraction of 6-body terms to retain.
+    -t / --timeout:        SAT solver timeout in seconds.
+    -c / --copy-numbers:   Comma-separated node copy numbers.
+    -C / --coupling-map:   Coupling topology: ``line`` or ``grid``.
+    -p / --reps:           Number of QAOA layers p (default 4).
+    -M / --method:         Optimiser: ``basinhopping`` or a scipy method name.
+    -n / --shots:          Shots per evaluation (default 1000).
+    --init:                Initialisation strategy: ``ramp``, ``random``, or
+                           ``warm``.
+    -a / --alpha:          CVaR tail fraction.
+"""
 import numpy as np
 import networkx as nx
 import pickle
@@ -54,11 +123,25 @@ p = args.reps
 
 
 def two_qubit_count(qc: QuantumCircuit):
+    """Count the total number of 2-qubit gates in a circuit.
+
+    Args:
+        qc: The quantum circuit to inspect.
+
+    Returns:
+        Total number of 2-qubit gates (CZ + RZZ + CX + SWAP) as an integer.
+    """
     ops: dict[str, int] = qc.count_ops()
     return ops.get("cz", 0) + ops.get("rzz", 0) + ops.get("cx", 0) + ops.get("swap", 0)
-   
-    
+
+
 def print_circuit_info(qc: QuantumCircuit, circuit_name: str):
+    """Log the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: The quantum circuit to summarise.
+        circuit_name: A human-readable label included in the log message.
+    """
     logger.info(f'{circuit_name} has {two_qubit_count(qc)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
     
@@ -280,12 +363,34 @@ logger.info(f'Init: {init_params}')
 history = []
 
 def cvar(energies, alpha=1.0):
+    """Compute the Conditional Value-at-Risk (CVaR) of a list of energies.
+
+    Args:
+        energies: Sequence of energy values (floats).
+        alpha: Tail fraction in (0, 1].  alpha=1.0 is the plain mean.
+
+    Returns:
+        CVaR estimate as a float.
+    """
     sorted_energies = sorted(energies)
     end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx
 
 
 def objective(x: np.ndarray):
+    """Evaluate the CVaR objective for the per-layer assembled QAOA circuit.
+
+    Submits the parameterised circuit to the Aer SamplerV2, collects counts,
+    evaluates each bitstring against the full Hamiltonian, and returns the
+    CVaR.  Appends a record to ``history``.
+
+    Args:
+        x: Parameter array of length 2*p in order
+           [gamma_0, ..., gamma_{p-1}, beta_0, ..., beta_{p-1}].
+
+    Returns:
+        CVaR energy (float) to be minimised.
+    """
     start = time()
     assigned_circuit = qaoa_circuit.assign_parameters(x, inplace=False)
     sampler_job = sampler.run([assigned_circuit], shots=args.shots)
@@ -305,16 +410,36 @@ def objective(x: np.ndarray):
 
 
 def callback(intermediate_result: OptimizeResult):
+    """Log the current optimiser state; raise StopIteration if optimal found.
+
+    Args:
+        intermediate_result: Current optimiser state from scipy.
+
+    Raises:
+        StopIteration: When the objective value reaches -1.
+    """
     logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
     if intermediate_result.fun == -1:
         raise StopIteration
-    
+
 
 def callback_cobyla(xk: np.ndarray):
+    """Log the current parameter vector for COBYLA/SLSQP/TNC optimisers.
+
+    Args:
+        xk: Current parameter vector.
+    """
     logger.info(f'Current params: {xk}.')
-    
+
 
 def callback_basinhopping(x: np.ndarray, f: float, accept: bool):
+    """Log the current basin-hopping state after each global step.
+
+    Args:
+        x: Current parameter vector.
+        f: Current function value.
+        accept: Whether the step was accepted.
+    """
     logger.info(f'Current params: {x}. Current func value: {f}')
     
 logger.info(f'Using method: {args.method}.')

@@ -1,3 +1,30 @@
+"""Shot-noise-free grid sweep over initial parameters for CVaR-QAOA.
+
+Combines the parameter-grid sweep strategy from ``optimize_sweep.py`` with the
+exact statevector energy computation from ``optimize_no_shot_noise.py``.  The
+full statevector is saved after each circuit execution and the expected energy
+is evaluated as a probability-weighted inner product with pre-computed basis
+energies — eliminating shot noise entirely.
+
+A Cartesian grid over (beta, gamma) is automatically reduced in resolution until
+the total number of starting points is at most 100, then each grid point is
+locally refined with the chosen scipy method.
+
+CLI usage::
+
+    python optimize_no_shot_noise_sweep.py -f <filename> [-p <reps>]
+                                           [-M <method>]
+
+Args:
+    -f / --filename (str): Base name of the QUBO data ``.pkl`` file.
+    -p / --reps (int): QAOA circuit depth (default: 4).
+    -M / --method (str): scipy optimisation method (default: ``"COBYLA"``).
+
+Output:
+    Saves a pickle file containing the best result, full history, circuit
+    graph artefacts, best statevector, and best parameters to the experiments
+    output directory.
+"""
 
 import numpy as np
 import argparse
@@ -35,9 +62,15 @@ seed = 1
 rng = np.random.default_rng()
 
 def print_circuit_info(qc, circuit_name):
+    """Print the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: A Qiskit ``QuantumCircuit`` to inspect.
+        circuit_name (str): Label to include in the output.
+    """
     print(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
-    
+
 
 data_file = f'/lustre/scratch127/qpg/jc59/out/oriented/qubo_data_{filename}.gfa.pkl'
 
@@ -97,17 +130,45 @@ best_sv = np.array([])
 best_res = None
 
 def callback(intermediate_result: OptimizeResult):
+    """Log the current parameter vector and objective value (gradient-based solvers).
+
+    Args:
+        intermediate_result: scipy ``OptimizeResult`` with ``.x`` and ``.fun``.
+    """
     logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
-    
+
 
 def callback_cobyla(xk: np.ndarray):
+    """Log the current parameter vector (COBYLA callback interface).
+
+    Args:
+        xk: Current parameter array passed by COBYLA at each iteration.
+    """
     logger.info(f'Current params: {xk}.')
 
+
 def callback_basinhopping(x: np.ndarray, f: float, accept: bool):
+    """Log the current parameters and objective value (basin-hopping callback).
+
+    Args:
+        x: Current parameter array.
+        f: Current objective value.
+        accept: Whether the step was accepted by the basin-hopping criterion.
+    """
     logger.info(f'Current params: {x}. Current func value: {f}')
 
 
 def cvar(energies, alpha=1.0):
+    """Compute the Conditional Value-at-Risk (CVaR) of an energy distribution.
+
+    Args:
+        energies: Iterable of scalar energy values.
+        alpha (float): CVaR threshold in (0, 1].  Default is 1.0 (full mean).
+
+    Returns:
+        float: Mean energy of the ``floor(alpha * len(energies))`` lowest-
+        energy samples.
+    """
     sorted_energies = sorted(energies)
     end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx
@@ -120,6 +181,19 @@ evals = np.array([
 
 
 def objective(x: np.ndarray):
+    """Evaluate the shot-noise-free QAOA energy for a given parameter vector.
+
+    Saves the full statevector after circuit execution and computes the
+    expected energy as the probability-weighted sum of pre-computed basis-state
+    energies (``evals``).  Updates module-level best tracking.
+
+    Args:
+        x: 1-D parameter array (betas then gammas) of length
+            ``2 * qaoa_depth``.
+
+    Returns:
+        float: Exact expected energy ⟨ψ(x)|H|ψ(x)⟩ from the statevector.
+    """
     assigned_circuit = circuit.assign_parameters(x, inplace=False)
     assigned_circuit.save_statevector()
     job = backend.run([assigned_circuit])
@@ -127,7 +201,7 @@ def objective(x: np.ndarray):
     data = result.results[0].data
     sv = np.asarray(data.statevector)
     energy = np.sum(np.abs(sv) ** 2 * evals)
-    
+
     global best_func_val
     global best_params
     global best_sv

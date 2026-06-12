@@ -1,3 +1,29 @@
+"""Updated CVaR-QAOA optimisation variant (statevector GPU backend).
+
+An updated version of ``optimize.py`` that switches the Aer backend to a GPU
+statevector simulator (with cuStateVec support) and loads the Hamiltonian
+directly from a pre-built pickle file rather than deriving it from a GFA QUBO
+data file.  The COBYLA objective is fixed at α = 0.05.
+
+CLI usage::
+
+    python optimize2.py -p <reps> [-m <memory>] [-M <method>] [-n <shots>]
+                        [--hardware] [--noisy] [--init {ramp,random}]
+
+Args:
+    -p / --reps (int): QAOA circuit depth (default: 4).
+    -m / --memory (int): Simulator memory limit in MB (default: 4000).
+    -M / --method (str): Aer simulation method (unused in statevector path).
+    -n / --shots (int): Shots per objective evaluation (default: 2000).
+    --hardware: Route through the FakeFez backend transpilation.
+    --noisy: Attach noise model to the Sampler.
+    --init: Parameter initialisation strategy — ``"ramp"`` or ``"random"``
+        (default: ``"random"``).
+
+Output:
+    Saves a pickle containing the optimisation result and history to
+    ``/lustre/.../orson/phylo.cvar.<suffix>.pkl``.
+"""
 
 import numpy as np
 from time import time
@@ -62,6 +88,12 @@ transpiled_qc = transpile(qc, backend, optimization_level=3, seed_transpiler=see
 
 
 def print_circuit_info(qc, circuit_name):
+    """Log the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: A Qiskit ``QuantumCircuit`` to inspect.
+        circuit_name (str): Label to include in the log message.
+    """
     logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
 
@@ -118,12 +150,38 @@ history = []
 
 
 def cvar(energies, alpha=1.0):
+    """Compute the Conditional Value-at-Risk (CVaR) of an energy distribution.
+
+    Returns the mean of the lowest-α fraction of energy samples.  Clamps the
+    index to at least 1 to avoid division by zero on very small sample sets.
+
+    Args:
+        energies: Iterable of scalar energy values from circuit measurements.
+        alpha (float): CVaR threshold in (0, 1].  Default is 1.0 (full mean).
+
+    Returns:
+        float: Mean energy of the ``max(1, floor(alpha * len(energies)))``
+        lowest-energy samples.
+    """
     sorted_energies = sorted(energies)
     end_idx = max(int(alpha * len(energies)), 1)
     return np.sum(sorted_energies[0:end_idx]) / end_idx
 
 
 def objective(x: np.ndarray):
+    """Evaluate the CVaR-QAOA objective for a given parameter vector.
+
+    Runs the QAOA circuit with parameters ``x``, evaluates each bitstring
+    against the cost operator (without the QUBO offset), and returns the CVaR
+    at α = 0.05.  Timing and sample data are appended to ``history``.
+
+    Args:
+        x: 1-D parameter array (betas then gammas) of length
+            ``2 * qaoa_depth``.
+
+    Returns:
+        float: CVaR_0.05 of the sampled energy distribution.
+    """
     start = time()
     assigned_circuit = circuit.assign_parameters(x, inplace=False)
     sampler_job = sampler.run([assigned_circuit], shots=shots)

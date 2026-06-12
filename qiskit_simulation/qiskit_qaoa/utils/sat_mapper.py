@@ -1,3 +1,26 @@
+"""SAT-based qubit placement for higher-order (HUBO) interactions.
+
+Provides ``HigherOrderSatMapper``, which uses a MaxSAT or SAT solver to find
+an optimal qubit layout for a set of multi-qubit Pauli-Z interactions on a
+given swap strategy.
+
+The layout problem is formulated as a subgraph isomorphism: each interaction
+tuple must map to a set of qubits that form a connected subgraph of the
+coupling map after at most ``num_layers`` swap steps (i.e. are within distance
+``num_layers`` in the swap strategy distance tensor).  SAT is used rather than
+a heuristic mapper because it guarantees optimality — it finds the minimum
+number of swap layers such that all required interactions are routable.
+
+Two methods are provided:
+
+- ``hubo_max_sat``: encodes the problem as a Weighted Partial MaxSAT instance
+  and invokes the external NuWLS solver; useful when the hard constraints
+  (one-to-one mapping) must always be satisfied but some soft adjacency
+  constraints can be violated.
+- ``find_hubo_mappings``: uses a standard SAT solver (PySAT) with binary
+  search over the number of swap layers; all constraints are hard.
+"""
+
 from __future__ import annotations
 
 from itertools import combinations, product
@@ -20,13 +43,43 @@ logger = get_logger(__name__)
 
 
 def get_cnfs(
-    num_nodes_g1: int, 
+    num_nodes_g1: int,
     num_nodes_g2: int,
-    program_interactions: list[tuple[int,...]], 
-    swap_strategy: ExtendedSwapStrategy, 
-    num_layers: int, 
+    program_interactions: list[tuple[int,...]],
+    swap_strategy: ExtendedSwapStrategy,
+    num_layers: int,
     variables: np.ndarray
 ):
+    """Build one-to-one mapping and adjacency CNF clause lists for SAT placement.
+
+    Constructs two groups of CNF clauses encoding the subgraph-isomorphism
+    problem for qubit placement:
+
+    - ``cnf1``: At-least-one and at-most-one clauses ensuring that every
+      program node maps to exactly one hardware qubit and vice-versa.
+    - ``cnf2``: Adjacency clauses ensuring that each interaction tuple maps
+      to a set of hardware qubits that are mutually reachable within
+      ``num_layers`` swap steps (using the distance tensor of
+      ``swap_strategy``).
+
+    Args:
+        num_nodes_g1: Number of program qubits (rows of ``variables``).
+        num_nodes_g2: Number of hardware qubits (columns of ``variables``).
+        program_interactions: List of interaction tuples to route; sorted
+            internally by arity before processing.
+        swap_strategy: The ``ExtendedSwapStrategy`` providing pairwise and
+            higher-order distance tensors.
+        num_layers: Maximum number of swap layers; interactions that require
+            more layers are excluded from the adjacency clauses.
+        variables: A ``(num_nodes_g1, num_nodes_g2)`` integer array of SAT
+            variable IDs.  Entry ``variables[i, j]`` is the variable asserting
+            that program qubit ``i`` maps to hardware qubit ``j``.
+
+    Returns:
+        A tuple ``(cnf1, cnf2)`` where each element is a list of clauses
+        (each clause is a list of signed integer variable IDs, as expected by
+        PySAT).
+    """
     program_interactions = sorted(program_interactions,key=lambda e: len(e))
         
     # Make a cnf for the one-to-one mapping constraint
@@ -77,14 +130,50 @@ def get_cnfs(
 
 
 class HigherOrderSatMapper(SATMapper):
+    """SAT-based qubit placement for HUBO (higher-order) interaction sets.
+
+    Extends ``qopt_best_practices.sat_mapping.SATMapper`` to handle
+    interactions involving more than two qubits.  The placement is found by
+    solving a (Max)SAT problem where:
+
+    - **Hard constraints** (``cnf1``): the variable assignment must encode a
+      one-to-one mapping between program qubits and physical qubits.
+    - **Soft constraints** (``cnf2``): for each interaction tuple, at least one
+      physical qubit assignment must satisfy the swap-distance constraint.
+
+    Uses the NuWLS-c solver (via subprocess) for MaxSAT and PySAT for standard
+    SAT.  The ``timeout`` attribute (inherited from ``SATMapper``) limits solver
+    wall time.
+    """
 
     def hubo_max_sat(
         self,
         num_nodes_g1: int,
-        program_interactions: list[tuple[int,...]], 
-        swap_strategy: ExtendedSwapStrategy, 
+        program_interactions: list[tuple[int,...]],
+        swap_strategy: ExtendedSwapStrategy,
         num_layers: int
     ) -> dict[int, tuple[int, list]] | None:
+        """Find a qubit placement using Weighted Partial MaxSAT (NuWLS-c solver).
+
+        Constructs a WCNF formula and calls the external NuWLS-c binary.  Hard
+        clauses enforce a one-to-one mapping; soft clauses reward satisfying each
+        interaction's adjacency constraint.  The formula, solution, and auxiliary
+        files are written to the current working directory and cleaned up after
+        the solver finishes.
+
+        Args:
+            num_nodes_g1: Number of program qubits (variables) to place.
+            program_interactions: List of interaction tuples (sorted by length).
+            swap_strategy: The ``ExtendedSwapStrategy`` providing the distance
+                tensor.
+            num_layers: The maximum number of swap layers to consider.
+
+        Returns:
+            A dict ``{num_layers: (cost, mapping)}`` where ``cost`` is the
+            MaxSAT objective value and ``mapping`` is a list of
+            ``(program_qubit, physical_qubit)`` index pairs; or ``None`` if the
+            solver output cannot be parsed.
+        """
         num_nodes_g2: int = swap_strategy.distance_matrix.shape[0]
         variable_pool = IDPool(start_from=1)
         variables = np.array(
@@ -153,12 +242,32 @@ class HigherOrderSatMapper(SATMapper):
 
 
     def find_hubo_mappings(
-        self, 
-        program_interactions: list[tuple], 
-        swap_strategy: ExtendedSwapStrategy, 
-        min_layers: int, 
-        max_layers: int 
+        self,
+        program_interactions: list[tuple],
+        swap_strategy: ExtendedSwapStrategy,
+        min_layers: int,
+        max_layers: int
     ) -> dict[int, SATResult]:
+        """Binary-search for the minimum swap depth satisfying all interaction constraints.
+
+        Encodes the placement problem as a satisfiability instance and uses
+        PySAT to perform a binary search over ``[min_layers, max_layers]``.
+        The distance tensors for all required interaction orders are
+        pre-populated in the swap strategy before the search begins.
+
+        Args:
+            program_interactions: List of interaction tuples to route.
+            swap_strategy: The ``ExtendedSwapStrategy`` providing distance
+                tensors; will be updated in-place with new distance tensors for
+                all interaction orders found in ``program_interactions``.
+            min_layers: Lower bound for the binary search (inclusive).
+            max_layers: Upper bound for the binary search (inclusive).
+
+        Returns:
+            A dict mapping each tested ``num_layers`` value to a ``SATResult``
+            (status, model, mapping, solve_time).  Only layers that were
+            actually tested appear in the dict.
+        """
         program_interactions = sorted(program_interactions,key=lambda e: len(e))
         nodes = set([node for interaction in program_interactions for node in interaction])
         num_nodes_g1 = len(nodes)

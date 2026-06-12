@@ -1,3 +1,30 @@
+"""MPS (matrix product state) simulator specialisation for QAOA optimisation.
+
+Builds a QAOAAnsatz from an explicitly loaded QUBO matrix (rather than a
+pre-built Hamiltonian utility), configures Qiskit-Aer's
+``matrix_product_state`` method with a capped bond dimension for memory
+efficiency, then optimises the variational parameters using either
+basin-hopping (scipy) or Bayesian (scikit-optimize) search.  Intended for
+larger circuits where a full statevector would exceed available memory.
+
+CLI usage::
+
+    python mps_optimize_qaoa.py <seed> [data_file] [p] [cpu_mem] [optimization_method]
+
+Args:
+    seed (int): Random seed (required, positional argv[1]).
+    data_file (str): Path to the ``.npy`` QUBO data file
+        (default: ``qubo_data_trivial.gfa.npy``).
+    p (int): QAOA circuit depth (default: 4).
+    cpu_mem (int): CPU memory limit in MB (default: 4000).
+    optimization_method (str): ``"scipy"`` (basin-hopping) or ``"scikit"``
+        (Bayesian optimisation) (default: ``"scipy"``).
+
+Output:
+    Saves the optimised parameter vector to
+    ``qaoa_params_mps_n<qubits>_p<p>_seed<seed>.npy``.
+"""
+
 import numpy as np
 import sys
 from qiskit_optimization import QuadraticProgram

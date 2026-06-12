@@ -1,3 +1,29 @@
+"""Sample from a hardware-optimised CVaR-QAOA circuit on IBM quantum hardware.
+
+Loads a set of pre-optimised QAOA parameters (warm-start or user-specified),
+reconstructs the SAT-mapped circuit, and submits a single sampling job to the
+IBM quantum backend (ibm_aachen) with optional gate twirling for error
+mitigation.  The resulting bitstring counts are scored against the cost
+operator and saved for downstream analysis.
+
+CLI usage::
+
+    python sample_hardware.py -f <filename> [-p <reps>] [-n <shots>]
+                              [--init {ramp,random,fixed,warm}]
+
+Args:
+    -f / --filename (str): Base name of the QUBO data ``.pkl`` file.
+    -p / --reps (int): QAOA circuit depth (default: 4).
+    -n / --shots (int): Number of shots to sample (default: 2000).
+    --init: Parameter source — ``"ramp"`` (linear schedule), ``"random"``,
+        ``"fixed"`` (hard-coded values for select depths), or ``"warm"``
+        (warm-start parameters for p=1–4).
+
+Output:
+    Saves a pickle file containing the counts, cost operator, circuit graph
+    artefacts, and sampled energy statistics to the experiments output
+    directory.
+"""
 
 import numpy as np
 import pickle
@@ -55,6 +81,14 @@ transpiled_qc = transpile(qc, backend, optimization_level=3)
 
 
 def print_circuit_info(qc, circuit_name):
+    """Log the 2-qubit gate count and 2-qubit gate depth for a hardware circuit.
+
+    Counts CZ, RZZ, CX, SWAP, and ECR gates.
+
+    Args:
+        qc: A Qiskit ``QuantumCircuit`` to inspect.
+        circuit_name (str): Label to include in the log message.
+    """
     logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0) + qc.count_ops().get("swap", 0)+ qc.count_ops().get("ecr", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
 
@@ -117,6 +151,16 @@ logger.info(f'Init: {init_params}')
 
 
 def cvar(energies, alpha=1.0):
+    """Compute the Conditional Value-at-Risk (CVaR) of an energy distribution.
+
+    Args:
+        energies: Iterable of scalar energy values from hardware measurements.
+        alpha (float): CVaR threshold in (0, 1].  Default is 1.0 (full mean).
+
+    Returns:
+        float: Mean energy of the ``floor(alpha * len(energies))`` lowest-
+        energy samples.
+    """
     sorted_energies = sorted(energies)
     end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx

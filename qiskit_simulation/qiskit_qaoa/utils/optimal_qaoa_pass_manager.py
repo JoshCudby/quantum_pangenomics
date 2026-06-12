@@ -1,3 +1,11 @@
+"""Staged PassManager pipeline for standard (quadratic) QAOA on a real backend.
+
+Constructs a ``generate_preset_pass_manager`` pipeline at optimisation level 3
+and replaces the ``pre_init``, ``init``, and ``post_init`` stages with custom
+passes that use a line swap strategy and ``QAOAPass`` to assemble the circuit,
+then translate to the backend basis gates.
+"""
+
 from qiskit.transpiler import PassManager
 from qiskit.transpiler.passes import (
     BasisTranslator,
@@ -18,6 +26,34 @@ from qiskit_qaoa.utils.qaoa_pass import QAOAPass
 
 
 def get_optimal_pass_manager(num_qubits, backend, initial_layout, betas):
+    """Build a staged PassManager for standard (quadratic QUBO) QAOA on a real backend.
+
+    Constructs a line-topology swap strategy for ``num_qubits`` qubits and
+    assembles a ``generate_preset_pass_manager`` pipeline (optimisation level 3)
+    with three custom stages:
+
+    - ``pre_init``: Synthesises Pauli evolutions, finds commuting blocks,
+      routes with the line swap strategy, and cancels redundant CX gates.
+    - ``init``: Runs ``QAOAPass`` to assemble the full 3-layer QAOA circuit
+      with RX mixer on 10 qubits.
+    - ``post_init``: Unrolls custom gate definitions and translates to the
+      backend basis gates.
+
+    Args:
+        num_qubits: Number of qubits (used to build the line swap strategy
+            and edge coloring).
+        backend: A Qiskit backend; its ``operation_names`` and ``target``
+            are used for basis translation and the preset pass manager.
+        initial_layout: An initial qubit layout passed to the preset pass
+            manager for physical qubit assignment.
+        betas: A ``ParameterVector`` of beta parameters passed to ``QAOAPass``
+            for the default RX mixer construction.
+
+    Returns:
+        A ``StagedPassManager`` with ``pre_init``, ``init``, and ``post_init``
+        stages customised for QAOA, and all other stages from the preset
+        pass manager at optimisation level 3.
+    """
     # 1. choose swap strategy (in this case -> line)
     swap_strategy = SwapStrategy.from_line([i for i in range(num_qubits)])
     edge_coloring = {(idx, idx + 1): (idx + 1) % 2 for idx in range(num_qubits)}

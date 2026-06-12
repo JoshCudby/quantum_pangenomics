@@ -1,3 +1,53 @@
+"""Simulation-specific HUBO compilation pipeline.
+
+Variant of ``hubo_circuit_compilation.py`` intended for noiseless or
+noise-model simulations rather than direct hardware execution.  Key
+differences from the hardware variant:
+
+- **Topology**: instead of a heavy-hex patch, the coupling map is either a
+  linear chain (``--coupling-map line``) or an (n x T) grid
+  (``--coupling-map grid``), selectable via the ``-C`` flag.
+
+- **Post-compilation transpilation**: after the commuting-gate router pass,
+  an additional ``generate_preset_pass_manager`` run (optimization level 3)
+  re-compiles the routed circuit for the AerSimulator backend, producing a
+  statevector-friendly gate decomposition.
+
+- **Output path**: pickle files are written to the ``hubo/`` scratch directory
+  (not the ``hubo_hardware/`` directory).
+
+Pipeline:
+
+1. Build full and subsampled HUBO Hamiltonians.
+2. Construct line or grid ``ExtendedSwapStrategy`` from the virtual qubit
+   count.
+3. Run SAT layout (``HigherOrderSatMapper.hubo_max_sat``) across 10 evenly-
+   spaced SWAP-layer budgets.
+4. Apply ``get_hubo_pass_manager`` → ``CommutingGateRouterPrecomputeRzz``.
+5. Apply generic preset pass manager for AerSimulator basis-gate targeting.
+6. Pickle results to::
+
+       <basepath>/simulation.<C>.compilation.<f>.extra<e>.times<t>.four<frac4>.six<frac6>.pkl
+
+   The pickle contains::
+
+       {
+           'full_hamiltonian':     SparsePauliOp,
+           'compiled_hamiltonian': SparsePauliOp,
+           <num_layers: int>:      Layout,
+       }
+
+CLI arguments:
+    -f / --filename:       GFA file stem.
+    -e / --extra:          Extra SWAP layers for the pass manager (default 1).
+    --fraction-four:       Fraction of 4-body terms to retain.
+    --fraction-six:        Fraction of 6-body terms to retain.
+    --times-to-keep:       Comma-separated timestep-transition indices to keep.
+    -t / --timeout:        SAT solver timeout in seconds.
+    -c / --copy-numbers:   Comma-separated node copy numbers.
+    -C / --coupling-map:   Topology for the virtual coupling map: ``line`` or
+                           ``grid``.
+"""
 import numpy as np
 import networkx as nx
 import pickle
@@ -42,11 +92,27 @@ args = parser.parse_args()
 logger.info(args)
 
 def two_qubit_count(qc: QuantumCircuit):
+    """Count the total number of 2-qubit gates in a circuit.
+
+    Counts CZ, RZZ, CX, and SWAP gates.
+
+    Args:
+        qc: The quantum circuit to inspect.
+
+    Returns:
+        Total number of 2-qubit gates as an integer.
+    """
     ops: dict[str, int] = qc.count_ops()
     return ops.get("cz", 0) + ops.get("rzz", 0) + ops.get("cx", 0) + ops.get("swap", 0)
-   
-    
+
+
 def print_circuit_info(qc: QuantumCircuit, circuit_name: str):
+    """Log the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: The quantum circuit to summarise.
+        circuit_name: A human-readable label included in the log message.
+    """
     logger.info(f'{circuit_name} has {two_qubit_count(qc)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
     

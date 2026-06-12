@@ -1,3 +1,18 @@
+"""ExtendedSwapStrategy for QAOA gate routing on different hardware topologies.
+
+A swap strategy is a precomputed sequence of SWAP-gate layers that, when
+applied repeatedly, can bring any pair (or tuple) of qubits into adjacency so
+that a two-qubit (or multi-qubit) gate can be applied.  ``ExtendedSwapStrategy``
+extends Qiskit's ``SwapStrategy`` with:
+
+- Factory class methods for common topologies (line, grid, heavy-hex,
+  all-to-all).
+- Lazy caching of pairwise and higher-order distance tensors, with on-disk
+  persistence for expensive computations.
+- ``distance_nodes`` for querying the minimum swap depth needed to make a
+  tuple of qubits mutually adjacent (i.e. form a connected subgraph).
+"""
+
 from __future__ import annotations
 
 import pickle
@@ -115,6 +130,27 @@ def get_longest_line_swaps(mapping: dict, graph: nx.Graph, rows: int, cols: int)
 
 
 class ExtendedSwapStrategy(SwapStrategy):
+    """Swap strategy with distance caching and multi-topology factory constructors.
+
+    Inherits from Qiskit's ``SwapStrategy`` and adds:
+
+    - Per-instance distance caches (``_distances`` for tuple queries,
+      ``_distance_tensors`` for full-order tensors).
+    - Factory class methods for line, 2-D grid, heavy-hex, and all-to-all
+      topologies, each generating the appropriate swap-layer sequence.
+    - ``distance_nodes``: minimum swap depth to make a qubit tuple mutually
+      adjacent (i.e. form a connected subgraph), with LRU-style cache look-up.
+    - ``distance_tensor``: full ``n^order`` tensor of pairwise / higher-order
+      distances, computed lazily and persisted to disk.
+
+    Args:
+        coupling_map: The physical coupling map of the hardware topology.
+        swap_layers: An ordered tuple of swap layers; each layer is a tuple
+            of ``(qubit_a, qubit_b)`` pairs to be swapped simultaneously.
+        type: A string label for the topology (used in the on-disk cache
+            filename).  Defaults to ``"custom"``.
+    """
+
     def __init__(
         self, coupling_map: CouplingMap, swap_layers: tuple[tuple[tuple[int, int], ...], ...], type: str="custom"
     ) -> None:
@@ -136,8 +172,27 @@ class ExtendedSwapStrategy(SwapStrategy):
         
       
       
-    @classmethod  
+    @classmethod
     def from_line(cls, line: list[int], num_swap_layers: int | None = None) -> ExtendedSwapStrategy:
+        """Construct a swap strategy for a linear qubit chain.
+
+        Alternates between even-indexed and odd-indexed nearest-neighbour swap
+        layers, with occasional randomly-generated shuffle layers inserted at
+        a rate of ``len(line) // 4`` to increase mixing.
+
+        Args:
+            line: Ordered list of physical qubit indices forming the chain.
+                Must have at least two elements.
+            num_swap_layers: Total number of swap layers to generate.  Defaults
+                to ``len(line) - 2``.
+
+        Returns:
+            An ``ExtendedSwapStrategy`` with ``type="line"``.
+
+        Raises:
+            ValueError: If ``line`` has fewer than 2 elements or if
+                ``num_swap_layers`` is negative.
+        """
         if len(line) < 2:
             raise ValueError(f"The line cannot have less than two elements, but is {line}")
 
@@ -184,8 +239,21 @@ class ExtendedSwapStrategy(SwapStrategy):
         return cls(coupling_map=CouplingMap(couplings), swap_layers=tuple(swap_layers), type="line")
 
 
-    @classmethod  
+    @classmethod
     def from_grid(cls, rows: int, cols: int) -> ExtendedSwapStrategy:
+        """Construct a swap strategy for a 2-D rectangular qubit grid.
+
+        Generates four base swap layers (two alternating row-direction and two
+        alternating column-direction) and combines them into a full sequence
+        that cycles through both dimensions.
+
+        Args:
+            rows: Number of rows in the grid.
+            cols: Number of columns in the grid.
+
+        Returns:
+            An ``ExtendedSwapStrategy`` with ``type="grid"``.
+        """
 
         qubits = [(row, col) for row in range(rows) for col in range(cols)]
         mapping = {qubit: idx for idx, qubit in enumerate(qubits)}
@@ -254,8 +322,22 @@ class ExtendedSwapStrategy(SwapStrategy):
         return cls(coupling_map=CouplingMap(couplings), swap_layers=tuple(swap_layers), type="grid")
 
     
-    @classmethod  
+    @classmethod
     def from_heavy_hex(cls, rows: int, cols: int) -> ExtendedSwapStrategy:
+        """Construct a swap strategy for a heavy-hex IBM quantum processor topology.
+
+        Builds the heavy-hex coupling graph using NetworkX's hexagonal lattice
+        graph, inserting auxiliary qubits on each edge (as physical qubits).
+        The swap layers follow the longest-line traversal of the heavy-hex
+        lattice produced by ``get_longest_line_swaps``.
+
+        Args:
+            rows: Number of hexagonal rows.
+            cols: Number of hexagonal columns.
+
+        Returns:
+            An ``ExtendedSwapStrategy`` with ``type="heavy_hex"``.
+        """
         
         hex = nx.hexagonal_lattice_graph(cols, rows)
         coupling_graph = nx.Graph()
@@ -291,6 +373,27 @@ class ExtendedSwapStrategy(SwapStrategy):
     
     
     def distance_nodes(self, nodes: tuple[int,...], cutoff: int | None = None) -> int:
+        """Return the minimum swap depth needed to make a qubit tuple mutually adjacent.
+
+        A tuple of qubits is "implementable" at swap depth ``d`` if, after
+        applying the first ``d`` swap layers, the qubits form a connected
+        subgraph in the current coupling map (i.e. every qubit in the tuple is
+        reachable from every other within one hop).
+
+        Results are cached both in the per-instance ``_distances`` dict and
+        in the full distance tensor (if already computed for the given order).
+
+        Args:
+            nodes: A tuple of qubit indices (sorted internally for caching).
+                Duplicate entries return ``-1``.
+            cutoff: Maximum swap depth to check.  Defaults to
+                ``len(swap_layers) + 1``.
+
+        Returns:
+            The minimum number of swap layers (0-indexed) after which the
+            qubits form a connected subgraph, or ``-1`` if no valid depth is
+            found within ``cutoff``.
+        """
         if cutoff is None:
             cutoff = len(self._swap_layers) + 1
         nodes = tuple(sorted(nodes))
@@ -342,6 +445,28 @@ class ExtendedSwapStrategy(SwapStrategy):
     
     
     def distance_tensor(self, order) -> np.ndarray:
+        """Return the full distance tensor for interactions of a given order.
+
+        An ``order``-th-order distance tensor is an ``n^order`` numpy array
+        (where ``n`` is the number of qubits) such that element ``[i, j, ...]``
+        gives the minimum swap depth required to make qubits ``i, j, ...``
+        mutually adjacent.  Order-2 tensors coincide with the standard distance
+        matrix.
+
+        Computation is lazy: the tensor is built by enumerating all connected
+        subgraphs of increasing swap depth.  The result is cached in memory and
+        on disk (under ``/lustre/scratch127/qpg/jc59/hubo_swap_strategies/``).
+        For all-to-all topologies the tensor is filled with zeros immediately.
+
+        Args:
+            order: The interaction order (number of qubits per interaction).
+                Must be >= 2.
+
+        Returns:
+            An ``n^order`` numpy int array of swap distances, with ``-1``
+            for qubit tuples that cannot be made adjacent within the available
+            swap layers.
+        """
         if order == 2:
             return self.distance_matrix
         

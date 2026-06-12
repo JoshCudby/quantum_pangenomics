@@ -1,3 +1,17 @@
+"""Smoke test for QAOAAnsatz parameter binding conventions.
+
+Constructs a small random 2-qubit QUBO and a depth-2 QAOAAnsatz circuit,
+then verifies that Qiskit's two parameter-binding APIs produce equivalent
+circuits:
+
+* **List-style binding** — ``circuit.assign_parameters(init_params)``
+* **Dict-style binding** — ``circuit.assign_parameters({param: value, ...})``
+
+Both bound circuits are drawn and saved to the qiskit output directory so that
+parameter ordering can be inspected visually.  Also prints ``circuit.parameters``
+and ``circuit.ordered_parameters`` to confirm ordering consistency.
+"""
+
 from qiskit.circuit.library import QAOAAnsatz
 from qiskit_optimization import QuadraticProgram
 import numpy as np

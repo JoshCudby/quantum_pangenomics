@@ -1,4 +1,50 @@
+"""No-noise HUBO QAOA optimisation on an all-to-all coupled topology.
 
+Noiseless statevector simulation of the HUBO QAOA problem on a fully-connected
+qubit topology (``ExtendedSwapStrategy.from_all_to_all``).  This setup removes
+connectivity constraints and gate-error effects, serving as an ideal upper
+bound on QAOA performance.
+
+Circuit compilation uses ``CommutingGateRouter`` (Rz decomposition) with
+``max_layers=0`` (no SWAP budget limit) followed by standard gate-cancellation
+passes.  The QAOA circuit is then assembled via ``QAOAConstructionPass``.
+
+The objective minimises the expected energy of the full Hamiltonian computed
+directly from the statevector (no shot noise):
+
+    E(x) = sum_k |psi_k(x)|^2 * h_k
+
+where h_k = evaluate_sparse_pauli_samples(k, full_hamiltonian).
+
+Optimisation uses basin-hopping with COBYLA as the local minimiser.
+
+Serialisation:
+    The result is pickled to::
+
+        /lustre/scratch127/qpg/jc59/out/qiskit/hubo_no_shot_noise/
+            basinhopping.<filename>.p<p>.pkl
+
+    The pickle contains::
+
+        {
+            'result':         basinhopping result,
+            'history':        list of (energy, params, statevector),
+            't_qaoa_circ':    QuantumCircuit,
+            'hamiltonian':    SparsePauliOp,
+            'best_sv':        np.ndarray,
+            'best_func_val':  float,
+            'best_params':    np.ndarray,
+        }
+
+CLI arguments:
+    -f / --filename:       GFA file stem.
+    -p / --reps:           Number of QAOA layers p (default 4).
+    -m / --memory:         GPU memory limit in MB (default 16000).
+    -N / --nodes:          Number of graph nodes N (used to derive
+                           n = ceil(log2(2N+1))).
+    -T / --time:           Number of timesteps T.
+    -c / --copy-numbers:   Comma-separated node copy numbers.
+"""
 import numpy as np
 import pickle
 import argparse
@@ -30,9 +76,15 @@ from qiskit_qaoa.utils.logging import get_logger
 
 
 def print_circuit_info(qc, circuit_name):
+    """Log the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: The quantum circuit to summarise.
+        circuit_name: A human-readable label included in the log message.
+    """
     logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
-    
+
 
 logger = get_logger(__name__)
 
@@ -149,6 +201,20 @@ zero_eval_indexs = np.nonzero(evals == 0)
 
 
 def objective(x: np.ndarray):
+    """Evaluate the statevector expected energy for a given parameter vector.
+
+    Runs the parameterised QAOA circuit on the AerSimulator statevector
+    backend, extracts the statevector, and computes the expectation value of
+    the full Hamiltonian.  Updates the module-level best-found solution and
+    appends a record to ``history``.
+
+    Args:
+        x: Parameter array of length 2*p in order
+           [beta_0, ..., beta_{p-1}, gamma_0, ..., gamma_{p-1}].
+
+    Returns:
+        Expected energy (float) to be minimised.
+    """
     assigned_circuit = t_qaoa_circ.assign_parameters(x, inplace=False)
     assigned_circuit.save_statevector()
     job = backend.run([assigned_circuit])
@@ -156,7 +222,7 @@ def objective(x: np.ndarray):
     data = result.results[0].data
     sv = np.asarray(data.statevector)
     energy = np.sum(np.abs(sv) ** 2 * evals)
-    
+
     global best_func_val
     global best_params
     global best_sv
@@ -171,6 +237,13 @@ def objective(x: np.ndarray):
 
 
 def callback_basinhopping(x: np.ndarray, f: float, accept: bool):
+    """Log the current basin-hopping state after each global step.
+
+    Args:
+        x: Current parameter vector.
+        f: Current function value.
+        accept: Whether the step was accepted.
+    """
     logger.info(f'Current params: {x}. Current func value: {f}')
 
 

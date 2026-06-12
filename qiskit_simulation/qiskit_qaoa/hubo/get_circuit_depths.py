@@ -1,3 +1,32 @@
+"""Survey compiled circuit depths across test instances and routing strategies.
+
+Iterates over a hard-coded set of test GFA instances, constructs the HUBO
+Hamiltonian for each, and benchmarks two alternative SWAP-strategy-based
+routing approaches:
+
+- **Rz** (``CommutingGateRouter``): decomposes multi-qubit Pauli evolutions
+  into CX + Rz gate sequences.
+- **Rzz** (``CommutingGateRouterRzz``): decomposes into Rzz gate sequences.
+
+For each routing strategy and each instance, the script searches over 10
+evenly-spaced SWAP-layer budgets (coarse sweep) then re-searches in a fine
+neighbourhood around the best coarse solution.  The qubit layout is obtained
+from ``HigherOrderSatMapper.hubo_max_sat`` or falls back to a trivial identity
+layout when ``--timeout 0`` is specified.
+
+A baseline is also recorded using Qiskit's default transpiler
+(``QAOAAnsatz`` → ``transpile`` at optimization level 3).
+
+Results are saved (with merge/update semantics) to::
+
+    /lustre/scratch127/qpg/jc59/circuit_depths/results<timeout>.pkl
+
+as a dict mapping filename → {'default': (count, depth), 'rz': (count, depth,
+layers), 'rzz': (count, depth, layers)}.
+
+CLI arguments:
+    -t / --timeout:   SAT solver timeout in seconds; 0 uses trivial layout.
+"""
 import numpy as np
 import pickle
 

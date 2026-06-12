@@ -1,3 +1,26 @@
+"""Hierarchical (multi-level) QAOA using DCT/DST parameter extrapolation.
+
+Implements the multi-level QAOA strategy: parameters are optimised at circuit
+depth p=1 using Powell's method, then extrapolated to depth p+1 via inverse/
+forward DCT-IV and DST-IV transforms (the "momentum-space" representation of
+the beta and gamma schedules).  A set of ``R`` perturbed candidates is also
+generated at each step to avoid local optima.  The outer loop increments p up
+to a maximum depth or until a convergence criterion is met.
+
+CLI usage::
+
+    python multi_level_experiment.py <filename>
+
+Args:
+    filename (str): Base name (without path or extension) of the QUBO data
+        file under ``/lustre/.../qubo_data_<filename>.gfa.npy``.
+
+Output:
+    A PNG plot of cumulative minimum cost vs. number of measurements saved to
+    the multilevel output directory.  Optimised parameters are logged at each
+    level.
+"""
+
 import numpy as np
 import sys
 from qiskit import QuantumCircuit
@@ -33,10 +56,26 @@ v_objective_evaluate = np.vectorize(objective.evaluate, signature='(i)->()')
 
 
 def mean_cost(samples):
+    """Compute the mean QUBO objective value over a batch of bitstring samples.
+
+    Args:
+        samples: Array of shape ``(M, n_qubits)`` containing binary samples.
+
+    Returns:
+        float: Mean objective value across all samples.
+    """
     return np.mean(v_objective_evaluate(samples))
 
 
 def cumulative_standard_error(samples):
+    """Estimate the standard error of the mean cost over accumulated samples.
+
+    Args:
+        samples: Array of shape ``(M, n_qubits)`` containing binary samples.
+
+    Returns:
+        float: Standard error of the mean cost estimate.
+    """
     # TODO: can reduce number of function calls around here
     M = samples.shape[0]
     mean = mean_cost(samples)
@@ -44,10 +83,33 @@ def cumulative_standard_error(samples):
 
 
 def parse_data(data: list[str]):
+    """Convert a list of measurement bitstrings to a binary integer array.
+
+    Args:
+        data: List of bitstrings as returned by ``job.result().get_memory()``.
+
+    Returns:
+        np.ndarray: Integer array of shape ``(len(data), n_bits)``.
+    """
     return np.array([[int(y) for y in list(x)] for x in data])
 
 
 def sample_circuit(parameters: np.ndarray, backend: AerSimulator, circuit: QuantumCircuit):
+    """Run the QAOA circuit and return the mean cost, accumulating samples.
+
+    Runs the circuit repeatedly until the cumulative standard error of the mean
+    cost falls below ``standard_error_tol`` or ``max_iters`` shots batches have
+    been taken.  All samples and costs are appended to the module-level
+    ``samples_history`` and ``costs_history`` lists.
+
+    Args:
+        parameters: 1-D array of variational parameters (betas then gammas).
+        backend: Configured AerSimulator backend to execute the circuit.
+        circuit: Transpiled and compiled QAOA circuit with bound parameters.
+
+    Returns:
+        float: Mean QUBO objective value over all accumulated samples.
+    """
     global samples_history
     global costs_history
     parameter_binding = {
@@ -70,7 +132,26 @@ def sample_circuit(parameters: np.ndarray, backend: AerSimulator, circuit: Quant
 
 
 def momentum_to_position_params(momentum_params, p):
-    """For testing only"""
+    """Convert DCT/DST frequency-domain parameters to position-domain (beta, gamma).
+
+    Used for testing the DCT-IV / DST-IV basis representation.  The momentum
+    (frequency) coefficients ``v`` and ``u`` are mapped back to ``beta`` and
+    ``gamma`` schedules of length ``p`` via the cosine and sine series defined
+    in the Fourier interpolation scheme.
+
+    Note:
+        This function is provided for testing purposes only.
+
+    Args:
+        momentum_params: 1-D array of length ``2*q`` containing ``q``
+            cosine-basis coefficients (for beta) followed by ``q`` sine-basis
+            coefficients (for gamma).
+        p: Target circuit depth (number of QAOA layers).
+
+    Returns:
+        list: ``[beta, gamma]`` where each element is a 1-D array of length
+        ``p``.
+    """
     q = int(len(momentum_params) / 2)
     u = momentum_params[:q]
     v = momentum_params[q:]
@@ -80,6 +161,21 @@ def momentum_to_position_params(momentum_params, p):
 
 
 def get_next_layer_params(params):
+    """Extrapolate optimised p-layer parameters to p+1 layers via DCT/DST.
+
+    Converts the current (beta, gamma) schedule to frequency-domain
+    coefficients using inverse DCT-IV (for beta) and inverse DST-IV (for
+    gamma), zero-pads by one coefficient, then transforms back to produce a
+    p+1 layer schedule.
+
+    Args:
+        params: 1-D array of length ``2*p`` containing ``p`` beta values
+            followed by ``p`` gamma values.
+
+    Returns:
+        np.ndarray: 1-D array of length ``2*(p+1)`` with the extrapolated
+        beta and gamma schedules concatenated.
+    """
     p = int(len(params) / 2)
     beta, gamma = params[:p], params[p:]
     u, v = idst(gamma, type=4), idct(beta, type=4)
@@ -90,6 +186,23 @@ def get_next_layer_params(params):
 
 
 def get_perturbed_next_layer_params(params, R, alpha):
+    """Generate R+1 candidate parameter sets for the next QAOA layer.
+
+    Extrapolates the current parameters to depth p+1 (zero-padded DCT/DST as
+    in :func:`get_next_layer_params`) and additionally creates ``R`` randomly
+    perturbed variants.  Perturbation magnitude is proportional to the
+    absolute value of each frequency coefficient, scaled by ``alpha``.
+
+    Args:
+        params: 1-D array of length ``2*p`` (betas then gammas).
+        R: Number of perturbed candidate initialisation points to generate.
+        alpha: Perturbation strength relative to the frequency-coefficient
+            magnitude.
+
+    Returns:
+        np.ndarray: Array of shape ``(R+1, 2*(p+1))`` where row 0 is the
+        unperturbed extrapolation and rows 1..R are perturbed variants.
+    """
     p = int(len(params) / 2)
     beta, gamma = params[:p], params[p:]
     u, v = idst(gamma, type=4), idct(beta, type=4)
@@ -101,6 +214,16 @@ def get_perturbed_next_layer_params(params, R, alpha):
 
 
 def callback(intermediate_result):
+    """Log the current objective value and raise StopIteration if converged.
+
+    Passed to ``scipy.optimize.minimize`` as the ``callback`` argument.
+    Raises ``StopIteration`` if the global minimum cost has effectively
+    reached zero (``< 1e-6``), which scipy interprets as a signal to halt.
+
+    Args:
+        intermediate_result: Optimisation result object with a ``.fun``
+            attribute holding the current objective value.
+    """
     logger.info(f'Inter result: {intermediate_result.fun}')
     if np.min(costs_history) < 1e-6 == 0:
         raise StopIteration

@@ -1,3 +1,14 @@
+"""QAOA parameter optimisation strategies.
+
+Provides three classical optimisers for finding the QAOA variational parameters
+(γ, β) that minimise the Hamiltonian expectation value:
+
+- ``bayesian_optimize_qaoa_parameters``: scikit-optimise Bayesian optimisation.
+- ``basinhopping_optimize_qaoa_parameters``: scipy basin-hopping with COBYLA.
+- ``local_optimize_qaoa_parameters``: scipy Powell method with optional early
+  stopping when the sampled cost reaches zero.
+"""
+
 import numpy as np
 from scipy.optimize import minimize, basinhopping
 from skopt import Optimizer
@@ -40,6 +51,25 @@ def bayesian_optimize_qaoa_parameters(
     reps: int,
     bounds: list[tuple]
 ):
+    """Optimise QAOA parameters using Bayesian optimisation (scikit-optimise).
+
+    Runs 200 iterations of a Gaussian-process surrogate model.  Each iteration
+    evaluates the Hamiltonian expectation value via the estimator and updates
+    the model.
+
+    Args:
+        estimator: An ``EstimatorWithHistory`` used to evaluate the circuit.
+        init_params: Initial parameter vector (length ``2 * reps`` for
+            standard QAOA with ``reps`` layers).
+        circuit: The transpiled QAOA ansatz circuit.
+        hamiltonian: The Ising Hamiltonian as a ``SparsePauliOp``.
+        reps: Number of QAOA layers; used to replicate the per-layer bounds.
+        bounds: Per-layer parameter bounds as a list of ``(low, high)`` tuples
+            (replicated ``reps`` times internally).
+
+    Returns:
+        The scikit-optimise ``OptimizeResult`` from the final ``tell`` call.
+    """
     bounds = bounds * reps
 
     bopt = Optimizer(bounds, random_state=10)
@@ -62,6 +92,25 @@ def basinhopping_optimize_qaoa_parameters(
         reps: int,
         bounds: list[tuple],
 ):
+    """Optimise QAOA parameters using basin-hopping with COBYLA local search.
+
+    Applies the observable layout transformation to map the virtual-qubit
+    Hamiltonian to the physical layout before optimisation.  Runs 100
+    basin-hopping steps with ``niter_success=20`` and a temperature of 0.01.
+
+    Args:
+        estimator: An ``EstimatorWithHistory`` used to evaluate the circuit.
+        init_params: Initial parameter vector.
+        circuit: The transpiled QAOA ansatz circuit (must have a ``layout``
+            attribute set by the transpiler).
+        hamiltonian: The Ising Hamiltonian as a ``SparsePauliOp`` defined on
+            virtual qubits.
+        reps: Number of QAOA layers; used to replicate the per-layer bounds.
+        bounds: Per-layer parameter bounds as a list of ``(low, high)`` tuples.
+
+    Returns:
+        The scipy ``OptimizeResult`` from ``basinhopping``.
+    """
     # transform the observable defined on virtual qubits to
     # an observable defined on all physical qubits
     isa_hamiltonian = hamiltonian.apply_layout(circuit.layout)
@@ -96,6 +145,33 @@ def local_optimize_qaoa_parameters(
         cost_fun: np.vectorize,
         ftol=1e-2,
 ):
+    """Optimise QAOA parameters using Powell's method with optional early stopping.
+
+    Applies the observable layout transformation then minimises the Hamiltonian
+    expectation value with scipy's Powell algorithm.  At each step the raw
+    measurement outcomes are scored by ``cost_fun`` and appended to
+    ``costs_history``; if the minimum observed cost drops below 1e-6 the
+    callback raises ``StopIteration`` to halt early.
+
+    Args:
+        estimator: An Aer ``EstimatorV2`` (or ``EstimatorWithHistory``) used
+            to evaluate the circuit.
+        init_params: Initial parameter vector.
+        circuit: The transpiled QAOA ansatz circuit (must have a ``layout``
+            attribute).
+        hamiltonian: The Ising Hamiltonian as a ``SparsePauliOp`` defined on
+            virtual qubits.
+        bounds: Parameter bounds as a list of ``(low, high)`` tuples.
+        costs_history: A mutable list that is extended with the raw sample
+            costs at each function evaluation.  Also used for early-stopping.
+        cost_fun: A ``numpy.vectorize``-d callable that maps a 2-D binary
+            outcome array (shape ``(n_samples, n_qubits)``) to a 1-D cost
+            array.
+        ftol: Function-value tolerance for Powell convergence (default 1e-2).
+
+    Returns:
+        The scipy ``OptimizeResult`` from ``minimize``.
+    """
     # transform the observable defined on virtual qubits to
     # an observable defined on all physical qubits
     isa_hamiltonian = hamiltonian.apply_layout(circuit.layout)

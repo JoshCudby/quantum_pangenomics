@@ -1,11 +1,37 @@
+"""Mixer operators and initial state preparation for constrained QAOA.
+
+Implements the Shukla–Vedula state preparation method for a uniform superposition
+over ``{0, …, M-1}`` on ``ceil(log2(M+1))`` qubits, the walk-state
+initialiser ``state_prep``, and the corresponding constrained mixer operator
+``get_mixer_operator`` that preserves the Hamming-weight subspace required by
+the pangenome path QUBO.
+"""
+
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter
 
 def uniform_over_range(num_qubits: int, M: int):
-    """
-    Returns a circuit that prepares a uniform superposition over |0>,|1>,...,|M-1> on num_qubits qubits.
-    Uses a Hadamard layer if M is a power of 2, else uses the method of Shukla and Vedula.
+    """Prepare a uniform superposition over ``|0>, |1>, ..., |M-1>`` on ``num_qubits`` qubits.
+
+    If ``M`` is a power of 2, a layer of Hadamard gates on the lowest
+    ``log2(M)`` qubits suffices.  Otherwise the Shukla–Vedula decomposition
+    is used: the binary representation of ``M`` drives a sequence of
+    controlled-Ry and controlled-Hadamard gates that partition the
+    probability amplitude correctly.
+
+    Args:
+        num_qubits: Number of qubits in the register.  Must satisfy
+            ``M <= 2**num_qubits``.
+        M: The number of basis states over which to prepare a uniform
+            distribution.  Must be a positive integer.
+
+    Returns:
+        A ``QuantumCircuit`` on ``num_qubits`` qubits that prepares the
+        state ``(1/sqrt(M)) * sum_{k=0}^{M-1} |k>``.
+
+    Raises:
+        Exception: If ``M`` is out of the range ``[0, 2**num_qubits]``.
     """
     if M not in range(2 ** num_qubits +1):
         print(M)
@@ -59,6 +85,20 @@ def uniform_over_range(num_qubits: int, M: int):
 
 
 def state_prep(N: int, T: int) -> QuantumCircuit:
+    """Prepare the initial state for constrained QAOA over ``T`` time steps with ``N`` nodes.
+
+    Builds a circuit of ``T`` registers, each of ``ceil(log2(2*N+1))`` qubits,
+    and applies ``uniform_over_range(n, 2*N+1)`` to each register independently.
+    This encodes the fact that at each time step a node index in ``{0, …, 2N}``
+    can be visited (using both orientations of ``N`` nodes plus a sentinel).
+
+    Args:
+        N: Number of graph nodes (segment orientations per strand).
+        T: Walk length (number of QAOA time steps / registers).
+
+    Returns:
+        A ``QuantumCircuit`` on ``ceil(log2(2*N+1)) * T`` qubits.
+    """
     n = int(np.ceil(np.log2(2*N+1)))
     uni = uniform_over_range(n, 2*N+1)
     circuit = QuantumCircuit(n * T)
@@ -71,6 +111,24 @@ def state_prep(N: int, T: int) -> QuantumCircuit:
 
 
 def get_mixer_operator(N: int, T: int, parameter=Parameter('beta')) -> QuantumCircuit:
+    """Construct the constrained QAOA mixer that preserves the walk-state subspace.
+
+    Implements the Grover-style mixer: uncompute the initial state preparation,
+    apply a multi-controlled phase to the all-zero ancilla state, then reapply
+    the state preparation.  This ensures that the mixer only mixes within the
+    feasible subspace of valid walk states (no amplitude leaks into invalid
+    configurations).
+
+    Args:
+        N: Number of graph nodes.
+        T: Walk length (number of registers).
+        parameter: The ``Parameter`` object representing the mixer angle
+            ``beta``.  Defaults to a parameter named ``'beta'``.
+
+    Returns:
+        A parameterised ``QuantumCircuit`` on ``ceil(log2(2*N+1)) * T`` qubits
+        implementing the constrained mixer layer ``U_B(beta)``.
+    """
     # TODO: use ancillas to reduce depth of mcp?
     num_qubits = int(np.ceil(np.log2(2*N+1))) * T
     state_prep_circuit = state_prep(N, T)

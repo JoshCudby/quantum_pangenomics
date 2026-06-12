@@ -1,4 +1,39 @@
+"""HUBO QAOA optimisation using the default Qiskit-Aer noise model.
 
+Variant of ``hubo_optimisation_for_simulation.py`` that builds the QAOA
+circuit directly from the Hamiltonian (no pre-compiled layout) and runs it
+under the *default* noise model of the configured AerSimulator backend
+(statevector method, GPU).  Intended as a baseline for comparing compiled
+versus uncompiled circuit performance under simulated hardware noise.
+
+The full HUBO Hamiltonian is constructed on-the-fly from the GFA file; no
+compilation pickle is required.  The QAOAAnsatz is transpiled directly to the
+basis gate set using Qiskit's standard transpiler (optimization level 0).
+
+Serialisation:
+    The optimisation result is pickled to::
+
+        <basepath>/<filename>default.method<M>.cvar<a>.p<p>.shots<n>.init<init>.pkl
+
+    The pickle contains::
+
+        {
+            'result':      scipy.optimize.OptimizeResult,
+            'history':     list of (sampling_time, energy, params, counts,
+                                    post_process_time),
+            'hamiltonian': SparsePauliOp,
+            't_qaoa_circ': QuantumCircuit,
+        }
+
+CLI arguments:
+    -f / --filename:       GFA file stem.
+    -p / --reps:           Number of QAOA layers p (default 4).
+    -m / --memory:         GPU memory limit in MB (default 16000).
+    -M / --method:         scipy optimiser name.
+    -n / --shots:          Shots per evaluation (default 1000).
+    --init:                Parameter initialisation: ``ramp`` or ``random``.
+    -c / --copy-numbers:   Comma-separated node copy numbers.
+"""
 import numpy as np
 import numpy.typing as npt
 from time import time
@@ -21,12 +56,30 @@ from qiskit_qaoa.utils.logging import get_logger
 
 
 def print_circuit_info(qc, circuit_name):
+    """Log the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: The quantum circuit to summarise.
+        circuit_name: A human-readable label included in the log message.
+    """
     logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
-    
-    
+
+
 properties = {}
 def get_permutation(pass_, dag, time, property_set, count):
+    """Callback for extracting the virtual permutation layout from a pass manager.
+
+    Stores the ``virtual_permutation_layout`` property set entry into the
+    module-level ``properties`` dict so it can be inspected after transpilation.
+
+    Args:
+        pass_: The transpiler pass that was just executed.
+        dag: The DAG circuit at this stage.
+        time: Elapsed time for this pass.
+        property_set: The pass manager property set dict.
+        count: Pass execution count.
+    """
     properties["virtual_permutation_layout"] = property_set["virtual_permutation_layout"]
     
 
@@ -109,12 +162,34 @@ history = []
 alpha = 0.25
 
 def cvar(energies, alpha=1.0):
+    """Compute the Conditional Value-at-Risk (CVaR) of a list of energies.
+
+    Args:
+        energies: Sequence of energy values (floats).
+        alpha: Tail fraction in (0, 1].  alpha=1.0 is the plain mean.
+
+    Returns:
+        CVaR estimate as a float.
+    """
     sorted_energies = sorted(energies)
     end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx
 
 
 def objective(x: npt.NDArray[np.float64]):
+    """Evaluate the CVaR objective under the default Aer noise model.
+
+    Submits the parameterised QAOA circuit to the Aer SamplerV2, collects
+    measurement counts, and returns the CVaR of the sample energies evaluated
+    against the full Hamiltonian.  Appends a record to ``history``.
+
+    Args:
+        x: Parameter array of length 2*p in order
+           [beta_0, ..., beta_{p-1}, gamma_0, ..., gamma_{p-1}].
+
+    Returns:
+        CVaR energy (float) to be minimised.
+    """
     start = time()
     assigned_circuit = t_qaoa_circ.assign_parameters(x, inplace=False)
     sampler_job = sampler.run([assigned_circuit], shots=shots)
@@ -134,12 +209,25 @@ def objective(x: npt.NDArray[np.float64]):
 
 
 def callback(intermediate_result: OptimizeResult):
+    """Log the current optimiser state; raise StopIteration if optimal found.
+
+    Args:
+        intermediate_result: Current optimiser state from scipy.
+
+    Raises:
+        StopIteration: When the objective value reaches -1.
+    """
     logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
     if intermediate_result.fun == -1:
         raise StopIteration
-    
+
 
 def callback_cobyla(xk: np.ndarray):
+    """Log the current parameter vector for COBYLA/SLSQP/TNC optimisers.
+
+    Args:
+        xk: Current parameter vector.
+    """
     logger.info(f'Current params: {xk}.')
     
     

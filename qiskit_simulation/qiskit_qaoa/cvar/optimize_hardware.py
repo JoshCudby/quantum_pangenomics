@@ -1,3 +1,29 @@
+"""CVaR-QAOA optimisation on real IBM quantum hardware.
+
+Submits the CVaR-QAOA circuit to an IBM quantum processor (ibm_aachen) via
+Qiskit Runtime, within a session to minimise queue latency between iterations.
+Gate twirling and (optional) dynamical decoupling are applied for error
+mitigation.
+
+CLI usage::
+
+    python optimize_hardware.py -f <filename> [-p <reps>] [-a <alpha>]
+                                [-M <method>] [-n <shots>]
+                                [--init {ramp,random,fixed}]
+
+Args:
+    -f / --filename (str): Base name of the QUBO data ``.pkl`` file.
+    -p / --reps (int): QAOA circuit depth (default: 4).
+    -a / --alpha (float): CVaR threshold (default: 0.25).
+    -M / --method (str): scipy optimisation method (default: ``"COBYLA"``).
+    -n / --shots (int): Shots per objective evaluation (default: 2000).
+    --init: Parameter initialisation strategy — ``"ramp"``, ``"random"``,
+        or ``"fixed"`` (default: ``"random"``).
+
+Output:
+    Saves a pickle file with the optimisation result, history, circuit graph
+    artefacts, and best samples to the hardware output directory.
+"""
 
 import numpy as np
 from time import time
@@ -60,6 +86,15 @@ transpiled_qc = transpile(qc, backend, optimization_level=3)
 
 
 def print_circuit_info(qc, circuit_name):
+    """Log the 2-qubit gate count and 2-qubit gate depth for a hardware circuit.
+
+    Includes ECR gates in the count alongside CZ, RZZ, and CX, since ECR is
+    the native 2-qubit gate on some IBM devices (e.g. ibm_aachen).
+
+    Args:
+        qc: A Qiskit ``QuantumCircuit`` to inspect.
+        circuit_name (str): Label to include in the log message.
+    """
     logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0) + qc.count_ops().get("ecr", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
 
@@ -110,20 +145,54 @@ best_params = init_params
 best_samples = []
 
 def callback(intermediate_result: OptimizeResult):
+    """Log the current parameter vector and objective value (gradient-based solvers).
+
+    Args:
+        intermediate_result: scipy ``OptimizeResult`` with ``.x`` and ``.fun``.
+    """
     logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
-    
+
 
 def callback_cobyla(xk: np.ndarray):
+    """Log the current parameter vector (COBYLA callback interface).
+
+    Args:
+        xk: Current parameter array passed by COBYLA at each iteration.
+    """
     logger.info(f'Current params: {xk}.')
 
 
 def cvar(energies, alpha=1.0):
+    """Compute the Conditional Value-at-Risk (CVaR) of an energy distribution.
+
+    Args:
+        energies: Iterable of scalar energy values from hardware measurements.
+        alpha (float): CVaR threshold in (0, 1].  Default is 1.0 (full mean).
+
+    Returns:
+        float: Mean energy of the ``floor(alpha * len(energies))`` lowest-
+        energy samples.
+    """
     sorted_energies = sorted(energies)
     end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx
 
 
 def objective(x: np.ndarray):
+    """Evaluate the CVaR-QAOA objective on IBM hardware for a parameter vector.
+
+    Submits the parameterised circuit to the IBM Sampler (inside an open
+    session), evaluates each returned bitstring against the cost operator with
+    Ising offset, and returns the CVaR of the energy distribution.  Updates
+    module-level best tracking and appends timing data to ``history``.
+
+    Args:
+        x: 1-D parameter array (betas then gammas) of length
+            ``2 * qaoa_depth``.
+
+    Returns:
+        float: CVaR_alpha of the hardware measurement energy distribution.
+    """
     start = time()
     assigned_circuit = circuit.assign_parameters(x, inplace=False)
     sampler_job = sampler.run([assigned_circuit], shots=shots)
@@ -140,7 +209,7 @@ def objective(x: np.ndarray):
     energies = [count * [evals[idx]] for idx, count in enumerate(counts.values())]
     flat_energies = [x for xs in energies for x in xs]
     total_energy = cvar(flat_energies, alpha)
-    
+
     global best_func_val
     global best_params
     global best_samples

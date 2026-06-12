@@ -1,4 +1,61 @@
+"""HUBO QAOA parameter optimisation using a simulation-compiled circuit.
 
+Loads a compiled HUBO circuit produced by
+``hubo_circuit_compilation_for_simulation.py`` (line or grid topology,
+statevector-friendly decomposition), wraps it in a full QAOA ansatz
+(p repetitions) via ``QAOAConstructionPass``, and optimises the beta/gamma
+parameters using basin-hopping or ``scipy.optimize.minimize``.
+
+This script mirrors ``hubo_optimisation.py`` but targets the AerSimulator
+(GPU, statevector method) instead of real hardware, and loads compilation
+pickles from the ``hubo/`` scratch directory rather than ``hubo_hardware/``.
+
+Objective function:
+    CVaR of bitstring energies evaluated against the remapped full Hamiltonian.
+
+Parameter initialisation:
+    - ``ramp``:   linearly spaced annealing schedule.
+    - ``random``: uniform random in [0, 1].
+    - ``warm``:   hard-coded warm-start values from a previous run.
+
+Serialisation:
+    The optimisation result is pickled to::
+
+        <basepath>/simulation.<C>.optimisation.<f>.extra<e>.times<t>
+            .four<frac4>.six<frac6>.method<M>.cvar<a>.p<p>.shots<n>.init<init>.d<d>.pkl
+
+    The pickle contains::
+
+        {
+            'result':                    OptimizeResult or basinhopping result,
+            'history':                   list of (sampling_time, energy, params,
+                                                   counts, post_process_time),
+            'remapped_full_hamiltonian': SparsePauliOp,
+            't_qaoa_circ':               QuantumCircuit,
+            'compiled_hamiltonian':      SparsePauliOp,
+            'layout':                    Layout,
+        }
+
+CLI arguments:
+    -f / --filename:       GFA file stem (used to locate the compilation
+                           pickle).
+    -p / --reps:           Number of QAOA layers p (default 4).
+    -d / --swap-depth:     SWAP-layer budget index from the compilation pickle
+                           (default 0).
+    -m / --memory:         GPU memory limit in MB (default 16000).
+    -M / --method:         Optimiser: ``basinhopping`` or a scipy method name.
+    -n / --shots:          Shots per evaluation (default 1000).
+    --init:                Initialisation strategy: ``ramp``, ``random``, or
+                           ``warm``.
+    -e / --extra:          Extra SWAP layers used during compilation (default 1).
+    --fraction-four:       Fraction of 4-body terms retained at compilation.
+    --fraction-six:        Fraction of 6-body terms retained at compilation.
+    --times-to-keep:       Timestep-transition indices used at compilation.
+    -N / --nodes:          Number of graph nodes (used to derive n = ceil(log2(2N+1))).
+    -T / --time:           Number of timesteps T.
+    -C / --coupling-map:   Coupling topology: ``line`` or ``grid``.
+    -a / --alpha:          CVaR tail fraction (default 0.25).
+"""
 import numpy as np
 import networkx as nx
 from itertools import combinations
@@ -28,9 +85,15 @@ from qiskit_qaoa.utils.logging import get_logger
 
 
 def print_circuit_info(qc, circuit_name):
+    """Log the 2-qubit gate count and 2-qubit gate depth of a circuit.
+
+    Args:
+        qc: The quantum circuit to summarise.
+        circuit_name: A human-readable label included in the log message.
+    """
     logger.info(f'{circuit_name} has {qc.count_ops().get("cz", 0) + qc.count_ops().get("rzz", 0) + qc.count_ops().get("cx", 0)} 2Q gates \
     and {qc.depth(lambda instr: len(instr.qubits) > 1)} 2Q depth')
-    
+
 
 logger = get_logger(__name__)
 
@@ -199,12 +262,34 @@ history = []
 alpha = args.alpha
 
 def cvar(energies, alpha=1.0):
+    """Compute the Conditional Value-at-Risk (CVaR) of a list of energies.
+
+    Args:
+        energies: Sequence of energy values (floats).
+        alpha: Tail fraction in (0, 1].  alpha=1.0 is the plain mean.
+
+    Returns:
+        CVaR estimate as a float.
+    """
     sorted_energies = sorted(energies)
     end_idx = int(alpha * len(energies))
     return np.sum(sorted_energies[0:end_idx]) / end_idx
 
 
 def objective(x: np.ndarray):
+    """Evaluate the CVaR objective for the simulation-compiled QAOA circuit.
+
+    Submits the parameterised circuit to the Aer SamplerV2, collects counts,
+    evaluates each bitstring against the remapped full Hamiltonian, and returns
+    the CVaR.  Appends a record to ``history``.
+
+    Args:
+        x: Parameter array of length 2*p in order
+           [beta_0, ..., beta_{p-1}, gamma_0, ..., gamma_{p-1}].
+
+    Returns:
+        CVaR energy (float) to be minimised.
+    """
     start = time()
     assigned_circuit = t_qaoa_circ.assign_parameters(x, inplace=False)
     sampler_job = sampler.run([assigned_circuit], shots=shots)
@@ -224,16 +309,36 @@ def objective(x: np.ndarray):
 
 
 def callback(intermediate_result: OptimizeResult):
+    """Log the current optimiser state; raise StopIteration if optimal found.
+
+    Args:
+        intermediate_result: Current optimiser state from scipy.
+
+    Raises:
+        StopIteration: When the objective value reaches -1.
+    """
     logger.info(f'Current params: {intermediate_result.x}. Current func value: {intermediate_result.fun}')
     if intermediate_result.fun == -1:
         raise StopIteration
-    
+
 
 def callback_cobyla(xk: np.ndarray):
+    """Log the current parameter vector for COBYLA/SLSQP/TNC optimisers.
+
+    Args:
+        xk: Current parameter vector.
+    """
     logger.info(f'Current params: {xk}.')
-    
+
 
 def callback_basinhopping(x: np.ndarray, f: float, accept: bool):
+    """Log the current basin-hopping state after each global step.
+
+    Args:
+        x: Current parameter vector.
+        f: Current function value.
+        accept: Whether the step was accepted.
+    """
     logger.info(f'Current params: {x}. Current func value: {f}')
     
 logger.info(f'Using method: {args.method}.')

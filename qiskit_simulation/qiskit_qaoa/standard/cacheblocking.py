@@ -1,3 +1,23 @@
+"""Qiskit-Aer cache-blocking verification script.
+
+Exercises the Aer statevector GPU simulator with cache-blocking enabled
+(``blocking_enable=True``, ``blocking_qubits=23``) on a QuantumVolume circuit
+of configurable width.  Prints memory estimates, available devices, and the
+simulation result metadata to verify that cache-blocking is active and
+functioning correctly.
+
+Cache-blocking partitions the statevector into chunks that fit within the GPU
+L2/HBM cache hierarchy, enabling simulation of circuits that exceed the memory
+of a single GPU when combined with multi-GPU support.
+
+CLI usage::
+
+    python cacheblocking.py <qubits>
+
+Args:
+    qubits (int): Number of qubits in the QuantumVolume circuit to simulate.
+"""
+
 from qiskit_aer import AerSimulator
 from qiskit.circuit.library import QuantumVolume
 from qiskit import transpile

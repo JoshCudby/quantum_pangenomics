@@ -1,3 +1,11 @@
+"""Selects the highest-fidelity qubit subset from a real IBM backend.
+
+Provides ``BackendEvaluator`` and helper functions to enumerate all linear
+chains (paths) of a given length in a backend's coupling map, score each chain
+by its cumulative two-qubit gate fidelity, and return the best chain as an
+``initial_layout`` for use with a ``SwapStrategy`` transpiler pass.
+"""
+
 from __future__ import annotations
 from collections.abc import Callable
 import numpy as np
@@ -99,14 +107,25 @@ def evaluate_fidelity(path: list[int], backend: Backend, edges: rx.EdgeList) -> 
 
 
 class BackendEvaluator:
-    """
-    Finds best subset of qubits for a given device that maximizes a given
-    metric for a given geometry.
-    This subset can be provided as an initial_layout for the SwapStrategy
+    """Finds the highest-fidelity qubit subset for a given backend topology.
+
+    Enumerates candidate qubit subsets (by default linear chains) using a
+    ``subset_finder`` callable and scores each by a ``metric_eval`` callable
+    (by default cumulative two-qubit gate fidelity along the chain).  The best
+    subset can then be supplied as ``initial_layout`` to a ``SwapStrategy``
     transpiler pass.
+
+    Attributes:
+        backend: The Qiskit backend being evaluated.
+        coupling_map: The symmetrised coupling map of the backend.
     """
 
     def __init__(self, backend: Backend):
+        """Initialise the evaluator for a specific backend.
+
+        Args:
+            backend: A Qiskit backend (v1 or v2) to evaluate.
+        """
         self.backend = backend
         if backend.version == 2:
             coupling_map = CouplingMap(backend.coupling_map)
@@ -122,11 +141,26 @@ class BackendEvaluator:
         subset_finder: Callable | None = None,
         metric_eval: Callable | None = None,
     ):
-        """
+        """Find the best qubit subset of the requested size.
+
         Args:
-            num_qubits: the number of qubits
-            subset_finder: callable, will default to "find_line"
-            metric_eval: callable, will default to "evaluate_fidelity"
+            num_qubits: Number of qubits in the desired subset.
+            subset_finder: A callable ``(num_qubits, backend) -> list[list[int]]``
+                that enumerates candidate qubit subsets.  Defaults to
+                ``find_lines``, which returns all simple paths of the given
+                length in the coupling graph.
+            metric_eval: A callable ``(subset, backend, edges) -> float``
+                that scores each subset.  Defaults to ``evaluate_fidelity``,
+                which computes the product of two-qubit gate fidelities along
+                the path.
+
+        Returns:
+            A tuple ``(best_subset, best_score, num_subsets)`` where:
+
+            - ``best_subset``: List of physical qubit indices forming the
+              highest-scoring subset.
+            - ``best_score``: The metric value for the best subset.
+            - ``num_subsets``: Total number of candidate subsets evaluated.
         """
 
         if metric_eval is None:

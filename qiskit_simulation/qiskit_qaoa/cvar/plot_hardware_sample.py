@@ -1,3 +1,23 @@
+"""Plot sample-only hardware CVaR-QAOA energy histograms.
+
+Loads a pickled result from ``sample_hardware.py`` (a single-shot sampling run
+without optimisation) and generates two PNG histograms:
+
+1. **Raw sample histogram** — QAOA circuit samples vs. random samples on a
+   log-scale x-axis.
+2. **Post-processed histogram** — same distributions after applying local
+   post-processing (``postprocess``) to each bitstring.
+
+Source pickle:
+    ``experiments/hardware.<filename>_sample.<suffix>.pkl``
+
+CLI usage::
+
+    python plot_hardware_sample.py -f <filename> -p <reps> -n <shots>
+                                   [-e <error>] [-T <time>]
+                                   [--init {ramp,random,fixed,warm}]
+"""
+
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt

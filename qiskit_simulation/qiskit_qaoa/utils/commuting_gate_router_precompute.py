@@ -1,3 +1,21 @@
+"""Precomputes swap-layer gate sequences for a fixed interaction graph.
+
+Provides ``CommutingGateRouterPrecompute``, which amortises the per-gate CX
+network search across all interactions in a layer by:
+
+1. Precomputing the ``enumerate_removal_pair_sequences`` for each interaction
+   tuple, finding the CX sequence that maximises the number of other
+   interactions satisfied as a by-product.
+2. Applying that sequence greedily, inserting RZ gates whenever the
+   accumulated parity matches a required interaction.
+3. Using BFS (``bfs_shortest_sequence``) or a heuristic spanning-tree solver
+   (``heuristic_spanning_tree_solver``) to find the shortest CX uncompute
+   sequence at the end of each chain.
+
+This variant uses single-qubit RZ rotations (not RZZ gates); see
+``commuting_gate_router_precompute_rzz.py`` for the RZZ version.
+"""
+
 import numpy as np
 from typing import overload, Dict, Set, Iterable, List, Generator, Optional, Tuple
 from collections import deque, defaultdict
@@ -21,6 +39,22 @@ from qiskit_qaoa.utils.shortest_sequence_graph_reset import heuristic_spanning_t
 
 
 class CommutingGateRouterPrecompute(TransformationPass):
+    """Routes commuting Pauli-Z evolutions with precomputed CX sequences (RZ variant).
+
+    At each swap depth layer the router:
+
+    1. Calls ``_precompute_chain`` alternately in descending/ascending
+       interaction-size order to find a chain of interactions that can be
+       implemented with a compact CX sequence.
+    2. Applies that CX sequence, inserting RZ gates whenever the accumulated
+       qubit parity matches a required interaction.
+    3. Calls ``_reset_info`` to uncompute the parity (using BFS or the
+       heuristic spanning-tree solver for the shortest possible sequence).
+
+    Interactions that cannot be routed within ``max_layers`` are collected in
+    ``_cannot_implement`` and optionally appended later.
+    """
+
     def __init__(
         self,
         swap_strategy: ExtendedSwapStrategy,
@@ -37,6 +71,25 @@ class CommutingGateRouterPrecompute(TransformationPass):
         
         
     def run(self, dag: DAGCircuit) -> DAGCircuit:
+        """Apply the precomputed-CX routing pass to the DAG.
+
+        Iterates topologically over ``dag``.  Each ``CommutingBlock`` is
+        decomposed into precomputed CX chains via ``swap_decompose``.
+        Non-block nodes accumulate in a side DAG and, if
+        ``perform_extra_swaps`` is True, are compiled with a Qiskit preset
+        pass manager (optimisation level 3) and appended to the output.
+
+        Args:
+            dag: Input ``DAGCircuit`` with a single quantum register.
+
+        Returns:
+            A new ``DAGCircuit`` with ``CommutingBlock`` nodes replaced by
+            native CX/RZ gate sequences.
+
+        Raises:
+            TranspilerError: If the circuit has more than one quantum register
+                or contains qubits outside the register.
+        """
         if len(dag.qregs) != 1:
             raise TranspilerError(
                 f"{self.__class__.__name__} runs on circuits with one quantum register."
@@ -113,6 +166,26 @@ class CommutingGateRouterPrecompute(TransformationPass):
     def swap_decompose(
         self, dag: DAGCircuit, node: DAGOpNode, current_layout: Layout, swap_strategy: ExtendedSwapStrategy
     ) -> DAGCircuit:
+        """Decompose a single ``CommutingBlock`` node using precomputed CX chains.
+
+        Partitions the block's gates into swap layers by distance, applies the
+        precomputed CX+RZ sub-layers for each step via ``_build_chain_sub_layers``,
+        and inserts SWAP gates between layers to advance the virtual layout.
+        Gates that cannot be routed within ``max_layers`` are stored in
+        ``self._cannot_implement``.
+
+        Args:
+            dag: The parent ``DAGCircuit`` (used for qubit look-ups).
+            node: The ``DAGOpNode`` whose ``op`` is a ``CommutingBlock``.
+            current_layout: Virtual-to-physical qubit mapping; updated in-place
+                by each SWAP gate applied.
+            swap_strategy: The ``ExtendedSwapStrategy`` supplying swap-layer
+                sequences and distance information.
+
+        Returns:
+            A ``DAGCircuit`` implementing the block under the current layout via
+            CX/RZ and SWAP gates.
+        """
         trivial_layout = Layout.generate_trivial_layout(*dag.qregs.values())
         gate_layers, impossible_nodes = self._make_op_layers(dag, node.op, current_layout, swap_strategy)
 
