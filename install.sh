@@ -19,14 +19,6 @@ if ! command -v mqlib &>/dev/null; then
     echo ""
 fi
 
-# ── Git submodules ─────────────────────────────────────────────────────────────
-
-echo "Initialising git submodules..."
-# Note: pangene_fork and openqaoa require Sanger internal GitLab SSH access.
-# If you are outside Sanger, those submodules will fail — this is expected.
-# All other submodules are publicly accessible.
-git submodule update --init --recursive 2>&1 | grep -v '^$' || true
-
 # ── Python packages ────────────────────────────────────────────────────────────
 
 echo ""

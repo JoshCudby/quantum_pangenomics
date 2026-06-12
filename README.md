@@ -35,7 +35,6 @@ path solution  ──── scored by coverage, breaks, identity
 | `sat/` | SAT solver approaches |
 | `data/` | Test GFA datasets (Arabidopsis, Daphnia, HLA, PhiX174, synthetic) |
 | `utils/` | Shared utilities (GFA subgraph cropper, plotting notebooks) |
-| `modules/` | Git submodules (qpg, oatk, qopt-best-practices, etc.) |
 | `legacy_code/` | Legacy implementations (QOKit, OpenQAOA, tensor networks, programmable QAOA, pathfinder) |
 
 ## Installation
@@ -44,12 +43,11 @@ path solution  ──── scored by coverage, breaks, identity
 
 - Python ≥ 3.10
 - [MQLib](https://github.com/MQLib/MQLib) — build from source following the instructions in that repo and add the resulting binary to your `$PATH`
-- Two submodules (`pangene_fork`, `openqaoa`) live on Sanger internal GitLab and require SSH access. If you are outside Sanger, submodule init will warn about these — all other submodules are public and will succeed.
 
 ### Quick install
 
 ```bash
-git clone --recurse-submodules https://github.com/JoshCudby/jc-tangle.git
+git clone https://github.com/JoshCudby/jc-tangle.git
 cd jc-tangle
 bash install.sh
 ```
@@ -61,14 +59,8 @@ bash install.sh
 **1. Clone**
 
 ```bash
-git clone --recurse-submodules https://github.com/JoshCudby/jc-tangle.git
+git clone https://github.com/JoshCudby/jc-tangle.git
 cd jc-tangle
-```
-
-If you already cloned without `--recurse-submodules`:
-
-```bash
-git submodule update --init --recursive
 ```
 
 **2. Create a virtual environment (recommended)**
