@@ -34,7 +34,7 @@ path solution  ──── scored by coverage, breaks, identity
 | `qubo_solvers/` | Core installable Python package — QUBO matrix builders and solver wrappers (D-Wave, MQLib, Gurobi) |
 | `new_qubo_formulation/` | QUBO formulations for QAOA circuits, with non-variational parameter strategies |
 | `new_hubo_formulation/` | HUBO formulation using binary-encoded node indices; circuit compilation and simulation |
-| `qiskit_simulation/` | Qiskit-based QAOA simulation (legacy) |
+| `qiskit_simulation/` | Qiskit-based QAOA simulation: standard QUBO, HUBO, CVaR variants, circuit compilation and parameter optimisation |
 | `pytket_simulation/` | PyTket-based QAOA simulation (legacy)|
 | `qokit_simulation/` | QOKit tensor-network simulation (legacy)|
 | `openqaoa_simulation/` | OpenQAOA framework integration (legacy)|
