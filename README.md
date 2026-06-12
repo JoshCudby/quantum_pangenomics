@@ -32,61 +32,101 @@ path solution  ──── scored by coverage, breaks, identity
 | `new_qubo_formulation/` | (Quantum only) QUBO formulations for QAOA circuits, with non-variational parameter strategies |
 | `new_hubo_formulation/` | (Quantum only) HUBO formulation using binary-encoded node indices; circuit compilation and simulation |
 | `qiskit_simulation/` | Qiskit-based QAOA simulation: standard QUBO, HUBO, CVaR variants, circuit compilation and parameter optimisation |
-| `pytket_simulation/` | PyTket-based QAOA simulation (legacy)|
 | `sat/` | SAT solver approaches |
 | `data/` | Test GFA datasets (Arabidopsis, Daphnia, HLA, PhiX174, synthetic) |
 | `utils/` | Shared utilities (GFA subgraph cropper, plotting notebooks) |
-| `modules/` | Git submodules (MQLib, QOKit, qpg, oatk, etc.) |
-|-----------|-------------|
-| `qokit_simulation/` | QOKit tensor-network simulation (legacy)|
-| `openqaoa_simulation/` | OpenQAOA framework integration (legacy)|
-| `cotengra_tensor_networks/` | Tensor network contraction experiments (legacy)|
-| `prog_qaoa/` | Programmable QAOA parameter experiments (legacy)|
-| `pathfinder/` | Classical exhaustive path finder (baseline) |
+| `modules/` | Git submodules (qpg, oatk, qopt-best-practices, etc.) |
+| `legacy_code/` | Legacy implementations (QOKit, OpenQAOA, tensor networks, programmable QAOA, pathfinder) |
 
 ## Installation
 
-#### TODO: check this works!
-Clone with submodules:
+### Prerequisites
+
+- Python ≥ 3.10
+- [MQLib](https://github.com/MQLib/MQLib) — build from source following the instructions in that repo and add the resulting binary to your `$PATH`
+- Two submodules (`pangene_fork`, `openqaoa`) live on Sanger internal GitLab and require SSH access. If you are outside Sanger, submodule init will warn about these — all other submodules are public and will succeed.
+
+### Quick install
 
 ```bash
-git clone --recurse-submodules https://github.com/JoshCudby/pangenome.git
+git clone --recurse-submodules https://github.com/JoshCudby/jc-tangle.git
+cd jc-tangle
+bash install.sh
+```
+
+`install.sh` walks through every step below and prints reminders about the two manual configuration steps at the end.
+
+### Step-by-step
+
+**1. Clone**
+
+```bash
+git clone --recurse-submodules https://github.com/JoshCudby/jc-tangle.git
 cd jc-tangle
 ```
 
-If you already cloned without submodules:
+If you already cloned without `--recurse-submodules`:
 
 ```bash
 git submodule update --init --recursive
 ```
 
-Install the main solver package:
+**2. Create a virtual environment (recommended)**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+**3. Install MQLib**
+
+Build MQLib from [github.com/MQLib/MQLib](https://github.com/MQLib/MQLib) and ensure the binary is on your `$PATH`. MQLib is a C++ project with its own build instructions.
+
+**4. Install Python packages**
+
+All four packages use `pip install -e` (editable install via [flit](https://flit.pypa.io/)):
 
 ```bash
 pip install -e qubo_solvers/
+pip install -e new_qubo_formulation/
+pip install -e new_hubo_formulation/
+pip install -e qiskit_simulation/
 ```
 
-Core Python dependencies:
+Install only the packages relevant to your workflow — see the table below.
 
-```
-numpy
-networkx
-gfapy          # GFA file parsing
-dwave-ocean-sdk # D-Wave quantum annealing (requires API key)
-gurobipy        # Gurobi solver (requires licence)
-qiskit          # Quantum circuit simulation
-```
+**5. Set local output paths**
 
+Edit `qubo_solvers/qubo_solvers/definitions.py` and update `DATA_DIR` and `OUT_DIR` to directories that exist on your machine. The defaults point to Sanger Lustre scratch and will not work elsewhere.
 
-### Solver credentials
+**6. Configure solver credentials**
 
 **Gurobi**: obtain a licence at https://support.gurobi.com/hc/en-us/articles/14799677517585
 
-**D-Wave**: create an account at https://cloud.dwavesys.com/leap/, then configure the CLI:
+**D-Wave**: create an account at https://cloud.dwavesys.com/leap/, then:
 
 ```bash
 dwave config create
 ```
+
+### Package overview
+
+| Package | Key dependencies | What it enables |
+|---|---|---|
+| `qubo_solvers/` | `gfapy`, `gurobipy`, `dwave-ocean-sdk`, `numpy`, `networkx` | QUBO matrix builders; D-Wave, MQLib, and Gurobi solver wrappers — the core HPC benchmark package |
+| `new_qubo_formulation/` | `qiskit`, `qiskit-optimization`, `qiskit-ibm-runtime`, `scipy`, `scikit-optimize` | QUBO formulations for QAOA circuits with non-variational parameter strategies |
+| `new_hubo_formulation/` | same as above | HUBO formulation using binary-encoded node indices; circuit compilation and simulation |
+| `qiskit_simulation/` | same + `qiskit-aer-gpu` | Full Qiskit QAOA simulation stack: standard QUBO, HUBO, CVaR variants, GPU-accelerated simulation |
+
+### Frozen requirements
+
+`qubo_solvers/qubo_requirements.txt` is a fully-pinned snapshot of a known-good environment. Use it when you need exact version parity:
+
+```bash
+pip install -r qubo_solvers/qubo_requirements.txt
+```
+
+This is not the primary install path — prefer the editable installs above for day-to-day development.
 
 ## Quick Start
 

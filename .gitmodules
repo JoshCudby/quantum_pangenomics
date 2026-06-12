@@ -5,12 +5,6 @@
 [submodule "qpg"]
 	path = modules/qpg
 	url = https://github.com/jkbonfield/qpg/
-[submodule "QOKit"]
-	path = modules/QOKit
-	url = https://github.com/JoshCudby/qokit_fork
-[submodule "modules/quimb_fork"]
-	path = modules/quimb_fork
-	url = https://github.com/JoshCudby/quimb_fork.git
 [submodule "pangene_fork"]
 	path = modules/pangene_fork
 	url = git@gitlab.internal.sanger.ac.uk:QPG/pangene_fork.git
