@@ -1,4 +1,4 @@
-# jc-tangle
+# quantum_pangenomics
 
 A research platform for solving **pangenome tangle resolution** using quantum and classical optimization. Given a sequence assembly graph in GFA format, the goal is to find the highest-coverage path through ambiguous regions (tangles) by formulating the problem as a QUBO or HUBO and solving it with multiple backends.
 
