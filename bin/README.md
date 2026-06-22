@@ -9,6 +9,12 @@ Each directory contains /bin subdirectories containing relevant orchestration sc
 
 HPC benchmark orchestration scripts for the tangle resolution pipeline. Scripts use LSF (`bsub`) for job submission and GNU parallel for local parallelism. They are written in Bash and Perl and are designed to run on the Sanger Institute compute cluster with Lustre scratch storage.
 
+## Reference File
+
+| File | Description |
+|------|-------------|
+| `run_sim_command.txt` | Archive of example bsub commands for various solver/seed combinations |
+
 ## Typical Pipeline
 
 ```
@@ -65,18 +71,12 @@ stat aggregation scripts    # aggregate coverage/break metrics across seeds and 
 | `copy_gfa.sh` | Matches S (sequence) and L (link) lines between two GFA files; outputs matching rows from the second file |
 | `node_avg.sh` | Node averaging utility (minimal / deprecated) |
 | `test.sh` | Test harness |
-
-### Reference Files
-
-| File | Description |
-|------|-------------|
 | `full_benchmark_experiment.md` | Human-readable description of the full benchmark pipeline |
-| `run_sim_command.txt` | Archive of example bsub commands for various solver/seed combinations |
 
 ## Environment Requirements
 
 - **LSF / bsub**: job scheduler (Sanger cluster)
 - **GNU parallel**: `parallel` must be on `PATH`
-- **syncasm**: genome assembler from [oatk](https://github.com/c-zhou/oatk) (`modules/oatk`)
-- **pangene.js**: pangenome utilities (available via `modules/qpg`)
+- **syncasm**: genome assembler from [oatk](https://github.com/c-zhou/oatk)
+- **pangene.js**: pangenome utilities 
 - Lustre scratch storage mounted at `/lustre/scratch127/qpg/jc59/`
